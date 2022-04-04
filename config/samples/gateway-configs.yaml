@@ -1,0 +1,133 @@
+---
+kind: GatewayConfiguration
+apiVersion: operator.konghq.com/v1alpha1
+metadata:
+  name: kong-gateway-sample
+  namespace: kong
+spec:
+  containerImage: kong/kong
+  version: 2.7.1
+  env:
+  - name: KONG_ADMIN_ACCESS_LOG
+    value: /dev/stdout
+  - name: KONG_ADMIN_ERROR_LOG
+    value: /dev/stderr
+  - name: KONG_ADMIN_GUI_ACCESS_LOG
+    value: /dev/stdout
+  - name: KONG_ADMIN_GUI_ERROR_LOG
+    value: /dev/stderr
+  - name: KONG_ADMIN_LISTEN
+    value: 0.0.0.0:8444 ssl
+  - name: KONG_CLUSTER_LISTEN
+    value: "off"
+  - name: KONG_DATABASE
+    value: "off"
+  - name: KONG_LUA_PACKAGE_PATH
+    value: /opt/?.lua;/opt/?/init.lua;;
+  - name: KONG_NGINX_WORKER_PROCESSES
+    value: "2"
+  - name: KONG_PLUGINS
+    value: bundled
+  - name: KONG_PORTAL_API_ACCESS_LOG
+    value: /dev/stdout
+  - name: KONG_PORTAL_API_ERROR_LOG
+    value: /dev/stderr
+  - name: KONG_PORT_MAPS
+    value: 80:8000, 443:8443
+  - name: KONG_PROXY_ACCESS_LOG
+    value: /dev/stdout
+  - name: KONG_PROXY_ERROR_LOG
+    value: /dev/stderr
+  - name: KONG_PROXY_LISTEN
+    value: 0.0.0.0:8000, 0.0.0.0:8443 http2 ssl
+  - name: KONG_STATUS_LISTEN
+    value: 0.0.0.0:8100
+---
+kind: GatewayConfiguration
+apiVersion: operator.konghq.com/v1alpha1
+metadata:
+  name: kong-gateway-sample-2
+  namespace: kong
+spec:
+  containerImage: kong/kong
+  version: 2.7.1
+  env:
+  - name: KONG_ADMIN_ACCESS_LOG
+    value: /dev/stdout
+  - name: KONG_ADMIN_ERROR_LOG
+    value: /dev/stderr
+  - name: KONG_ADMIN_GUI_ACCESS_LOG
+    value: /dev/stdout
+  - name: KONG_ADMIN_GUI_ERROR_LOG
+    value: /dev/stderr
+  - name: KONG_ADMIN_LISTEN
+    value: 0.0.0.0:8444 ssl
+  - name: KONG_CLUSTER_LISTEN
+    value: "off"
+  - name: KONG_DATABASE
+    value: "off"
+  - name: KONG_LUA_PACKAGE_PATH
+    value: /opt/?.lua;/opt/?/init.lua;;
+  - name: KONG_NGINX_WORKER_PROCESSES
+    value: "2"
+  - name: KONG_PLUGINS
+    value: bundled
+  - name: KONG_PORTAL_API_ACCESS_LOG
+    value: /dev/stdout
+  - name: KONG_PORTAL_API_ERROR_LOG
+    value: /dev/stderr
+  - name: KONG_PORT_MAPS
+    value: 80:8000, 443:8443
+  - name: KONG_PROXY_ACCESS_LOG
+    value: /dev/stdout
+  - name: KONG_PROXY_ERROR_LOG
+    value: /dev/stderr
+  - name: KONG_PROXY_LISTEN
+    value: 0.0.0.0:8000, 0.0.0.0:8443 http2 ssl
+  - name: KONG_STATUS_LISTEN
+    value: 0.0.0.0:8100
+---
+kind: GatewayConfiguration
+apiVersion: operator.konghq.com/v1alpha1
+metadata:
+  name: kong-gateway-sample-3
+  namespace: kong
+spec:
+  containerImage: kong/kong
+  version: 2.7.1
+  env:
+  - name: KONG_ADMIN_ACCESS_LOG
+    value: /dev/stdout
+  - name: KONG_ADMIN_ERROR_LOG
+    value: /dev/stderr
+  - name: KONG_ADMIN_GUI_ACCESS_LOG
+    value: /dev/stdout
+  - name: KONG_ADMIN_GUI_ERROR_LOG
+    value: /dev/stderr
+  - name: KONG_ADMIN_LISTEN
+    value: 0.0.0.0:8444 ssl
+  - name: KONG_CLUSTER_LISTEN
+    value: "off"
+  - name: KONG_DATABASE
+    value: "off"
+  - name: KONG_LUA_PACKAGE_PATH
+    value: /opt/?.lua;/opt/?/init.lua;;
+  - name: KONG_NGINX_WORKER_PROCESSES
+    value: "2"
+  - name: KONG_PLUGINS
+    value: bundled
+  - name: KONG_PORTAL_API_ACCESS_LOG
+    value: /dev/stdout
+  - name: KONG_PORTAL_API_ERROR_LOG
+    value: /dev/stderr
+  - name: KONG_PORT_MAPS
+    value: 80:8000, 443:8443
+  - name: KONG_PROXY_ACCESS_LOG
+    value: /dev/stdout
+  - name: KONG_PROXY_ERROR_LOG
+    value: /dev/stderr
+  - name: KONG_PROXY_LISTEN
+    value: 0.0.0.0:8000, 0.0.0.0:8443 http2 ssl
+  - name: KONG_STATUS_LISTEN
+    value: 0.0.0.0:8100
+

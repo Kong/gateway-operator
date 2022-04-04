@@ -1,0 +1,27 @@
+domain: konghq.com
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: operator
+repo: github.com/kong/operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: konghq.com
+  group: operator
+  kind: ControlPlane
+  path: github.com/kong/operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: konghq.com
+  group: operator
+  kind: GatewayConfiguration
+  path: github.com/kong/operator/api/v1alpha1
+  version: v1alpha1
+version: "3"
