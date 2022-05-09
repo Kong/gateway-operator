@@ -589,17 +589,15 @@ Testing for this new operator will be performed similarly to what's already
 performed in the [KIC][kic] which will include:
 
 - unit tests for all Go packages using [go tests][gotest]
-- lightweight integration tests using [envtest][envtest] for each controller
 - integration tests using the [Kong Kubernetes Testing Framework (KTF)][ktf]
 - e2e tests using [KTF][ktf]
 
-All tests should be able to run locally using `go test`, `envtest`, or for
-integration and e2e tests using a local system Kubernetes deployment like
-[Kubernetes in Docker (KIND)][kind].
+All tests should be able to run locally using `go test` or for integration and
+e2e tests using a local system Kubernetes deployment like [Kubernetes in Docker
+(KIND)][kind].
 
 [kic]:https://github.com/kong/kubernetes-ingress-controller
 [gotest]:https://pkg.go.dev/testing
-[envtest]:https://book.kubebuilder.io/cronjob-tutorial/writing-tests.html
 [ktf]:https://github.com/kong/kubernetes-testing-framework
 [kind]:https://github.com/kubernetes-sigs/kind
 
