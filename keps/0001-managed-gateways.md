@@ -3,6 +3,13 @@ title: Managed Gateways
 status: provisional
 ---
 
+# NOTES
+
+We're currently actively redefining the design for this KEP based on some
+experimentation and proof of concept work which should be in the repo soon.
+Ignore the `# Proposal` section for the time being as all of that is subject to
+change.
+
 # Managed Gateways
 
 <!-- toc -->
@@ -51,6 +58,7 @@ automation of Kong cluster operations and management of the Gateway lifecycle.
 - enable deploying the KIC configured to manage any number `Gateways` (resolves historical [KIC#702][kic702])
 - enable automated blue/green upgrades of Kong (and KIC)
 - stay in spec with [Operator Framework][ofrm] standards so that we can be published on [operatorhub][ohub]
+- provide easy defaults for deployment while also enabling power users
 
 [gosdk]:https://sdk.operatorframework.io/docs/building-operators/golang/quickstart/
 [gwapis]:https://github.com/kubernetes-sigs/gateway-api
