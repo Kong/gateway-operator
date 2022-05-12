@@ -1,0 +1,6 @@
+apiVersion: operator.konghq.com/v1alpha1
+kind: ControlPlane
+metadata:
+  name: controlplane-sample
+spec:
+  # TODO(user): Add fields here

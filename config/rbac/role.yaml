@@ -6,37 +6,6 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - gateway.networking.k8s.io
-  resources:
-  - gatewayclasses
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - gateway.networking.k8s.io
-  resources:
-  - gatewayclasses/status
-  verbs:
-  - get
-  - update
-- apiGroups:
-  - gateway.networking.k8s.io
-  resources:
-  - gateways
-  verbs:
-  - get
-  - list
-  - update
-  - watch
-- apiGroups:
-  - gateway.networking.k8s.io
-  resources:
-  - gateways/status
-  verbs:
-  - get
-  - update
-- apiGroups:
   - operator.konghq.com
   resources:
   - controlplanes
@@ -58,6 +27,32 @@ rules:
   - operator.konghq.com
   resources:
   - controlplanes/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - operator.konghq.com
+  resources:
+  - dataplanes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - operator.konghq.com
+  resources:
+  - dataplanes/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - operator.konghq.com
+  resources:
+  - dataplanes/status
   verbs:
   - get
   - patch

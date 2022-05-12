@@ -1,20 +1,24 @@
-# permissions for end users to view gatewayconfigurations.
+# permissions for end users to edit dataplanes.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: gatewayconfiguration-viewer-role
+  name: dataplane-editor-role
 rules:
 - apiGroups:
   - operator.konghq.com
   resources:
-  - gatewayconfigurations
+  - dataplanes
   verbs:
+  - create
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - operator.konghq.com
   resources:
-  - gatewayconfigurations/status
+  - dataplanes/status
   verbs:
   - get
