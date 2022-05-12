@@ -10,8 +10,6 @@ rules:
   resources:
   - controlplanes
   verbs:
-  - create
-  - delete
   - get
   - list
   - patch
@@ -36,8 +34,6 @@ rules:
   resources:
   - dataplanes
   verbs:
-  - create
-  - delete
   - get
   - list
   - patch

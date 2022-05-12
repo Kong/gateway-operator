@@ -18,24 +18,11 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// ControlPlaneSpec defines the desired state of ControlPlane
-type ControlPlaneSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of ControlPlane. Edit controlplane_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
-}
-
-// ControlPlaneStatus defines the observed state of ControlPlane
-type ControlPlaneStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+func init() {
+	SchemeBuilder.Register(&ControlPlane{}, &ControlPlaneList{})
 }
 
 //+kubebuilder:object:root=true
@@ -59,6 +46,42 @@ type ControlPlaneList struct {
 	Items           []ControlPlane `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&ControlPlane{}, &ControlPlaneList{})
+// ControlPlaneSpec defines the desired state of ControlPlane
+type ControlPlaneSpec struct {
+	DeploymentOptions `json:",inline"`
+
+	// GatewayClass indicates the Gateway resources which this ControlPlane
+	// should be responsible for configuring routes for (e.g. HTTPRoute,
+	// TCPRoute, UDPRoute, TLSRoute, e.t.c.).
+	//
+	// Required for the ControlPlane to have any effect: at least one Gateway
+	// must be present for configuration to be pushed to the data-plane and
+	// only Gateway resources can be used to identify data-plane entities.
+	//
+	// +kubebuilder:default=DefaultGatewayClass
+	GatewayClass *gatewayv1alpha2.ObjectName `json:"gatewayClass"`
+
+	// IngressClass enables support for the older Ingress resource and indicates
+	// which Ingress resources this ControlPlane should be responsible for.
+	//
+	// Routing configured this way will be applied to the Gateway resources
+	// indicated by GatewayClass.
+	//
+	// If omitted, Ingress resources will not be supported by the ControlPlane.
+	//
+	// +optional
+	// +kubebuilder:default=DefaultIngressClass
+	IngressClass *string `json:"ingressClass,omitempty"`
+}
+
+// ControlPlaneStatus defines the observed state of ControlPlane
+type ControlPlaneStatus struct {
+	// Conditions describe the current conditions of the Gateway.
+	//
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:default={{type: "Scheduled", status: "Unknown", reason:"NotReconciled", message:"Waiting for controller", lastTransitionTime: "1970-01-01T00:00:00Z"}}
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
