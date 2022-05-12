@@ -19,12 +19,18 @@ package controllers
 import (
 	"context"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/kong/operator/api/v1alpha1"
+	"github.com/kong/operator/internal/logging"
 )
 
 // DataPlaneReconciler reconciles a DataPlane object
@@ -46,9 +52,182 @@ func (r *DataPlaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // Reconcile moves the current state of an object to the intended state.
 func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	l := log.FromContext(ctx)
+	log := log.FromContext(ctx)
 
-	l.Info("found new data-plane", "namespace", req.Namespace, "name", req.Name)
+	log.V(logging.DebugLevel).Info("reconciling data-plane resource", "namespace", req.Namespace, "name", req.Name)
+	dataPlane := new(operatorv1alpha1.DataPlane)
+	if err := r.Client.Get(ctx, req.NamespacedName, dataPlane); err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	log.V(logging.DebugLevel).Info("found data-plane object", "namespace", req.Namespace, "name", req.Name)
+
+	// TODO: switch to using ownership
+	finalizers := dataPlane.GetFinalizers()
+	foundDataPlaneFinalizer := false
+	for _, finalizer := range finalizers {
+		if finalizer == "wait-for-deployments" {
+			foundDataPlaneFinalizer = true
+		}
+	}
+	if !foundDataPlaneFinalizer {
+		dataPlane.Finalizers = append(dataPlane.Finalizers, "wait-for-deployments")
+		if err := r.Client.Update(ctx, dataPlane); err != nil {
+			if errors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, err
+		}
+	}
+
+	dataPlaneDeployment := new(appsv1.Deployment)
+	if dataPlane.DeletionTimestamp != nil {
+		now := metav1.Now()
+		if dataPlane.DeletionTimestamp.Before(&now) {
+			if err := r.Client.Get(ctx, req.NamespacedName, dataPlaneDeployment); err != nil {
+				if errors.IsNotFound(err) {
+					// TODO: all set, drop finalizer
+					var newFinalizers []string
+					for _, finalizer := range finalizers {
+						if finalizer != "wait-for-deployments" {
+							newFinalizers = append(newFinalizers, finalizer)
+						}
+					}
+					dataPlane.SetFinalizers(newFinalizers)
+					if err := r.Client.Update(ctx, dataPlane); err != nil {
+						if errors.IsConflict(err) {
+							return ctrl.Result{Requeue: true}, nil
+						}
+						return ctrl.Result{}, err
+					}
+					return ctrl.Result{}, nil
+				}
+				return ctrl.Result{}, err
+			}
+			if err := r.Client.Delete(ctx, dataPlaneDeployment); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true}, nil
+		}
+	}
+
+	deploymentExists := false
+	if err := r.Client.Get(ctx, req.NamespacedName, dataPlaneDeployment); err == nil {
+		deploymentExists = true
+	} else {
+		if !errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+	}
+
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_ADMIN_ACCESS_LOG", Value: "/dev/stdout"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_ADMIN_ERROR_LOG", Value: "/dev/stderr"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_ADMIN_GUI_ACCESS_LOG", Value: "/dev/stdout"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_ADMIN_GUI_ERROR_LOG", Value: "/dev/stderr"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_ADMIN_LISTEN", Value: "0.0.0.0:8444 ssl"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_CLUSTER_LISTEN", Value: "off"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_DATABASE", Value: "off"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_LUA_PACKAGE_PATH", Value: "/opt/?.lua;/opt/?/init.lua;;"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_NGINX_WORKER_PROCESSES", Value: "2"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_PLUGINS", Value: "bundled"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_PORTAL_API_ACCESS_LOG", Value: "/dev/stdout"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_PORTAL_API_ERROR_LOG", Value: "/dev/stderr"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_PORT_MAPS", Value: "80:8000, 443:8443"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_PROXY_ACCESS_LOG", Value: "/dev/stdout"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_PROXY_ERROR_LOG", Value: "/dev/stderr"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_PROXY_LISTEN", Value: "0.0.0.0:8000, 0.0.0.0:8443 http2 ssl"})
+	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_STATUS_LISTEN", Value: "0.0.0.0:8100"})
+
+	dataPlaneDeployment.ObjectMeta.Namespace = req.Namespace
+	dataPlaneDeployment.ObjectMeta.Name = req.Name
+	dataPlaneDeployment.ObjectMeta.Labels = map[string]string{"app": req.Name}
+	dataPlaneDeployment.Spec = appsv1.DeploymentSpec{
+		Selector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app": req.Name,
+			},
+		},
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					"app": req.Name,
+				},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{
+					Name:    "proxy",
+					Env:     dataPlane.Spec.Env,
+					EnvFrom: dataPlane.Spec.EnvFrom,
+					Image:   "kong:2.8",
+					Lifecycle: &corev1.Lifecycle{
+						PreStop: &corev1.LifecycleHandler{
+							Exec: &corev1.ExecAction{
+								Command: []string{
+									"/bin/sh",
+									"-c",
+									"kong quit",
+								},
+							},
+						},
+					},
+					Ports: []corev1.ContainerPort{
+						{
+							Name:          "proxy",
+							ContainerPort: 8000,
+							Protocol:      corev1.ProtocolTCP,
+						},
+						{
+							Name:          "proxy-ssl",
+							ContainerPort: 8443,
+							Protocol:      corev1.ProtocolTCP,
+						},
+						{
+							Name:          "metrics",
+							ContainerPort: 8100,
+							Protocol:      corev1.ProtocolTCP,
+						},
+						{
+							Name:          "admin-ssl",
+							ContainerPort: 8444,
+							Protocol:      corev1.ProtocolTCP,
+						},
+					},
+					ReadinessProbe: &corev1.Probe{
+						FailureThreshold:    3,
+						InitialDelaySeconds: 5,
+						PeriodSeconds:       10,
+						SuccessThreshold:    1,
+						TimeoutSeconds:      1,
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path:   "/status",
+								Port:   intstr.FromInt(8100),
+								Scheme: corev1.URISchemeHTTP,
+							},
+						},
+					},
+				}},
+			},
+		},
+	}
+
+	if deploymentExists {
+		log.Info("deployment for data-plane already exists, updating", "namespace", req.Namespace, "name", req.Name)
+		if err := r.Client.Update(ctx, dataPlaneDeployment); err != nil {
+			if errors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, err
+		}
+	} else {
+		log.Info("no deployment exists for data-plane, creating", "namespace", req.Namespace, "name", req.Name)
+		if err := r.Client.Create(ctx, dataPlaneDeployment); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 
 	return ctrl.Result{}, nil
+
 }
