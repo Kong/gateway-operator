@@ -23,6 +23,8 @@ which can be deployed to a test cluster with:
 
 ```console
 $ ktf envs create --addon metallb
+$ kubectl create namespace kong
+$ kubectl create serviceaccount kong-serviceaccount -n kong
 $ kubectl kustomize https://github.com/Kong/kubernetes-ingress-controller/config/crd | kubectl apply -f -
 $ kubectl kustomize https://github.com/kubernetes-sigs/gateway-api/config/crd | kubectl apply -f -
 $ kubectl kustomize https://github.com/Kong/kubernetes-ingress-controller/config/rbac | kubectl apply -f -
