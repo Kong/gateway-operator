@@ -18,18 +18,16 @@ A [Kubernetes Operator][k8soperator] for [Kong][kong].
 
 ## Usage
 
-Currently the `config/samples` directly has a `ControlPlane` and `Gateway`
-which can be deployed to a test cluster with:
+Currently the sample configurations for demoing are all under `deploy/`:
 
 ```console
-$ ktf envs create --addon metallb
-$ kubectl create namespace kong
-$ kubectl create serviceaccount kong-serviceaccount -n kong
-$ kubectl kustomize https://github.com/Kong/kubernetes-ingress-controller/config/crd | kubectl apply -f -
-$ kubectl kustomize https://github.com/kubernetes-sigs/gateway-api/config/crd | kubectl apply -f -
-$ kubectl kustomize https://github.com/Kong/kubernetes-ingress-controller/config/rbac | kubectl apply -f -
-$ kubectl kustomize config/crd | kubectl apply -f -
-$ kubectl kustomize config/samples | kubectl apply -f -
+$ kubectl apply -f deploy/crds.yaml
+$ kubectl apply -f deploy/operator.yaml
+```
+
+In another shell run the controller in the foreground:
+
+```
 $ make install run
 ```
 
