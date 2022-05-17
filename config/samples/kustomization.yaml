@@ -1,6 +1,6 @@
 ## Append samples you want in your CSV to this file as resources ##
 resources:
-- operator_v1alpha1_controlplane_and_gateway.yam
+- operator_v1alpha1_controlplane_and_gateway.yaml
 - gateway-configs.yaml
 - gateway.yaml
 - httpbin.yaml
