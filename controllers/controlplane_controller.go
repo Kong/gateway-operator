@@ -32,9 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/blang/semver/v4"
-	operatorv1alpha1 "github.com/kong/operator/api/v1alpha1"
-	"github.com/kong/operator/internal/logging"
-	"github.com/kong/operator/internal/rbac"
+	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
+	"github.com/kong/gateway-operator/internal/logging"
+	"github.com/kong/gateway-operator/internal/rbac"
 )
 
 // ControlPlaneReconciler reconciles a ControlPlane object
@@ -50,9 +50,9 @@ func (r *ControlPlaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-//+kubebuilder:rbac:groups=operator.konghq.com,resources=controlplanes,verbs=get;list;watch;update;patch
-//+kubebuilder:rbac:groups=operator.konghq.com,resources=controlplanes/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=operator.konghq.com,resources=controlplanes/finalizers,verbs=update
+//+kubebuilder:rbac:groups=gateway-operator.konghq.com,resources=controlplanes,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=gateway-operator.konghq.com,resources=controlplanes/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=gateway-operator.konghq.com,resources=controlplanes/finalizers,verbs=update
 
 // Reconcile moves the current state of an object to the intended state.
 func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

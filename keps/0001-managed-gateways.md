@@ -180,7 +180,7 @@ data:
   password: bWFkZSB5b3UgbG9vawo=
 ---
 kind: GatewayConfiguration
-apiVersion: operator.konghq.com/v1alpha1
+apiVersion: gateway-operator.konghq.com/v1alpha1
 metadata:
   name: kong-gateway-config
 spec:
@@ -202,7 +202,7 @@ metadata:
 spec:
   controllerName: konghq.com/operator
   parametersRef:
-    group: operator.konghq.com/v1alpha1
+    group: gateway-operator.konghq.com/v1alpha1
     kind: GatewayConfig
     name: kong-gateway-config
 ---

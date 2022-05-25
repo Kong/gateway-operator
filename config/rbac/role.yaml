@@ -6,7 +6,7 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - operator.konghq.com
+  - gateway-operator.konghq.com
   resources:
   - controlplanes
   verbs:
@@ -16,13 +16,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - operator.konghq.com
+  - gateway-operator.konghq.com
   resources:
   - controlplanes/finalizers
   verbs:
   - update
 - apiGroups:
-  - operator.konghq.com
+  - gateway-operator.konghq.com
   resources:
   - controlplanes/status
   verbs:
@@ -30,7 +30,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - operator.konghq.com
+  - gateway-operator.konghq.com
   resources:
   - dataplanes
   verbs:
@@ -40,13 +40,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - operator.konghq.com
+  - gateway-operator.konghq.com
   resources:
   - dataplanes/finalizers
   verbs:
   - update
 - apiGroups:
-  - operator.konghq.com
+  - gateway-operator.konghq.com
   resources:
   - dataplanes/status
   verbs:

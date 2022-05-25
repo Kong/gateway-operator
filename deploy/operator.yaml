@@ -483,7 +483,7 @@ spec:
         path: /
         pathType: Prefix
 ---
-apiVersion: operator.konghq.com/v1alpha1
+apiVersion: gateway-operator.konghq.com/v1alpha1
 kind: ControlPlane
 metadata:
   name: kong-controlplane-sample
@@ -512,7 +512,7 @@ spec:
   gatewayClass: kong-gatewayclass-sample
   version: 2.2.1
 ---
-apiVersion: operator.konghq.com/v1alpha1
+apiVersion: gateway-operator.konghq.com/v1alpha1
 kind: GatewayConfiguration
 metadata:
   name: kong-gateway-sample
@@ -556,7 +556,7 @@ spec:
     value: 0.0.0.0:8100
   version: 2.7.1
 ---
-apiVersion: operator.konghq.com/v1alpha1
+apiVersion: gateway-operator.konghq.com/v1alpha1
 kind: GatewayConfiguration
 metadata:
   name: kong-gateway-sample-2
@@ -600,7 +600,7 @@ spec:
     value: 0.0.0.0:8100
   version: 2.7.1
 ---
-apiVersion: operator.konghq.com/v1alpha1
+apiVersion: gateway-operator.konghq.com/v1alpha1
 kind: GatewayConfiguration
 metadata:
   name: kong-gateway-sample-3

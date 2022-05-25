@@ -29,8 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	operatorv1alpha1 "github.com/kong/operator/api/v1alpha1"
-	"github.com/kong/operator/internal/logging"
+	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
+	"github.com/kong/gateway-operator/internal/logging"
 )
 
 // DataPlaneReconciler reconciles a DataPlane object
@@ -46,9 +46,9 @@ func (r *DataPlaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-//+kubebuilder:rbac:groups=operator.konghq.com,resources=dataplanes,verbs=get;list;watch;update;patch
-//+kubebuilder:rbac:groups=operator.konghq.com,resources=dataplanes/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=operator.konghq.com,resources=dataplanes/finalizers,verbs=update
+//+kubebuilder:rbac:groups=gateway-operator.konghq.com,resources=dataplanes,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=gateway-operator.konghq.com,resources=dataplanes/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=gateway-operator.konghq.com,resources=dataplanes/finalizers,verbs=update
 
 // Reconcile moves the current state of an object to the intended state.
 func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

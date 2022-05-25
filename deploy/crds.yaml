@@ -4739,9 +4739,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.8.0
   creationTimestamp: null
-  name: controlplanes.operator.konghq.com
+  name: controlplanes.gateway-operator.konghq.com
 spec:
-  group: operator.konghq.com
+  group: gateway-operator.konghq.com
   names:
     kind: ControlPlane
     listKind: ControlPlaneList
@@ -5045,9 +5045,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.8.0
   creationTimestamp: null
-  name: gatewayconfigurations.operator.konghq.com
+  name: gatewayconfigurations.gateway-operator.konghq.com
 spec:
-  group: operator.konghq.com
+  group: gateway-operator.konghq.com
   names:
     kind: GatewayConfiguration
     listKind: GatewayConfigurationList

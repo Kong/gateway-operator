@@ -6,11 +6,11 @@
              questions, want to contribute, or just want to chat.
 
 [ch]:https://kubernetes.slack.com/messages/kong
-[discuss]:https://github.com/kong/operator/discussions
+[discuss]:https://github.com/kong/gateway-operator/discussions
 
-# Kong Operator
+# Kong Gateway Operator
 
-A [Kubernetes Operator][k8soperator] for [Kong][kong].
+A [Kubernetes Operator][k8soperator] for the [Kong Gateway][kong].
 
 [k8soperator]:https://kubernetes.io/docs/concepts/extend-kubernetes/operator/
 [kong]:https://konghq.com
@@ -37,7 +37,7 @@ been successfully provisioned, e.g.:
 ```console
 $ kubectl -n kong get controlplanes,gateways,deployments,services,pods
 NAME                                                        AGE
-controlplane.operator.konghq.com/kong-controlplane-sample   4m13s
+controlplane.gateway-operator.konghq.com/kong-controlplane-sample   4m13s
 
 NAME                                                    CLASS                      ADDRESS   READY   AGE
 gateway.gateway.networking.k8s.io/kong-gateway-sample   kong-gatewayclass-sample                     4m13s
