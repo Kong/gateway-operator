@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/blang/semver/v4"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -31,7 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/blang/semver/v4"
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/internal/logging"
 	"github.com/kong/gateway-operator/internal/rbac"
@@ -150,8 +150,9 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	roles, clusterRoles := rbac.GetRBACRolesForControlPlaneVersion(version)
 
 	for _, role := range roles {
-		role.SetNamespace(req.Namespace)
-		if err := r.Client.Create(ctx, &role); err != nil {
+		roleCpy := role
+		roleCpy.SetNamespace(req.Namespace)
+		if err := r.Client.Create(ctx, &roleCpy); err != nil {
 			if !errors.IsAlreadyExists(err) {
 				return ctrl.Result{}, err
 			}
@@ -183,7 +184,8 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	for _, role := range clusterRoles {
-		if err := r.Client.Create(ctx, &role); err != nil {
+		roleCpy := role
+		if err := r.Client.Create(ctx, &roleCpy); err != nil {
 			if !errors.IsAlreadyExists(err) {
 				return ctrl.Result{}, err
 			}

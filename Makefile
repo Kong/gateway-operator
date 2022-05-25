@@ -94,6 +94,20 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
+.PHONY: generate.clientsets
+generate.clientsets: client-gen
+	@$(CLIENT_GEN) --go-header-file ./hack/boilerplate.go.txt \
+		--clientset-name clientset \
+		--input-base github.com/kong/gateway-operator/api/  \
+		--input v1alpha1 \
+		--input-dirs github.com/kong/gateway-operator/api/v1alpha1/ \
+		--output-base client-gen-tmp/ \
+		--output-package github.com/kong/gateway-operator/pkg/
+	@rm -rf pkg/clientset/
+	@mkdir -p pkg/clientset
+	@mv client-gen-tmp/github.com/kong/gateway-operator/pkg/clientset/* pkg/clientset/
+	@rm -rf client-gen-tmp/
+
 .PHONY: fmt
 fmt: ## Run go fmt against code.
 	go fmt ./...
@@ -105,6 +119,14 @@ vet: ## Run go vet against code.
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+
+.PHONY: test.unit
+test.unit:
+	go test -race -v ./internal/... ./pkg/...
+
+.PHONY: test.integration
+test.integration:
+	GOFLAGS="-tags=integration_tests" go test -race -v ./test/integration/...
 
 ##@ Build
 
@@ -162,6 +184,10 @@ ENVTEST = $(shell pwd)/bin/setup-envtest
 envtest: ## Download envtest-setup locally if necessary.
 	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
 
+CLIENT_GEN = $(shell pwd)/bin/client-gen
+client-gen: ## Download client-gen locally if necessary.
+	$(call go-get-tool,$(CLIENT_GEN),k8s.io/code-generator/cmd/client-gen@v0.24.0)
+
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 define go-get-tool
@@ -171,7 +197,7 @@ TMP_DIR=$$(mktemp -d) ;\
 cd $$TMP_DIR ;\
 go mod init tmp ;\
 echo "Downloading $(2)" ;\
-GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
+GOBIN=$(PROJECT_DIR)/bin go install $(2) ;\
 rm -rf $$TMP_DIR ;\
 }
 endef
@@ -237,3 +263,11 @@ catalog-push: ## Push a catalog image.
 tidy:
 	go mod tidy
 	go mod verify
+
+GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint
+golangci-lint: ## Download golangci-lint locally if necessary.
+	$(call go-get-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint@v1.44.2)
+
+.PHONY: lint
+lint: golangci-lint
+	$(GOLANGCI_LINT) run -v
