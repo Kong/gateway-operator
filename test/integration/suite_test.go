@@ -24,7 +24,8 @@ import (
 // -----------------------------------------------------------------------------
 
 var (
-	existingClusterName = os.Getenv("KONG_TEST_CLUSTER")
+	existingClusterName  = os.Getenv("KONG_TEST_CLUSTER")
+	controllerManagerOut = os.Getenv("KONG_CONTROLLER_OUT")
 )
 
 // -----------------------------------------------------------------------------
@@ -80,9 +81,7 @@ func TestMain(m *testing.M) {
 	exitOnErr(clusters.KustomizeDeployForCluster(ctx, env.Cluster(), "../../config/crd"))
 
 	fmt.Println("INFO: starting the operator's controller manager")
-	go func() {
-		exitOnErr(manager.Run(manager.Config{}))
-	}()
+	go startControllerManager()
 
 	fmt.Println("INFO: environment is ready, starting tests")
 	code := m.Run()
@@ -107,4 +106,20 @@ func exitOnErr(err error) {
 		fmt.Printf("ERROR: %s\n", err.Error())
 		os.Exit(1)
 	}
+}
+
+func startControllerManager() {
+	cfg := manager.DefaultConfig
+	cfg.LeaderElection = false
+	cfg.DevelopmentMode = true
+
+	if controllerManagerOut != "stdout" {
+		out, err := os.CreateTemp(os.TempDir(), "gateway-operator-controller-logs")
+		exitOnErr(err)
+		cfg.Out = out
+		fmt.Printf("INFO: controller output is being logged to %s\n", out.Name())
+		defer out.Close()
+	}
+
+	exitOnErr(manager.Run(cfg))
 }
