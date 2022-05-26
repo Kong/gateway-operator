@@ -5,7 +5,8 @@
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
-IMG ?= kong/gateway-operator
+IMG ?= ghcr.io/kong/gateway-operator
+TAG ?= latest
 
 # ------------------------------------------------------------------------------
 # Configuration - OperatorHub
@@ -19,7 +20,7 @@ ifneq ($(origin DEFAULT_CHANNEL), undefined)
 BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
-IMAGE_TAG_BASE ?= kong/gateway-operator
+IMAGE_TAG_BASE ?= ghcr.io/kong/gateway-operator
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
 BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
 USE_IMAGE_DIGESTS ?= false
@@ -147,13 +148,13 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 # Build - Container Images
 # ------------------------------------------------------------------------------
 
-.PHONY: docker-build
-docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG} .
+.PHONY: docker.build
+docker.build:
+	docker build -t ${IMG}:${TAG} .
 
-.PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	docker push ${IMG}
+.PHONY: docker.push
+docker.push:
+	docker push ${IMG}:${TAG}
 
 # ------------------------------------------------------------------------------
 # Build - OperatorHub Bundles
