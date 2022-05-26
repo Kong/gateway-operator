@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/kong/gateway-operator/api/v1alpha1"
+	"github.com/kong/gateway-operator/controllers"
 )
 
 func TestDataplaneEssentials(t *testing.T) {
@@ -42,9 +43,35 @@ func TestDataplaneEssentials(t *testing.T) {
 	require.NoError(t, err)
 	cleaner.Add(dataplane)
 
+	t.Log("verifying dataplane gets marked scheduled")
+	require.Eventually(t, func() bool {
+		dataplane, err = operatorClient.V1alpha1().DataPlanes(namespace.Name).Get(ctx, dataplane.Name, metav1.GetOptions{})
+		require.NoError(t, err)
+		isScheduled := false
+		for _, condition := range dataplane.Status.Conditions {
+			if condition.Type == string(controllers.DataPlaneConditionTypeProvisioned) {
+				isScheduled = true
+			}
+		}
+		return isScheduled
+	}, time.Minute, time.Second)
+
 	t.Log("waiting for dataplane deployment")
 	require.Eventually(t, func() bool {
 		deployment, err := k8sClient.AppsV1().Deployments(namespace.Name).Get(ctx, dataplane.Name, metav1.GetOptions{})
-		return err == nil && deployment.Status.ReadyReplicas == deployment.Status.Replicas
+		return err == nil && deployment.Status.AvailableReplicas == deployment.Status.Replicas
+	}, time.Minute, time.Second)
+
+	t.Log("verifying that the dataplane gets marked as provisioned")
+	require.Eventually(t, func() bool {
+		dataplane, err = operatorClient.V1alpha1().DataPlanes(namespace.Name).Get(ctx, dataplane.Name, metav1.GetOptions{})
+		require.NoError(t, err)
+		isProvisioned := false
+		for _, condition := range dataplane.Status.Conditions {
+			if condition.Type == string(controllers.DataPlaneConditionTypeProvisioned) && condition.Status == metav1.ConditionTrue {
+				isProvisioned = true
+			}
+		}
+		return isProvisioned
 	}, time.Minute, time.Second)
 }

@@ -54,4 +54,21 @@ type DataPlaneSpec struct {
 
 // DataPlaneStatus defines the observed state of DataPlane
 type DataPlaneStatus struct {
+	// ChildRefs are a reference to all the Deployment resources which have their
+	// lifecycle managed by this DataPlane.
+	// +kubebuilder:validation:MinItems=0
+	// +kubebuilder:validation:MaxItems=20
+	ChildRefs []ChildRef `json:"childRefs,omitempty"`
+
+	// Conditions describe the status of the DataPlane.
+	// +listType=map
+	// +listMapKey=type
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+type ChildRef struct {
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name"`
 }

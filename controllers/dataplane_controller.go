@@ -21,6 +21,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -29,6 +30,10 @@ import (
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 )
+
+// -----------------------------------------------------------------------------
+// DataPlaneReconciler
+// -----------------------------------------------------------------------------
 
 // DataPlaneReconciler reconciles a DataPlane object
 type DataPlaneReconciler struct {
@@ -42,6 +47,13 @@ func (r *DataPlaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&operatorv1alpha1.DataPlane{}).
 		Complete(r)
 }
+
+// TODO: need to label Deployments created by this controller
+// TODO: need to trigger reconciliation whenever labeled Deployments are changed or deleted
+
+// -----------------------------------------------------------------------------
+// DataPlaneReconciler - Reconciliation
+// -----------------------------------------------------------------------------
 
 //+kubebuilder:rbac:groups=gateway-operator.konghq.com,resources=dataplanes,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway-operator.konghq.com,resources=dataplanes/status,verbs=get;update;patch
@@ -60,7 +72,17 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	debug(log, "validating DataPlane resource", dataplane)
+	debug(log, "validating DataPlane resource conditions", dataplane)
+	changed, err := r.ensureDataPlaneIsMarkedScheduled(ctx, dataplane)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if changed {
+		debug(log, "DataPlane resource now marked as scheduled", dataplane)
+		return ctrl.Result{}, nil // no need to requeue, status update will requeue
+	}
+
+	debug(log, "validing DataPlane configuration", dataplane)
 	if len(dataplane.Spec.Env) == 0 && len(dataplane.Spec.EnvFrom) == 0 {
 		debug(log, "no ENV config found for DataPlane resource, setting defaults", dataplane)
 		setDataPlaneDefaults(dataplane) // FIXME: this probably shouldn't be done on the SPEC, perhaps we can remove this when we support Gateway?
@@ -89,23 +111,30 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if err := r.createDeploymentForDataPlane(ctx, dataplane); err != nil {
 			return ctrl.Result{}, err
 		}
-	} else {
-		debug(log, "existing Deployment was found for DataPlane, updating", dataplane)
-		if err := r.updateDeploymentForDataPlane(ctx, dataplane); err != nil {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{Requeue: true}, nil
 	}
 
+	debug(log, "checking readiness of DataPlane Deployments", dataplane)
+	if dataplaneDeployment.Status.AvailableReplicas < dataplaneDeployment.Status.Replicas {
+		debug(log, "Deployment for DataPlane not yet ready, waiting", dataplane)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	debug(log, "exposing DataPlane Deployment via Service", dataplane)
+	// TODO: create a service to expose the DataPlane also (and add an owner reference to this dataplane).
+	//       wait for a cluster IP.
+
 	debug(log, "reconciliation complete for DataPlane resource", dataplane)
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, r.ensureDataPlaneIsMarkedProvisioned(ctx, dataplane)
 }
+
+// -----------------------------------------------------------------------------
+// DataPlaneReconciler - Reconciliation Helper Methods
+// -----------------------------------------------------------------------------
 
 // getDeploymentForDataPlane attempts to retrieve an existing Deployment object
 // for the provided DataPlane object if one exists.
-func (r *DataPlaneReconciler) getDeploymentForDataPlane(
-	ctx context.Context,
-	dataPlane *operatorv1alpha1.DataPlane,
-) (*appsv1.Deployment, error) {
+func (r *DataPlaneReconciler) getDeploymentForDataPlane(ctx context.Context, dataPlane *operatorv1alpha1.DataPlane) (*appsv1.Deployment, error) {
 	dataPlaneDeployment := new(appsv1.Deployment)
 	if err := r.Client.Get(ctx, types.NamespacedName{
 		Namespace: dataPlane.Namespace,
@@ -122,7 +151,42 @@ func (r *DataPlaneReconciler) createDeploymentForDataPlane(ctx context.Context, 
 	return r.Client.Create(ctx, deployment)
 }
 
-func (r *DataPlaneReconciler) updateDeploymentForDataPlane(ctx context.Context, dataplane *operatorv1alpha1.DataPlane) error {
-	// FIXME - not yet implemented
-	return nil
+func (r *DataPlaneReconciler) ensureDataPlaneIsMarkedScheduled(ctx context.Context, dataplane *operatorv1alpha1.DataPlane) (bool, error) {
+	isScheduled := false
+	for _, condition := range dataplane.Status.Conditions {
+		if condition.Type == string(DataPlaneConditionTypeProvisioned) {
+			isScheduled = true
+		}
+	}
+
+	if !isScheduled {
+		dataplane.Status.Conditions = append(dataplane.Status.Conditions, metav1.Condition{
+			Type:               string(DataPlaneConditionTypeProvisioned),
+			Reason:             DataPlaneConditionReasonPodsNotReady,
+			Status:             metav1.ConditionFalse,
+			Message:            "dataplane resource is scheduled for provisioning",
+			ObservedGeneration: dataplane.Generation,
+			LastTransitionTime: metav1.Now(),
+		})
+		return true, r.Client.Status().Update(ctx, dataplane)
+	}
+
+	return false, nil
+}
+
+func (r *DataPlaneReconciler) ensureDataPlaneIsMarkedProvisioned(ctx context.Context, dataplane *operatorv1alpha1.DataPlane) error {
+	updatedConditions := make([]metav1.Condition, 0)
+	for _, condition := range dataplane.Status.Conditions {
+		if condition.Type == string(DataPlaneConditionTypeProvisioned) {
+			condition.Status = metav1.ConditionTrue
+			condition.Reason = DataPlaneConditionReasonPodsReady
+			condition.Message = "pods for all Deployments and/or Daemonsets are ready"
+			condition.ObservedGeneration = dataplane.Generation
+			condition.LastTransitionTime = metav1.Now()
+		}
+		updatedConditions = append(updatedConditions, condition)
+	}
+
+	dataplane.Status.Conditions = updatedConditions
+	return r.Status().Update(ctx, dataplane)
 }
