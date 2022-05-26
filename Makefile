@@ -130,6 +130,7 @@ generate.clientsets: client-gen
 	@mkdir -p pkg/clientset
 	@mv client-gen-tmp/github.com/kong/gateway-operator/pkg/clientset/* pkg/clientset/
 	@rm -rf client-gen-tmp/
+	@sed -i 's/"v1alpha1"/"gateway-operator.konghq.com"/g' pkg/clientset/typed/v1alpha1/internalversion/v1alpha1_client.go # FIXME
 
 # ------------------------------------------------------------------------------
 # Build - Manifests
