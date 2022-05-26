@@ -88,6 +88,11 @@ clean:
 	@rm -rf bin/*
 	@rm -f coverage*.out
 
+.PHONY: tidy
+tidy:
+	go mod tidy
+	go mod verify
+
 .PHONY: build
 build: generate fmt vet lint
 	go build -o bin/manager main.go
@@ -205,12 +210,6 @@ catalog-build: opm ## Build a catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
-
-# Go mod tidy & verify
-.PHONY: tidy
-tidy:
-	go mod tidy
-	go mod verify
 
 # ------------------------------------------------------------------------------
 # Testing

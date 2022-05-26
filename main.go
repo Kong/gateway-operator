@@ -21,9 +21,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kong/gateway-operator/internal/manager"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/kong/gateway-operator/internal/manager"
 )
 
 func main() {
