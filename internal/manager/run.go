@@ -18,6 +18,7 @@ package manager
 
 import (
 	"fmt"
+	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -48,6 +49,7 @@ type Config struct {
 	WebhookPort     int
 	LeaderElection  bool
 	DevelopmentMode bool
+	Out             *os.File
 }
 
 var DefaultConfig = Config{
@@ -62,6 +64,11 @@ func Run(cfg Config) error {
 	opts := zap.Options{
 		Development: cfg.DevelopmentMode,
 	}
+
+	if cfg.Out != nil {
+		opts.DestWriter = cfg.Out
+	}
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
