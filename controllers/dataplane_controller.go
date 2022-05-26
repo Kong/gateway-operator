@@ -50,6 +50,7 @@ func (r *DataPlaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // TODO: need to label Deployments created by this controller
 // TODO: need to trigger reconciliation whenever labeled Deployments are changed or deleted
+// TODO: revisit places to emit events
 
 // -----------------------------------------------------------------------------
 // DataPlaneReconciler - Reconciliation
