@@ -64,9 +64,6 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
-    needs:
-      - "lint"
-      - "unit-tests"
     steps:
 
     - name: setup golang
