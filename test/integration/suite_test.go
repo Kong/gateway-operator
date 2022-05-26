@@ -108,6 +108,8 @@ func exitOnErr(err error) {
 	}
 }
 
+// TODO: run the manager with a service account and RBAC from kustomize to help
+// catch problems with permissions
 func startControllerManager() {
 	cfg := manager.DefaultConfig
 	cfg.LeaderElection = false

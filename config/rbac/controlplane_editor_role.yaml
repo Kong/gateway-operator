@@ -5,7 +5,7 @@ metadata:
   name: controlplane-editor-role
 rules:
 - apiGroups:
-  - gateway-operator.konghq.com
+  - operator.konghq.com
   resources:
   - controlplanes
   verbs:
@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - gateway-operator.konghq.com
+  - operator.konghq.com
   resources:
   - controlplanes/status
   verbs:
