@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -64,55 +65,7 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	log.V(logging.DebugLevel).Info("found data-plane object", "namespace", req.Namespace, "name", req.Name)
 
-	// TODO: switch to using ownership
-	finalizers := dataPlane.GetFinalizers()
-	foundDataPlaneFinalizer := false
-	for _, finalizer := range finalizers {
-		if finalizer == "wait-for-deployments" {
-			foundDataPlaneFinalizer = true
-		}
-	}
-	if !foundDataPlaneFinalizer {
-		dataPlane.Finalizers = append(dataPlane.Finalizers, "wait-for-deployments")
-		if err := r.Client.Update(ctx, dataPlane); err != nil {
-			if errors.IsConflict(err) {
-				return ctrl.Result{Requeue: true}, nil
-			}
-			return ctrl.Result{}, err
-		}
-	}
-
 	dataPlaneDeployment := new(appsv1.Deployment)
-	if dataPlane.DeletionTimestamp != nil {
-		now := metav1.Now()
-		if dataPlane.DeletionTimestamp.Before(&now) {
-			if err := r.Client.Get(ctx, req.NamespacedName, dataPlaneDeployment); err != nil {
-				if errors.IsNotFound(err) {
-					// TODO: all set, drop finalizer
-					var newFinalizers []string
-					for _, finalizer := range finalizers {
-						if finalizer != "wait-for-deployments" {
-							newFinalizers = append(newFinalizers, finalizer)
-						}
-					}
-					dataPlane.SetFinalizers(newFinalizers)
-					if err := r.Client.Update(ctx, dataPlane); err != nil {
-						if errors.IsConflict(err) {
-							return ctrl.Result{Requeue: true}, nil
-						}
-						return ctrl.Result{}, err
-					}
-					return ctrl.Result{}, nil
-				}
-				return ctrl.Result{}, err
-			}
-			if err := r.Client.Delete(ctx, dataPlaneDeployment); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{Requeue: true}, nil
-		}
-	}
-
 	deploymentExists := false
 	if err := r.Client.Get(ctx, req.NamespacedName, dataPlaneDeployment); err == nil {
 		deploymentExists = true
@@ -139,6 +92,14 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_PROXY_ERROR_LOG", Value: "/dev/stderr"})
 	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_PROXY_LISTEN", Value: "0.0.0.0:8000, 0.0.0.0:8443 http2 ssl"})
 	dataPlane.Spec.Env = append(dataPlane.Spec.Env, corev1.EnvVar{Name: "KONG_STATUS_LISTEN", Value: "0.0.0.0:8100"})
+
+	// set owner reference to cascade DataPlane deletions to Deployment
+	dataPlaneDeployment.ObjectMeta.OwnerReferences = append(dataPlane.ObjectMeta.OwnerReferences, metav1.OwnerReference{
+		APIVersion: fmt.Sprintf("%s/%s", dataPlane.GroupVersionKind().Group, dataPlane.GroupVersionKind().Version),
+		Kind:       dataPlane.GroupVersionKind().Kind,
+		Name:       dataPlane.Name,
+		UID:        dataPlane.UID,
+	})
 
 	dataPlaneDeployment.ObjectMeta.Namespace = req.Namespace
 	dataPlaneDeployment.ObjectMeta.Name = req.Name

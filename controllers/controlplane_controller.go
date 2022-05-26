@@ -68,55 +68,6 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 	log.V(logging.DebugLevel).Info("found control-plane object", "namespace", req.Namespace, "name", req.Name)
 
-	// TODO: switch to using ownership
-	finalizers := controlPlane.GetFinalizers()
-	foundControlPlaneFinalizer := false
-	for _, finalizer := range finalizers {
-		if finalizer == "wait-for-deployments" {
-			foundControlPlaneFinalizer = true
-		}
-	}
-	if !foundControlPlaneFinalizer {
-		controlPlane.Finalizers = append(controlPlane.Finalizers, "wait-for-deployments")
-		if err := r.Client.Update(ctx, controlPlane); err != nil {
-			if errors.IsConflict(err) {
-				return ctrl.Result{Requeue: true}, nil
-			}
-			return ctrl.Result{}, err
-		}
-	}
-
-	controlPlaneDeployment := new(appsv1.Deployment)
-	if controlPlane.DeletionTimestamp != nil {
-		now := metav1.Now()
-		if controlPlane.DeletionTimestamp.Before(&now) {
-			if err := r.Client.Get(ctx, req.NamespacedName, controlPlaneDeployment); err != nil {
-				if errors.IsNotFound(err) {
-					// TODO: all set, drop finalizer
-					var newFinalizers []string
-					for _, finalizer := range finalizers {
-						if finalizer != "wait-for-deployments" {
-							newFinalizers = append(newFinalizers, finalizer)
-						}
-					}
-					controlPlane.SetFinalizers(newFinalizers)
-					if err := r.Client.Update(ctx, controlPlane); err != nil {
-						if errors.IsConflict(err) {
-							return ctrl.Result{Requeue: true}, nil
-						}
-						return ctrl.Result{}, err
-					}
-					return ctrl.Result{}, nil
-				}
-				return ctrl.Result{}, err
-			}
-			if err := r.Client.Delete(ctx, controlPlaneDeployment); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{Requeue: true}, nil
-		}
-	}
-
 	serviceAccountExists := false
 	serviceAccount := new(corev1.ServiceAccount)
 	if err := r.Client.Get(ctx, req.NamespacedName, serviceAccount); err == nil {
@@ -215,6 +166,7 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
+	controlPlaneDeployment := new(appsv1.Deployment)
 	deploymentExists := false
 	if err := r.Client.Get(ctx, req.NamespacedName, controlPlaneDeployment); err == nil {
 		deploymentExists = true
@@ -230,6 +182,14 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	controlPlane.Spec.Env = append(controlPlane.Spec.Env, corev1.EnvVar{Name: "CONTROLLER_FEATURE_GATES", Value: "Gateway=true"})
 	controlPlane.Spec.Env = append(controlPlane.Spec.Env, corev1.EnvVar{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "metadata.name"}}})
 	controlPlane.Spec.Env = append(controlPlane.Spec.Env, corev1.EnvVar{Name: "POD_NAMESPACE", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "metadata.namespace"}}})
+
+	// set owner reference to cascade ControlPlane deletions to Deployment
+	controlPlaneDeployment.ObjectMeta.OwnerReferences = append(controlPlane.ObjectMeta.OwnerReferences, metav1.OwnerReference{
+		APIVersion: controlPlane.GroupVersionKind().Version,
+		Kind:       controlPlane.GroupVersionKind().Kind,
+		Name:       controlPlane.Name,
+		UID:        controlPlane.UID,
+	})
 
 	controlPlaneDeployment.ObjectMeta.Namespace = req.Namespace
 	controlPlaneDeployment.ObjectMeta.Name = req.Name

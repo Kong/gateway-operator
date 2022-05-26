@@ -22,6 +22,8 @@ import (
 	"os"
 
 	"github.com/kong/gateway-operator/internal/manager"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func main() {
@@ -31,8 +33,22 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", manager.DefaultConfig.LeaderElection,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
+		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+
+	developmentModeEnabled := manager.DefaultConfig.DevelopmentMode
+	if v := os.Getenv("CONTROLLER_DEVELOPMENT_MODE"); v == "true" { // TODO: make an explicit section and listing of available ENV vars
+		fmt.Println("INFO: development mode has been enabled")
+		developmentModeEnabled = true
+	}
+
+	opts := zap.Options{
+		Development: developmentModeEnabled,
+	}
+
+	opts.BindFlags(flag.CommandLine)
+	flag.Parse()
+
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	cfg := manager.Config{
 		MetricsAddr:    metricsAddr,
