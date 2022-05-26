@@ -13,6 +13,8 @@ import (
 	"github.com/kong/kubernetes-testing-framework/pkg/clusters/addons/metallb"
 	"github.com/kong/kubernetes-testing-framework/pkg/clusters/types/kind"
 	"github.com/kong/kubernetes-testing-framework/pkg/environments"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/kong/gateway-operator/internal/manager"
@@ -79,6 +81,7 @@ func TestMain(m *testing.M) {
 
 	fmt.Println("INFO: deploying CRDs to test cluster")
 	exitOnErr(clusters.KustomizeDeployForCluster(ctx, env.Cluster(), "../../config/crd"))
+	exitOnErr(waitForCRDs(ctx))
 
 	fmt.Println("INFO: starting the operator's controller manager")
 	go startControllerManager()
@@ -124,4 +127,15 @@ func startControllerManager() {
 	}
 
 	exitOnErr(manager.Run(cfg))
+}
+
+func waitForCRDs(ctx context.Context) error {
+	ready := false
+	for !ready {
+		_, err := operatorClient.V1alpha1().DataPlanes(corev1.NamespaceDefault).List(ctx, metav1.ListOptions{})
+		if err == nil {
+			ready = true
+		}
+	}
+	return nil
 }
