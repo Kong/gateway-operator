@@ -190,21 +190,6 @@ spec:
           status:
             description: DataPlaneStatus defines the observed state of DataPlane
             properties:
-              childRefs:
-                description: ChildRefs are a reference to all the Deployment resources
-                  which have their lifecycle managed by this DataPlane.
-                items:
-                  properties:
-                    name:
-                      type: string
-                    namespace:
-                      type: string
-                  required:
-                  - name
-                  type: object
-                maxItems: 20
-                minItems: 0
-                type: array
               conditions:
                 description: Conditions describe the status of the DataPlane.
                 items:

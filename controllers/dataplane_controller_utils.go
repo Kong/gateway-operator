@@ -1,28 +1,138 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/kong/gateway-operator/api/v1alpha1"
+	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/internal/consts"
 	"github.com/kong/gateway-operator/internal/logging"
 )
 
-func setDataPlaneDefaults(dataplane *v1alpha1.DataPlane) {
+// -----------------------------------------------------------------------------
+// Public Functions - Owner References
+// -----------------------------------------------------------------------------
+
+const (
+	// GatewayOperatorControlledLabel is the label that is used for objects which
+	// were created by this operator.
+	GatewayOperatorControlledLabel = "konghq.com/gateway-operator"
+
+	// DataPlaneManagedLabel indicates that an object's lifecycle is managed by
+	// the dataplane controller.
+	DataPlaneManagedLabel = "dataplane"
+)
+
+// ListDeploymentsForDataPlane uses labels to list Deployments which were
+// created by the dataplane controller, and further filters on those which
+// were created specifically for the provided dataplane object.
+func ListDeploymentsForDataPlane(
+	ctx context.Context,
+	c client.Client,
+	dataplane *operatorv1alpha1.DataPlane,
+) ([]appsv1.Deployment, error) {
+	requirement, err := labels.NewRequirement(
+		GatewayOperatorControlledLabel,
+		selection.Equals,
+		[]string{DataPlaneManagedLabel},
+	)
+	if err != nil {
+		return nil, err
+	}
+	selector := labels.NewSelector().Add(*requirement)
+
+	deploymentList := &appsv1.DeploymentList{}
+	if err := c.List(ctx, deploymentList, &client.ListOptions{
+		Namespace:     dataplane.Namespace,
+		LabelSelector: selector,
+	}); err != nil {
+		return nil, err
+	}
+
+	deployments := make([]appsv1.Deployment, 0)
+	for _, deployment := range deploymentList.Items {
+		for _, ownerRef := range deployment.ObjectMeta.OwnerReferences {
+			if ownerRef.UID == dataplane.UID {
+				deployments = append(deployments, deployment)
+				break
+			}
+		}
+	}
+
+	return deployments, nil
+}
+
+// ListServicesForDataPlane uses labels to list Services which were
+// created by the dataplane controller, and further filters on those which
+// were created specifically for the provided dataplane object.
+func ListServicesForDataPlane(
+	ctx context.Context,
+	c client.Client,
+	dataplane *operatorv1alpha1.DataPlane,
+) ([]corev1.Service, error) {
+	requirement, err := labels.NewRequirement(
+		GatewayOperatorControlledLabel,
+		selection.Equals,
+		[]string{DataPlaneManagedLabel},
+	)
+	if err != nil {
+		return nil, err
+	}
+	selector := labels.NewSelector().Add(*requirement)
+
+	serviceList := &corev1.ServiceList{}
+	if err := c.List(ctx, serviceList, &client.ListOptions{
+		Namespace:     dataplane.Namespace,
+		LabelSelector: selector,
+	}); err != nil {
+		return nil, err
+	}
+
+	services := make([]corev1.Service, 0)
+	for _, service := range serviceList.Items {
+		for _, ownerRef := range service.ObjectMeta.OwnerReferences {
+			if ownerRef.UID == dataplane.UID {
+				services = append(services, service)
+				break
+			}
+		}
+	}
+
+	return services, nil
+}
+
+// -----------------------------------------------------------------------------
+// Private Functions - Generators
+// -----------------------------------------------------------------------------
+
+const (
+	defaultHTTPPort  = 80
+	defaultHTTPSPort = 443
+
+	defaultKongHTTPPort   = 8000
+	defaultKongHTTPSPort  = 8443
+	defaultKongAdminPort  = 8444
+	defaultKongStatusPort = 8100
+)
+
+func setDataPlaneDefaults(dataplane *operatorv1alpha1.DataPlane) {
 	// FIXME: these defaults are kind of esoteric, is there a better way to express and document them? do we actually need all of them?
+	// TODO: make this a generator that returns the object instead
 	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_ADMIN_ACCESS_LOG", Value: "/dev/stdout"})
 	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_ADMIN_ERROR_LOG", Value: "/dev/stderr"})
 	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_ADMIN_GUI_ACCESS_LOG", Value: "/dev/stdout"})
 	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_ADMIN_GUI_ERROR_LOG", Value: "/dev/stderr"})
-	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_ADMIN_LISTEN", Value: "0.0.0.0:8444 ssl"})
+	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_ADMIN_LISTEN", Value: fmt.Sprintf("0.0.0.0:%d ssl", defaultKongAdminPort)})
 	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_CLUSTER_LISTEN", Value: "off"})
 	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_DATABASE", Value: "off"})
 	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_LUA_PACKAGE_PATH", Value: "/opt/?.lua;/opt/?/init.lua;;"})
@@ -33,28 +143,11 @@ func setDataPlaneDefaults(dataplane *v1alpha1.DataPlane) {
 	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_PORT_MAPS", Value: "80:8000, 443:8443"})
 	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_PROXY_ACCESS_LOG", Value: "/dev/stdout"})
 	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_PROXY_ERROR_LOG", Value: "/dev/stderr"})
-	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_PROXY_LISTEN", Value: "0.0.0.0:8000, 0.0.0.0:8443 http2 ssl"})
-	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_STATUS_LISTEN", Value: "0.0.0.0:8100"})
+	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_PROXY_LISTEN", Value: fmt.Sprintf("0.0.0.0:%d, 0.0.0.0:%d http2 ssl", defaultKongHTTPPort, defaultKongHTTPSPort)})
+	dataplane.Spec.Env = append(dataplane.Spec.Env, corev1.EnvVar{Name: "KONG_STATUS_LISTEN", Value: fmt.Sprintf("0.0.0.0:%d", defaultKongStatusPort)})
 }
 
-func setDataPlaneAsDeploymentOwner(dataplane *v1alpha1.DataPlane, deployment *appsv1.Deployment) {
-	foundOwnerRef := false
-	for _, ownerRef := range deployment.ObjectMeta.OwnerReferences {
-		if ownerRef.UID == dataplane.UID {
-			foundOwnerRef = true
-		}
-	}
-	if !foundOwnerRef {
-		deployment.ObjectMeta.OwnerReferences = append(deployment.ObjectMeta.OwnerReferences, metav1.OwnerReference{
-			APIVersion: fmt.Sprintf("%s/%s", dataplane.GroupVersionKind().Group, dataplane.GroupVersionKind().Version),
-			Kind:       dataplane.GroupVersionKind().Kind,
-			Name:       dataplane.Name,
-			UID:        dataplane.UID,
-		})
-	}
-}
-
-func generateNewDeploymentForDataPlane(dataplane *v1alpha1.DataPlane) *appsv1.Deployment {
+func generateNewDeploymentForDataPlane(dataplane *operatorv1alpha1.DataPlane) *appsv1.Deployment {
 	var dataplaneImage string
 	if dataplane.Spec.ContainerImage != nil {
 		dataplaneImage = *dataplane.Spec.ContainerImage
@@ -146,11 +239,55 @@ func generateNewDeploymentForDataPlane(dataplane *v1alpha1.DataPlane) *appsv1.De
 	return deployment
 }
 
-func debug(log logr.Logger, msg string, rawOBJ interface{}) {
+// -----------------------------------------------------------------------------
+// Private Functions - Owner References
+// -----------------------------------------------------------------------------
+
+func createOwnerRefForDataPlane(dataplane *operatorv1alpha1.DataPlane) metav1.OwnerReference {
+	return metav1.OwnerReference{
+		APIVersion: apiVersionForDataplane(dataplane),
+		Kind:       dataplane.GroupVersionKind().Kind,
+		Name:       dataplane.Name,
+		UID:        dataplane.UID,
+	}
+}
+
+func apiVersionForDataplane(dataplane *operatorv1alpha1.DataPlane) string {
+	return fmt.Sprintf("%s/%s", dataplane.GroupVersionKind().Group, dataplane.GroupVersionKind().Version)
+}
+
+func setDataPlaneAsDeploymentOwner(dataplane *operatorv1alpha1.DataPlane, deployment *appsv1.Deployment) {
+	foundOwnerRef := false
+	for _, ownerRef := range deployment.ObjectMeta.OwnerReferences {
+		if ownerRef.UID == dataplane.UID {
+			foundOwnerRef = true
+		}
+	}
+	if !foundOwnerRef {
+		deployment.ObjectMeta.OwnerReferences = append(deployment.ObjectMeta.OwnerReferences, createOwnerRefForDataPlane(dataplane))
+	}
+}
+
+func labelObjForDataplane(obj client.Object) {
+	labels := obj.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels[GatewayOperatorControlledLabel] = DataPlaneManagedLabel
+	obj.SetLabels(labels)
+}
+
+// -----------------------------------------------------------------------------
+// Private Functions - Logging
+// -----------------------------------------------------------------------------
+
+func debug(log logr.Logger, msg string, rawOBJ interface{}, keysAndValues ...interface{}) { //nolint:unparam //FIXME
 	if obj, ok := rawOBJ.(client.Object); ok {
-		log.V(logging.DebugLevel).Info(msg, "namespace", obj.GetNamespace(), "name", obj.GetName())
+		kvs := append([]interface{}{"namespace", obj.GetNamespace(), "name", obj.GetName()}, keysAndValues...)
+		log.V(logging.DebugLevel).Info(msg, kvs...)
 	} else if req, ok := rawOBJ.(reconcile.Request); ok {
-		log.V(logging.DebugLevel).Info(msg, "namespace", req.Namespace, "name", req.Name)
+		kvs := append([]interface{}{"namespace", req.Namespace, "name", req.Name}, keysAndValues...)
+		log.V(logging.DebugLevel).Info(msg, kvs...)
 	} else {
 		log.V(logging.DebugLevel).Info(fmt.Sprintf("unexpected type processed for debug logging: %T, this is a bug!", rawOBJ))
 	}

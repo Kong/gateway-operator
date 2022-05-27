@@ -5,9 +5,12 @@ package integration
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/kong/kubernetes-testing-framework/pkg/clusters"
 	"github.com/kong/kubernetes-testing-framework/pkg/clusters/addons/metallb"
@@ -16,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kong/gateway-operator/internal/manager"
 	"github.com/kong/gateway-operator/pkg/clientset"
@@ -41,6 +45,16 @@ var (
 
 	k8sClient      *kubernetes.Clientset
 	operatorClient *clientset.Clientset
+	mgrClient      client.Client
+
+	httpc = http.Client{
+		Timeout: time.Second * 10,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
 )
 
 // -----------------------------------------------------------------------------
@@ -77,6 +91,7 @@ func TestMain(m *testing.M) {
 	fmt.Println("INFO: initializing Kubernetes API clients")
 	k8sClient = env.Cluster().Client()
 	operatorClient, err = clientset.NewForConfig(env.Cluster().Config())
+	mgrClient, err = client.New(env.Cluster().Config(), client.Options{})
 	exitOnErr(err)
 
 	fmt.Println("INFO: deploying CRDs to test cluster")
@@ -135,6 +150,8 @@ func waitForCRDs(ctx context.Context) error {
 		_, err := operatorClient.V1alpha1().DataPlanes(corev1.NamespaceDefault).List(ctx, metav1.ListOptions{})
 		if err == nil {
 			ready = true
+		} else {
+			return err
 		}
 	}
 	return nil

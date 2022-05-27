@@ -4,6 +4,8 @@
 package integration
 
 import (
+	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -56,12 +58,6 @@ func TestDataplaneEssentials(t *testing.T) {
 		return isScheduled
 	}, time.Minute, time.Second)
 
-	t.Log("waiting for dataplane deployment")
-	require.Eventually(t, func() bool {
-		deployment, err := k8sClient.AppsV1().Deployments(namespace.Name).Get(ctx, dataplane.Name, metav1.GetOptions{})
-		return err == nil && deployment.Status.AvailableReplicas == deployment.Status.Replicas
-	}, time.Minute, time.Second)
-
 	t.Log("verifying that the dataplane gets marked as provisioned")
 	require.Eventually(t, func() bool {
 		dataplane, err = operatorClient.V1alpha1().DataPlanes(namespace.Name).Get(ctx, dataplane.Name, metav1.GetOptions{})
@@ -74,4 +70,43 @@ func TestDataplaneEssentials(t *testing.T) {
 		}
 		return isProvisioned
 	}, time.Minute, time.Second)
+
+	t.Log("verifying deployments managed by the dataplane")
+	require.Eventually(t, func() bool {
+		deployments, err := controllers.ListDeploymentsForDataPlane(ctx, mgrClient, dataplane)
+		require.NoError(t, err)
+		return len(deployments) == 1 && deployments[0].Status.AvailableReplicas >= deployments[0].Status.ReadyReplicas
+	}, time.Minute, time.Second)
+
+	t.Log("verifying services managed by the dataplane")
+	var dataplaneService *corev1.Service
+	require.Eventually(t, func() bool {
+		services, err := controllers.ListServicesForDataPlane(ctx, mgrClient, dataplane)
+		require.NoError(t, err)
+		if len(services) == 1 {
+			dataplaneService = &services[0]
+			return true
+		}
+		return false
+	}, time.Minute, time.Second)
+
+	t.Log("verifying dataplane services receive IP addresses")
+	var dataplaneIP string
+	require.Eventually(t, func() bool {
+		dataplaneService, err := k8sClient.CoreV1().Services(dataplane.Namespace).Get(ctx, dataplaneService.Name, metav1.GetOptions{})
+		require.NoError(t, err)
+		if len(dataplaneService.Status.LoadBalancer.Ingress) > 0 {
+			dataplaneIP = dataplaneService.Status.LoadBalancer.Ingress[0].IP
+			return true
+		}
+		return false
+	}, time.Minute, time.Second)
+
+	t.Log("verifying connectivity to the dataplane")
+	resp, err := httpc.Get(fmt.Sprintf("https://%s:8444/status", dataplaneIP))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(body), `"database":{"reachable":true}`)
 }
