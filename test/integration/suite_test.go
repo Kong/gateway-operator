@@ -147,11 +147,14 @@ func startControllerManager() {
 func waitForCRDs(ctx context.Context) error {
 	ready := false
 	for !ready {
-		_, err := operatorClient.V1alpha1().DataPlanes(corev1.NamespaceDefault).List(ctx, metav1.ListOptions{})
-		if err == nil {
-			ready = true
-		} else {
-			return err
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			_, err := operatorClient.V1alpha1().DataPlanes(corev1.NamespaceDefault).List(ctx, metav1.ListOptions{})
+			if err == nil {
+				ready = true
+			}
 		}
 	}
 	return nil
