@@ -24,6 +24,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -50,6 +51,7 @@ type Config struct {
 	LeaderElection  bool
 	DevelopmentMode bool
 	Out             *os.File
+	NewClientFunc   cluster.NewClientFunc
 }
 
 var DefaultConfig = Config{
@@ -77,7 +79,8 @@ func Run(cfg Config) error {
 		Port:                   cfg.WebhookPort,
 		HealthProbeBindAddress: cfg.ProbeAddr,
 		LeaderElection:         cfg.LeaderElection,
-		LeaderElectionID:       "7feedc84.konghq.com",
+		LeaderElectionID:       "7feCliedc84.konghq.com",
+		NewClient:              cfg.NewClientFunc,
 	})
 	if err != nil {
 		return fmt.Errorf("unable to start manager: %w", err)
