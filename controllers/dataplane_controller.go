@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -153,8 +154,13 @@ func (r *DataPlaneReconciler) ensureServiceForDataPlane(
 	ctx context.Context,
 	dataplane *operatorv1alpha1.DataPlane,
 ) (bool, *corev1.Service, error) {
+	nsn := types.NamespacedName{
+		Namespace: dataplane.Namespace,
+		Name:      "dataplane-" + dataplane.Name,
+	}
+
 	service := &corev1.Service{}
-	if err := r.Client.Get(ctx, client.ObjectKeyFromObject(dataplane), service); err == nil { // TODO: use generated name
+	if err := r.Client.Get(ctx, nsn, service); err == nil { // TODO: use generated name
 		return false, service, nil
 	} else if !errors.IsNotFound(err) {
 		return false, nil, err
@@ -162,8 +168,8 @@ func (r *DataPlaneReconciler) ensureServiceForDataPlane(
 
 	service = &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace:       dataplane.Namespace,
-			Name:            dataplane.Name, // TODO: use generated name
+			Namespace:       nsn.Namespace,
+			Name:            nsn.Name,
 			OwnerReferences: []metav1.OwnerReference{createOwnerRefForDataPlane(dataplane)},
 		},
 		Spec: corev1.ServiceSpec{

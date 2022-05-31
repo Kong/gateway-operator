@@ -69,7 +69,7 @@ func TestDataplaneEssentials(t *testing.T) {
 			}
 		}
 		return isProvisioned
-	}, time.Minute, time.Second)
+	}, time.Minute*2, time.Second)
 
 	t.Log("verifying deployments managed by the dataplane")
 	require.Eventually(t, func() bool {
