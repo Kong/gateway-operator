@@ -67,6 +67,8 @@ func (r *DataPlaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //+kubebuilder:rbac:groups=gateway-operator.konghq.com,resources=dataplanes/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=create;get;list;watch;update;patch
 //+kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get
+//+kubebuilder:rbac:groups=core,resources=services,verbs=create;get;list;watch;update;patch
+//+kubebuilder:rbac:groups=core,resources=services/status,verbs=get
 
 // Reconcile moves the current state of an object to the intended state.
 func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

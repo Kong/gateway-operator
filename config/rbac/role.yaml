@@ -23,6 +23,23 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services/status
+  verbs:
+  - get
+- apiGroups:
   - gateway-operator.konghq.com
   resources:
   - controlplanes

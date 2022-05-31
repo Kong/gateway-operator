@@ -86,3 +86,5 @@ jobs:
 
     - name: run integration tests
       run: make test.integration
+      env:
+        KONG_CONTROLLER_OUT: stdout

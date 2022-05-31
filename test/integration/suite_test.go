@@ -19,6 +19,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kong/gateway-operator/internal/manager"
@@ -94,6 +96,10 @@ func TestMain(m *testing.M) {
 	mgrClient, err = client.New(env.Cluster().Config(), client.Options{})
 	exitOnErr(err)
 
+	fmt.Println("INFO: creating system namespaces and serviceaccounts")
+	exitOnErr(clusters.CreateNamespace(ctx, env.Cluster(), "kong-system"))
+	exitOnErr(clusters.KustomizeDeployForCluster(ctx, env.Cluster(), "../../config/rbac"))
+
 	fmt.Println("INFO: deploying CRDs to test cluster")
 	exitOnErr(clusters.KustomizeDeployForCluster(ctx, env.Cluster(), "../../config/crd"))
 	exitOnErr(waitForCRDs(ctx))
@@ -126,12 +132,28 @@ func exitOnErr(err error) {
 	}
 }
 
-// TODO: run the manager with a service account and RBAC from kustomize to help
-// catch problems with permissions
 func startControllerManager() {
 	cfg := manager.DefaultConfig
 	cfg.LeaderElection = false
 	cfg.DevelopmentMode = true
+
+	cfg.NewClientFunc = func(cache cache.Cache, config *rest.Config, options client.Options, uncachedObjects ...client.Object) (client.Client, error) {
+		// always hijack and impersonate the system service account here so that the manager
+		// is testing the RBAC permissions we provide under config/rbac/. This helps alert us
+		// if we break our RBAC configs as the manager will emit permissions errors.
+		config.Impersonate.UserName = "system:serviceaccount:kong-system:controller-manager"
+
+		c, err := client.New(config, options)
+		if err != nil {
+			return nil, err
+		}
+
+		return client.NewDelegatingClient(client.NewDelegatingClientInput{
+			CacheReader:     cache,
+			Client:          c,
+			UncachedObjects: uncachedObjects,
+		})
+	}
 
 	if controllerManagerOut != "stdout" {
 		out, err := os.CreateTemp(os.TempDir(), "gateway-operator-controller-logs")
