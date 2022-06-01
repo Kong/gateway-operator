@@ -231,6 +231,10 @@ test.unit:
 test.integration:
 	GOFLAGS="-tags=integration_tests" go test -race -v ./test/integration/...
 
+.PHONY: test.e2e
+test.e2e:
+	GOFLAGS="-tags=e2e_tests" go test -race -v ./test/e2e/...
+
 # ------------------------------------------------------------------------------
 # Debug
 # ------------------------------------------------------------------------------

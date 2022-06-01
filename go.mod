@@ -6,7 +6,7 @@ require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/go-logr/logr v1.2.3
 	github.com/google/uuid v1.3.0
-	github.com/kong/kubernetes-testing-framework v0.14.1
+	github.com/kong/kubernetes-testing-framework v0.14.2
 	github.com/stretchr/testify v1.7.1
 	k8s.io/api v0.24.1
 	k8s.io/apimachinery v0.24.1
