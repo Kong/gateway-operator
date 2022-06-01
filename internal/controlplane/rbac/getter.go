@@ -6,6 +6,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// FIXME delete this
 func GetRBACRolesForControlPlaneVersion(version semver.Version) ([]rbacv1.Role, []rbacv1.ClusterRole) {
 	// FIXME - this file should be _generated_ and should do a lookup of the version
 	return []rbacv1.Role{

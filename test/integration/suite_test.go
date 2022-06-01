@@ -53,7 +53,7 @@ var (
 		Timeout: time.Second * 10,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
+				InsecureSkipVerify: true, //nolint:gosec
 			},
 		},
 	}
@@ -93,6 +93,7 @@ func TestMain(m *testing.M) {
 	fmt.Println("INFO: initializing Kubernetes API clients")
 	k8sClient = env.Cluster().Client()
 	operatorClient, err = clientset.NewForConfig(env.Cluster().Config())
+	exitOnErr(err)
 	mgrClient, err = client.New(env.Cluster().Config(), client.Options{})
 	exitOnErr(err)
 

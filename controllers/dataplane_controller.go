@@ -1,34 +1,14 @@
-/*
-Copyright 2022 Kong Inc.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package controllers
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -53,6 +33,7 @@ func (r *DataPlaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+// TODO: need to promote some of the debug log entries to info, and then turn off debug logs by default
 // TODO: need to trigger reconciliation whenever labeled Deployments or Services are changed or deleted
 // TODO: revisit places to emit events
 
@@ -106,22 +87,14 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	debug(log, "looking for existing deployments for dataplane resource", dataplane)
-	dataplaneDeployment, err := r.getDeploymentForDataPlane(ctx, log, dataplane)
+	created, dataplaneDeployment, err := r.ensureDeploymentForDataPlane(ctx, dataplane)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			dataplaneDeployment = nil
-		} else {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, err
+	}
+	if created {
+		return ctrl.Result{Requeue: true}, nil // TODO: change once deployment create triggers reconciliation
 	}
 
-	if dataplaneDeployment == nil {
-		debug(log, "no deployment found for dataplane, creating", dataplane)
-		if err := r.createDeploymentForDataPlane(ctx, dataplane); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
-	}
 	// TODO: needs to update the existing deployment to ensure latest config
 
 	debug(log, "checking readiness of dataplane deployments", dataplane)
@@ -131,7 +104,6 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	debug(log, "exposing dataplane deployment via service", dataplane)
-	// TODO: needs to update the existing service too to ensure latest config
 	created, dataplaneService, err := r.ensureServiceForDataPlane(ctx, dataplane)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -140,8 +112,10 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{Requeue: true}, nil // TODO: change once service create triggers reconciliation
 	}
 
+	// TODO: needs to update the existing service too to ensure latest config
+
+	debug(log, "checking readiness of dataplane service", dataplaneService)
 	if dataplaneService.Spec.ClusterIP == "" {
-		debug(log, "waiting for dataplane service to be provisioned an IP", dataplaneService)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -150,43 +124,13 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 // -----------------------------------------------------------------------------
-// DataPlaneReconciler - Reconciliation Helper Methods
+// DataPlaneReconciler - Status Management
 // -----------------------------------------------------------------------------
 
-// getDeploymentForDataPlane attempts to retrieve an existing Deployment object
-// for the provided DataPlane object if one exists.
-func (r *DataPlaneReconciler) getDeploymentForDataPlane(
+func (r *DataPlaneReconciler) ensureDataPlaneIsMarkedScheduled(
 	ctx context.Context,
-	log logr.Logger,
 	dataplane *operatorv1alpha1.DataPlane,
-) (*appsv1.Deployment, error) {
-	debug(log, "listing deployments for dataplane", dataplane)
-	deployments, err := ListDeploymentsForDataPlane(ctx, r.Client, dataplane)
-	if err != nil {
-		return nil, err
-	}
-
-	count := len(deployments)
-	if count > 1 { // TODO: add handling for multiple deployments
-		return nil, fmt.Errorf("found %d deployments for dataplane, expected 1 or less", count)
-	}
-
-	if count == 0 {
-		debug(log, "found no deployments for dataplane", dataplane)
-		return nil, errors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "deployments"}, "unknown")
-	}
-
-	return &deployments[0], nil
-}
-
-func (r *DataPlaneReconciler) createDeploymentForDataPlane(ctx context.Context, dataplane *operatorv1alpha1.DataPlane) error {
-	deployment := generateNewDeploymentForDataPlane(dataplane)
-	setDataPlaneAsDeploymentOwner(dataplane, deployment)
-	labelObjForDataplane(deployment)
-	return r.Client.Create(ctx, deployment)
-}
-
-func (r *DataPlaneReconciler) ensureDataPlaneIsMarkedScheduled(ctx context.Context, dataplane *operatorv1alpha1.DataPlane) (bool, error) {
+) (bool, error) {
 	isScheduled := false
 	for _, condition := range dataplane.Status.Conditions {
 		if condition.Type == string(DataPlaneConditionTypeProvisioned) {
@@ -209,7 +153,10 @@ func (r *DataPlaneReconciler) ensureDataPlaneIsMarkedScheduled(ctx context.Conte
 	return false, nil
 }
 
-func (r *DataPlaneReconciler) ensureDataPlaneIsMarkedProvisioned(ctx context.Context, dataplane *operatorv1alpha1.DataPlane) error {
+func (r *DataPlaneReconciler) ensureDataPlaneIsMarkedProvisioned(
+	ctx context.Context,
+	dataplane *operatorv1alpha1.DataPlane,
+) error {
 	updatedConditions := make([]metav1.Condition, 0)
 	for _, condition := range dataplane.Status.Conditions {
 		if condition.Type == string(DataPlaneConditionTypeProvisioned) {
@@ -226,52 +173,53 @@ func (r *DataPlaneReconciler) ensureDataPlaneIsMarkedProvisioned(ctx context.Con
 	return r.Status().Update(ctx, dataplane)
 }
 
+// -----------------------------------------------------------------------------
+// DataPlaneReconciler - Owned Resource Management
+// -----------------------------------------------------------------------------
+
+func (r *DataPlaneReconciler) ensureDeploymentForDataPlane(
+	ctx context.Context,
+	dataplane *operatorv1alpha1.DataPlane,
+) (bool, *appsv1.Deployment, error) {
+	deployments, err := ListDeploymentsForDataPlane(ctx, r.Client, dataplane)
+	if err != nil {
+		return false, nil, err
+	}
+
+	count := len(deployments)
+	if count > 1 { // TODO: add handling for multiple deployments
+		return false, nil, fmt.Errorf("found %d deployments for dataplane currently unsupported: expected 1 or less", count)
+	}
+
+	if count == 1 {
+		return false, &deployments[0], nil
+	}
+
+	deployment := generateNewDeploymentForDataPlane(dataplane)
+	setDataPlaneAsDeploymentOwner(dataplane, deployment)
+	labelObjForDataplane(deployment)
+	return true, deployment, r.Client.Create(ctx, deployment)
+}
+
 func (r *DataPlaneReconciler) ensureServiceForDataPlane(
 	ctx context.Context,
 	dataplane *operatorv1alpha1.DataPlane,
 ) (bool, *corev1.Service, error) {
-	nsn := types.NamespacedName{
-		Namespace: dataplane.Namespace,
-		Name:      "dataplane-" + dataplane.Name,
-	}
-
-	service := &corev1.Service{}
-	if err := r.Client.Get(ctx, nsn, service); err == nil { // TODO: use generated name
-		return false, service, nil
-	} else if !errors.IsNotFound(err) {
+	services, err := ListServicesForDataPlane(ctx, r.Client, dataplane)
+	if err != nil {
 		return false, nil, err
 	}
 
-	service = &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:       nsn.Namespace,
-			Name:            nsn.Name,
-			OwnerReferences: []metav1.OwnerReference{createOwnerRefForDataPlane(dataplane)},
-		},
-		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeLoadBalancer, // TODO: dynamically figure this out
-			Selector: map[string]string{"app": dataplane.Name},
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "http",
-					Protocol:   corev1.ProtocolTCP,
-					Port:       defaultHTTPPort, // TODO: add dynamic port determinations
-					TargetPort: intstr.FromInt(defaultKongHTTPPort),
-				},
-				{
-					Name:       "https",
-					Protocol:   corev1.ProtocolTCP,
-					Port:       defaultHTTPSPort, // TODO: add dynamic port determinations
-					TargetPort: intstr.FromInt(defaultKongHTTPSPort),
-				},
-				{ // TODO: in time, create a separate ClusterIP ONLY admin Service (this is just convenient for the moment, but not secure)
-					Name:     "admin",
-					Protocol: corev1.ProtocolTCP,
-					Port:     defaultKongAdminPort, // TODO: add dynamic port determinations
-				},
-			},
-		},
+	count := len(services)
+	if count > 1 { // TODO: add handling for multiple services
+		return false, nil, fmt.Errorf("found %d services for dataplane currently unsupported: expected 1 or less", count)
 	}
+
+	if count == 1 {
+		return false, &services[0], nil
+	}
+
+	service := generateNewServiceForDataplane(dataplane)
 	labelObjForDataplane(service)
 
 	return true, service, r.Client.Create(ctx, service)

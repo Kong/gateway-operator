@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,15 +11,13 @@ import (
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/internal/consts"
-	"github.com/kong/gateway-operator/internal/logging"
 )
 
 // -----------------------------------------------------------------------------
-// Public Functions - Owner References
+// Public Consts - Labels
 // -----------------------------------------------------------------------------
 
 const (
@@ -32,6 +29,10 @@ const (
 	// the dataplane controller.
 	DataPlaneManagedLabel = "dataplane"
 )
+
+// -----------------------------------------------------------------------------
+// Public Functions - Owner References
+// -----------------------------------------------------------------------------
 
 // ListDeploymentsForDataPlane uses labels to list Deployments which were
 // created by the dataplane controller, and further filters on those which
@@ -239,6 +240,39 @@ func generateNewDeploymentForDataPlane(dataplane *operatorv1alpha1.DataPlane) *a
 	return deployment
 }
 
+func generateNewServiceForDataplane(dataplane *operatorv1alpha1.DataPlane) *corev1.Service {
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:       dataplane.Namespace,
+			Name:            "dataplane-" + dataplane.Name, // TODO: generate instead
+			OwnerReferences: []metav1.OwnerReference{createOwnerRefForDataPlane(dataplane)},
+		},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeLoadBalancer, // TODO: dynamically figure this out
+			Selector: map[string]string{"app": dataplane.Name},
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "http",
+					Protocol:   corev1.ProtocolTCP,
+					Port:       defaultHTTPPort, // TODO: add dynamic port determinations
+					TargetPort: intstr.FromInt(defaultKongHTTPPort),
+				},
+				{
+					Name:       "https",
+					Protocol:   corev1.ProtocolTCP,
+					Port:       defaultHTTPSPort, // TODO: add dynamic port determinations
+					TargetPort: intstr.FromInt(defaultKongHTTPSPort),
+				},
+				{ // TODO: in time, create a separate ClusterIP ONLY admin Service (this is just convenient for the moment, but not secure)
+					Name:     "admin",
+					Protocol: corev1.ProtocolTCP,
+					Port:     defaultKongAdminPort, // TODO: add dynamic port determinations
+				},
+			},
+		},
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Private Functions - Owner References
 // -----------------------------------------------------------------------------
@@ -275,20 +309,4 @@ func labelObjForDataplane(obj client.Object) {
 	}
 	labels[GatewayOperatorControlledLabel] = DataPlaneManagedLabel
 	obj.SetLabels(labels)
-}
-
-// -----------------------------------------------------------------------------
-// Private Functions - Logging
-// -----------------------------------------------------------------------------
-
-func debug(log logr.Logger, msg string, rawOBJ interface{}, keysAndValues ...interface{}) { //nolint:unparam //FIXME
-	if obj, ok := rawOBJ.(client.Object); ok {
-		kvs := append([]interface{}{"namespace", obj.GetNamespace(), "name", obj.GetName()}, keysAndValues...)
-		log.V(logging.DebugLevel).Info(msg, kvs...)
-	} else if req, ok := rawOBJ.(reconcile.Request); ok {
-		kvs := append([]interface{}{"namespace", req.Namespace, "name", req.Name}, keysAndValues...)
-		log.V(logging.DebugLevel).Info(msg, kvs...)
-	} else {
-		log.V(logging.DebugLevel).Info(fmt.Sprintf("unexpected type processed for debug logging: %T, this is a bug!", rawOBJ))
-	}
 }

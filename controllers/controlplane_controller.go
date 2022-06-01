@@ -33,8 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
-	"github.com/kong/gateway-operator/internal/logging"
-	"github.com/kong/gateway-operator/internal/rbac"
+	"github.com/kong/gateway-operator/internal/controlplane/rbac"
+	"github.com/kong/gateway-operator/internal/manager/logging"
 )
 
 // ControlPlaneReconciler reconciles a ControlPlane object
