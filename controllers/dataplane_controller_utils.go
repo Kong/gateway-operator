@@ -1,116 +1,17 @@
 package controllers
 
 import (
-	"context"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/internal/consts"
 )
-
-// -----------------------------------------------------------------------------
-// Public Consts - Labels
-// -----------------------------------------------------------------------------
-
-const (
-	// GatewayOperatorControlledLabel is the label that is used for objects which
-	// were created by this operator.
-	GatewayOperatorControlledLabel = "konghq.com/gateway-operator"
-
-	// DataPlaneManagedLabel indicates that an object's lifecycle is managed by
-	// the dataplane controller.
-	DataPlaneManagedLabel = "dataplane"
-)
-
-// -----------------------------------------------------------------------------
-// Public Functions - Owner References
-// -----------------------------------------------------------------------------
-
-// ListDeploymentsForDataPlane uses labels to list Deployments which were
-// created by the dataplane controller, and further filters on those which
-// were created specifically for the provided dataplane object.
-func ListDeploymentsForDataPlane(
-	ctx context.Context,
-	c client.Client,
-	dataplane *operatorv1alpha1.DataPlane,
-) ([]appsv1.Deployment, error) {
-	requirement, err := labels.NewRequirement(
-		GatewayOperatorControlledLabel,
-		selection.Equals,
-		[]string{DataPlaneManagedLabel},
-	)
-	if err != nil {
-		return nil, err
-	}
-	selector := labels.NewSelector().Add(*requirement)
-
-	deploymentList := &appsv1.DeploymentList{}
-	if err := c.List(ctx, deploymentList, &client.ListOptions{
-		Namespace:     dataplane.Namespace,
-		LabelSelector: selector,
-	}); err != nil {
-		return nil, err
-	}
-
-	deployments := make([]appsv1.Deployment, 0)
-	for _, deployment := range deploymentList.Items {
-		for _, ownerRef := range deployment.ObjectMeta.OwnerReferences {
-			if ownerRef.UID == dataplane.UID {
-				deployments = append(deployments, deployment)
-				break
-			}
-		}
-	}
-
-	return deployments, nil
-}
-
-// ListServicesForDataPlane uses labels to list Services which were
-// created by the dataplane controller, and further filters on those which
-// were created specifically for the provided dataplane object.
-func ListServicesForDataPlane(
-	ctx context.Context,
-	c client.Client,
-	dataplane *operatorv1alpha1.DataPlane,
-) ([]corev1.Service, error) {
-	requirement, err := labels.NewRequirement(
-		GatewayOperatorControlledLabel,
-		selection.Equals,
-		[]string{DataPlaneManagedLabel},
-	)
-	if err != nil {
-		return nil, err
-	}
-	selector := labels.NewSelector().Add(*requirement)
-
-	serviceList := &corev1.ServiceList{}
-	if err := c.List(ctx, serviceList, &client.ListOptions{
-		Namespace:     dataplane.Namespace,
-		LabelSelector: selector,
-	}); err != nil {
-		return nil, err
-	}
-
-	services := make([]corev1.Service, 0)
-	for _, service := range serviceList.Items {
-		for _, ownerRef := range service.ObjectMeta.OwnerReferences {
-			if ownerRef.UID == dataplane.UID {
-				services = append(services, service)
-				break
-			}
-		}
-	}
-
-	return services, nil
-}
 
 // -----------------------------------------------------------------------------
 // Private Functions - Generators
@@ -245,7 +146,7 @@ func generateNewServiceForDataplane(dataplane *operatorv1alpha1.DataPlane) *core
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:       dataplane.Namespace,
 			Name:            "dataplane-" + dataplane.Name, // TODO: generate instead
-			OwnerReferences: []metav1.OwnerReference{createOwnerRefForDataPlane(dataplane)},
+			OwnerReferences: []metav1.OwnerReference{createObjectOwnerRef(dataplane)},
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeLoadBalancer, // TODO: dynamically figure this out
@@ -274,39 +175,14 @@ func generateNewServiceForDataplane(dataplane *operatorv1alpha1.DataPlane) *core
 }
 
 // -----------------------------------------------------------------------------
-// Private Functions - Owner References
+// Private Functions - Kubernetes Object Labels
 // -----------------------------------------------------------------------------
-
-func createOwnerRefForDataPlane(dataplane *operatorv1alpha1.DataPlane) metav1.OwnerReference {
-	return metav1.OwnerReference{
-		APIVersion: apiVersionForDataplane(dataplane),
-		Kind:       dataplane.GroupVersionKind().Kind,
-		Name:       dataplane.Name,
-		UID:        dataplane.UID,
-	}
-}
-
-func apiVersionForDataplane(dataplane *operatorv1alpha1.DataPlane) string {
-	return fmt.Sprintf("%s/%s", dataplane.GroupVersionKind().Group, dataplane.GroupVersionKind().Version)
-}
-
-func setDataPlaneAsDeploymentOwner(dataplane *operatorv1alpha1.DataPlane, deployment *appsv1.Deployment) {
-	foundOwnerRef := false
-	for _, ownerRef := range deployment.ObjectMeta.OwnerReferences {
-		if ownerRef.UID == dataplane.UID {
-			foundOwnerRef = true
-		}
-	}
-	if !foundOwnerRef {
-		deployment.ObjectMeta.OwnerReferences = append(deployment.ObjectMeta.OwnerReferences, createOwnerRefForDataPlane(dataplane))
-	}
-}
 
 func labelObjForDataplane(obj client.Object) {
 	labels := obj.GetLabels()
 	if labels == nil {
 		labels = make(map[string]string)
 	}
-	labels[GatewayOperatorControlledLabel] = DataPlaneManagedLabel
+	labels[consts.GatewayOperatorControlledLabel] = consts.DataPlaneManagedLabelValue
 	obj.SetLabels(labels)
 }

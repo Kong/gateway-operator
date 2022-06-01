@@ -1,5 +1,23 @@
 package consts
 
+// -----------------------------------------------------------------------------
+// Consts - Standard Kubernetes Object Labels
+// -----------------------------------------------------------------------------
+
+const (
+	// GatewayOperatorControlledLabel is the label that is used for objects which
+	// were created by this operator.
+	GatewayOperatorControlledLabel = "konghq.com/gateway-operator"
+
+	// DataPlaneManagedLabelValue indicates that an object's lifecycle is managed
+	// by the dataplane controller.
+	DataPlaneManagedLabelValue = "dataplane"
+)
+
+// -----------------------------------------------------------------------------
+// Consts - Container Images
+// -----------------------------------------------------------------------------
+
 const (
 	// DefaultDataPlaneBaseImage is the base container image that can be used
 	// by default for a DataPlane resource if all other attempts to dynamically

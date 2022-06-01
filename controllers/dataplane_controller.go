@@ -14,6 +14,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
+	"github.com/kong/gateway-operator/internal/consts"
+	k8sutils "github.com/kong/gateway-operator/internal/utils/kubernetes"
 )
 
 // -----------------------------------------------------------------------------
@@ -181,7 +183,14 @@ func (r *DataPlaneReconciler) ensureDeploymentForDataPlane(
 	ctx context.Context,
 	dataplane *operatorv1alpha1.DataPlane,
 ) (bool, *appsv1.Deployment, error) {
-	deployments, err := ListDeploymentsForDataPlane(ctx, r.Client, dataplane)
+	deployments, err := k8sutils.ListDeploymentsForOwner(
+		ctx,
+		r.Client,
+		consts.GatewayOperatorControlledLabel,
+		consts.DataPlaneManagedLabelValue,
+		dataplane.Namespace,
+		dataplane.UID,
+	)
 	if err != nil {
 		return false, nil, err
 	}
@@ -196,7 +205,7 @@ func (r *DataPlaneReconciler) ensureDeploymentForDataPlane(
 	}
 
 	deployment := generateNewDeploymentForDataPlane(dataplane)
-	setDataPlaneAsDeploymentOwner(dataplane, deployment)
+	setObjectOwner(dataplane, deployment)
 	labelObjForDataplane(deployment)
 	return true, deployment, r.Client.Create(ctx, deployment)
 }
@@ -205,7 +214,14 @@ func (r *DataPlaneReconciler) ensureServiceForDataPlane(
 	ctx context.Context,
 	dataplane *operatorv1alpha1.DataPlane,
 ) (bool, *corev1.Service, error) {
-	services, err := ListServicesForDataPlane(ctx, r.Client, dataplane)
+	services, err := k8sutils.ListServicesForOwner(
+		ctx,
+		r.Client,
+		consts.GatewayOperatorControlledLabel,
+		consts.DataPlaneManagedLabelValue,
+		dataplane.Namespace,
+		dataplane.UID,
+	)
 	if err != nil {
 		return false, nil, err
 	}

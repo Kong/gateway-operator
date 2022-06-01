@@ -18,6 +18,8 @@ import (
 
 	"github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/controllers"
+	"github.com/kong/gateway-operator/internal/consts"
+	k8sutils "github.com/kong/gateway-operator/internal/utils/kubernetes"
 )
 
 func TestDataplaneEssentials(t *testing.T) {
@@ -73,7 +75,14 @@ func TestDataplaneEssentials(t *testing.T) {
 
 	t.Log("verifying deployments managed by the dataplane")
 	require.Eventually(t, func() bool {
-		deployments, err := controllers.ListDeploymentsForDataPlane(ctx, mgrClient, dataplane)
+		deployments, err := k8sutils.ListDeploymentsForOwner(
+			ctx,
+			mgrClient,
+			consts.GatewayOperatorControlledLabel,
+			consts.DataPlaneManagedLabelValue,
+			dataplane.Namespace,
+			dataplane.UID,
+		)
 		require.NoError(t, err)
 		return len(deployments) == 1 && deployments[0].Status.AvailableReplicas >= deployments[0].Status.ReadyReplicas
 	}, time.Minute, time.Second)
@@ -81,7 +90,14 @@ func TestDataplaneEssentials(t *testing.T) {
 	t.Log("verifying services managed by the dataplane")
 	var dataplaneService *corev1.Service
 	require.Eventually(t, func() bool {
-		services, err := controllers.ListServicesForDataPlane(ctx, mgrClient, dataplane)
+		services, err := k8sutils.ListServicesForOwner(
+			ctx,
+			mgrClient,
+			consts.GatewayOperatorControlledLabel,
+			consts.DataPlaneManagedLabelValue,
+			dataplane.Namespace,
+			dataplane.UID,
+		)
 		require.NoError(t, err)
 		if len(services) == 1 {
 			dataplaneService = &services[0]
