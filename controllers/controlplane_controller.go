@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -80,7 +81,7 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if err := r.Client.Update(ctx, controlplane); err != nil {
 			if errors.IsConflict(err) {
 				debug(log, "conflict found when updating controlplane resource, retrying", controlplane)
-				return ctrl.Result{Requeue: true}, nil
+				return ctrl.Result{Requeue: true, RequeueAfter: time.Millisecond * 200}, nil
 			}
 			return ctrl.Result{}, err
 		}
@@ -93,7 +94,7 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 	if created {
-		return ctrl.Result{Requeue: true}, nil // TODO: change once deployment create triggers reconciliation
+		return ctrl.Result{Requeue: true, RequeueAfter: time.Millisecond * 200}, nil // TODO: change once deployment create triggers reconciliation
 	}
 
 	// TODO: needs to update the existing deployment to ensure latest config
@@ -101,7 +102,7 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	debug(log, "checking readiness of controlplane deployments", controlplane)
 	if controlplaneDeployment.Status.Replicas == 0 || controlplaneDeployment.Status.AvailableReplicas < controlplaneDeployment.Status.Replicas {
 		debug(log, "deployment for controlplane not yet ready, waiting", controlplane)
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: time.Millisecond * 200}, nil
 	}
 
 	debug(log, "reconciliation complete for controlplane resource", controlplane)

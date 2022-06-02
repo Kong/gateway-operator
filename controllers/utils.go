@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -44,7 +43,7 @@ func debug(log logr.Logger, msg string, rawOBJ interface{}, keysAndValues ...int
 // Private Functions - Kubernetes Object Metadata
 // -----------------------------------------------------------------------------
 
-func setObjectOwner(owner client.Object, obj *appsv1.Deployment) {
+func setObjectOwner(owner client.Object, obj client.Object) {
 	foundOwnerRef := false
 	for _, ownerRef := range obj.GetOwnerReferences() {
 		if ownerRef.UID == owner.GetUID() {

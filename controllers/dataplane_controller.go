@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -81,7 +82,7 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if err := r.Client.Update(ctx, dataplane); err != nil {
 			if errors.IsConflict(err) {
 				debug(log, "conflict found when updating dataplane resource, retrying", dataplane)
-				return ctrl.Result{Requeue: true}, nil
+				return ctrl.Result{Requeue: true, RequeueAfter: time.Millisecond * 200}, nil
 			}
 			return ctrl.Result{}, err
 		}
@@ -94,7 +95,7 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 	if created {
-		return ctrl.Result{Requeue: true}, nil // TODO: change once deployment create triggers reconciliation
+		return ctrl.Result{Requeue: true, RequeueAfter: time.Millisecond * 200}, nil // TODO: change once deployment create triggers reconciliation
 	}
 
 	// TODO: needs to update the existing deployment to ensure latest config
@@ -102,7 +103,7 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	debug(log, "checking readiness of dataplane deployments", dataplane)
 	if dataplaneDeployment.Status.Replicas == 0 || dataplaneDeployment.Status.AvailableReplicas < dataplaneDeployment.Status.Replicas {
 		debug(log, "deployment for dataplane not yet ready, waiting", dataplane)
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: time.Millisecond * 200}, nil
 	}
 
 	debug(log, "exposing dataplane deployment via service", dataplane)
@@ -111,14 +112,14 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 	if created {
-		return ctrl.Result{Requeue: true}, nil // TODO: change once service create triggers reconciliation
+		return ctrl.Result{Requeue: true, RequeueAfter: time.Millisecond * 200}, nil // TODO: change once service create triggers reconciliation
 	}
 
 	// TODO: needs to update the existing service too to ensure latest config
 
 	debug(log, "checking readiness of dataplane service", dataplaneService)
 	if dataplaneService.Spec.ClusterIP == "" {
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: time.Millisecond * 200}, nil
 	}
 
 	debug(log, "reconciliation complete for dataplane resource", dataplane)

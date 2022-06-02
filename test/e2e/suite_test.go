@@ -5,12 +5,9 @@ package e2e
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net/http"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/kong/kubernetes-testing-framework/pkg/clusters"
 	"github.com/kong/kubernetes-testing-framework/pkg/clusters/addons/metallb"
@@ -43,15 +40,6 @@ var (
 	k8sClient      *kubernetes.Clientset
 	operatorClient *clientset.Clientset
 	mgrClient      client.Client
-
-	httpc = http.Client{
-		Timeout: time.Second * 10,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, //nolint:gosec
-			},
-		},
-	}
 )
 
 // -----------------------------------------------------------------------------

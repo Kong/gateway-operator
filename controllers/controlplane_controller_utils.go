@@ -3,13 +3,14 @@ package controllers
 import (
 	"fmt"
 
-	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
-	"github.com/kong/gateway-operator/internal/consts"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
+	"github.com/kong/gateway-operator/internal/consts"
 )
 
 // FIXME cleanup in here
@@ -39,8 +40,8 @@ func setControlPlaneDefaults(controlplane *operatorv1alpha1.ControlPlane) {
 
 	// TODO: these need to be done after the fact, not as part of the setup
 	if controlplane.Spec.DataPlane != nil && *controlplane.Spec.DataPlane != "" {
-		controlplane.Spec.Env = updateEnv(controlplane.Spec.Env, "CONTROLLER_PUBLISH_SERVICE", fmt.Sprintf("%s/dataplane-%s", controlplane.Namespace, *controlplane.Spec.DataPlane))
-		controlplane.Spec.Env = updateEnv(controlplane.Spec.Env, "CONTROLLER_KONG_ADMIN_URL", fmt.Sprintf("https://dataplane-%s.%s.svc:%d", *controlplane.Spec.DataPlane, controlplane.Namespace, defaultKongAdminPort))
+		controlplane.Spec.Env = updateEnv(controlplane.Spec.Env, "CONTROLLER_PUBLISH_SERVICE", fmt.Sprintf("%s/%s", controlplane.Namespace, *controlplane.Spec.DataPlane))
+		controlplane.Spec.Env = updateEnv(controlplane.Spec.Env, "CONTROLLER_KONG_ADMIN_URL", fmt.Sprintf("https://%s.%s.svc:%d", *controlplane.Spec.DataPlane, controlplane.Namespace, defaultKongAdminPort))
 	}
 }
 
