@@ -80,7 +80,7 @@ func Run(cfg Config) error {
 		Port:                   cfg.WebhookPort,
 		HealthProbeBindAddress: cfg.ProbeAddr,
 		LeaderElection:         cfg.LeaderElection,
-		LeaderElectionID:       "7feCliedc84.konghq.com",
+		LeaderElectionID:       "a7feCliedc84.konghq.com",
 		NewClient:              cfg.NewClientFunc,
 	})
 	if err != nil {
