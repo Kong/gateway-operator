@@ -21,11 +21,11 @@ A [Kubernetes Operator][k8soperator] for the [Kong Gateway][kong].
 Deploy the operator with the following one-liner:
 
 ```console
-$ kubectl kustomize https://github.com/kong/gateway-operator/config/default | kubectl apply -f -
+kubectl kustomize https://github.com/kong/gateway-operator/config/default | kubectl apply -f -
 ```
 
 Optionally, you can wait for the operator with:
 
 ```console
-$ kubectl -n kong-system wait --for=condition=Available=true deployment/gateway-operator-controller-manager
+kubectl -n kong-system wait --for=condition=Available=true deployment/gateway-operator-controller-manager
 ```
