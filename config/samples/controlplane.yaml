@@ -1,6 +1,7 @@
 apiVersion: gateway-operator.konghq.com/v1alpha1
 kind: ControlPlane
 metadata:
-  name: controlplane-sample
+  name: controlplane-example
 spec:
-  # TODO(user): Add fields here
+  dataplane: dataplane-example
+  gatewayClass: "kong"

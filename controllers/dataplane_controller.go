@@ -164,7 +164,7 @@ func (r *DataPlaneReconciler) ensureDataPlaneIsMarkedProvisioned(
 		if condition.Type == string(DataPlaneConditionTypeProvisioned) {
 			condition.Status = metav1.ConditionTrue
 			condition.Reason = DataPlaneConditionReasonPodsReady
-			condition.Message = "pods for all Deployments and/or Daemonsets are ready"
+			condition.Message = "pods for all Deployments are ready"
 			condition.ObservedGeneration = dataplane.Generation
 			condition.LastTransitionTime = metav1.Now()
 		}

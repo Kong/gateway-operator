@@ -82,10 +82,11 @@ func generateNewDeploymentForDataPlane(dataplane *operatorv1alpha1.DataPlane) *a
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
-						Name:    "proxy",
-						Env:     dataplane.Spec.Env,
-						EnvFrom: dataplane.Spec.EnvFrom,
-						Image:   dataplaneImage,
+						Name:            "proxy",
+						Env:             dataplane.Spec.Env,
+						EnvFrom:         dataplane.Spec.EnvFrom,
+						Image:           dataplaneImage,
+						ImagePullPolicy: corev1.PullIfNotPresent,
 						Lifecycle: &corev1.Lifecycle{
 							PreStop: &corev1.LifecycleHandler{
 								Exec: &corev1.ExecAction{

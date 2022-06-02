@@ -74,6 +74,13 @@ type ControlPlaneSpec struct {
 	// +optional
 	// +kubebuilder:default=DefaultIngressClass
 	IngressClass *string `json:"ingressClass,omitempty"`
+
+	// DataPlanes refers to the named DataPlane objects which this ControlPlane
+	// is responsible for. Currently they must be in the same namespace as the
+	// Dataplane.
+	//
+	// +optional
+	DataPlane *string `json:"dataplane,omitempty"`
 }
 
 // ControlPlaneStatus defines the observed state of ControlPlane

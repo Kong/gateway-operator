@@ -1,6 +1,4 @@
 apiVersion: gateway-operator.konghq.com/v1alpha1
 kind: DataPlane
 metadata:
-  name: dataplane-sample
-spec:
-  # TODO(user): Add fields here
+  name: dataplane-example

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,6 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
+	"github.com/kong/gateway-operator/internal/consts"
+	k8sutils "github.com/kong/gateway-operator/internal/utils/kubernetes"
 )
 
 // -----------------------------------------------------------------------------
@@ -75,7 +76,7 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	debug(log, "validating controlplane configuration", controlplane)
 	if len(controlplane.Spec.Env) == 0 && len(controlplane.Spec.EnvFrom) == 0 {
 		debug(log, "no ENV config found for controlplane resource, setting defaults", controlplane)
-		// TODO setControlPlaneDefaults(controlplane) // FIXME: this probably shouldn't be done on the SPEC, perhaps we can remove this when we support Gateway?
+		setControlPlaneDefaults(controlplane) // FIXME: this probably shouldn't be done on the SPEC, perhaps we can remove this when we support Gateway?
 		if err := r.Client.Update(ctx, controlplane); err != nil {
 			if errors.IsConflict(err) {
 				debug(log, "conflict found when updating controlplane resource, retrying", controlplane)
@@ -100,22 +101,6 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	debug(log, "checking readiness of controlplane deployments", controlplane)
 	if controlplaneDeployment.Status.Replicas == 0 || controlplaneDeployment.Status.AvailableReplicas < controlplaneDeployment.Status.Replicas {
 		debug(log, "deployment for controlplane not yet ready, waiting", controlplane)
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	debug(log, "exposing controlplane deployment via service", controlplane)
-	created, controlplaneService, err := r.ensureServiceForControlPlane(ctx, controlplane)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if created {
-		return ctrl.Result{Requeue: true}, nil // TODO: change once service create triggers reconciliation
-	}
-
-	// TODO: needs to update the existing service too to ensure latest config
-
-	debug(log, "checking readiness of controlplane service", controlplaneService)
-	if controlplaneService.Spec.ClusterIP == "" {
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -162,7 +147,7 @@ func (r *ControlPlaneReconciler) ensureControlPlaneIsMarkedProvisioned(
 		if condition.Type == string(ControlPlaneConditionTypeProvisioned) {
 			condition.Status = metav1.ConditionTrue
 			condition.Reason = ControlPlaneConditionReasonPodsReady
-			condition.Message = "pods for all Deployments and/or Daemonsets are ready"
+			condition.Message = "pods for all Deployments are ready"
 			condition.ObservedGeneration = controlplane.Generation
 			condition.LastTransitionTime = metav1.Now()
 		}
@@ -181,52 +166,22 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 	ctx context.Context,
 	controlplane *operatorv1alpha1.ControlPlane,
 ) (bool, *appsv1.Deployment, error) {
-	/*
-		deployments, err := ListDeploymentsForControlPlane(ctx, r.Client, controlplane)
-		if err != nil {
-			return false, nil, err
-		}
+	deployments, err := k8sutils.ListDeploymentsForOwner(ctx, r.Client, consts.GatewayOperatorControlledLabel, consts.ControlPlaneManagedLabelValue, controlplane.Namespace, controlplane.UID)
+	if err != nil {
+		return false, nil, err
+	}
 
-		count := len(deployments)
-		if count > 1 { // TODO: add handling for multiple deployments
-			return false, nil, fmt.Errorf("found %d deployments for controlplane currently unsupported: expected 1 or less", count)
-		}
+	count := len(deployments)
+	if count > 1 { // TODO: add handling for multiple deployments
+		return false, nil, fmt.Errorf("found %d deployments for controlplane currently unsupported: expected 1 or less", count)
+	}
 
-		if count == 1 {
-			return false, &deployments[0], nil
-		}
+	if count == 1 {
+		return false, &deployments[0], nil
+	}
 
-		deployment := generateNewDeploymentForControlPlane(controlplane)
-		setControlPlaneAsDeploymentOwner(controlplane, deployment)
-		labelObjForDataplane(deployment)
-		return true, deployment, r.Client.Create(ctx, deployment)
-	*/
-	return false, nil, fmt.Errorf("unimplemented")
-}
-
-func (r *ControlPlaneReconciler) ensureServiceForControlPlane(
-	ctx context.Context,
-	controlplane *operatorv1alpha1.ControlPlane,
-) (bool, *corev1.Service, error) {
-	/*
-		services, err := ListServicesForControlPlane(ctx, r.Client, controlplane)
-		if err != nil {
-			return false, nil, err
-		}
-
-		count := len(services)
-		if count > 1 { // TODO: add handling for multiple services
-			return false, nil, fmt.Errorf("found %d services for controlplane currently unsupported: expected 1 or less", count)
-		}
-
-		if count == 1 {
-			return false, &services[0], nil
-		}
-
-		service := generateNewServiceForDataplane(controlplane)
-		labelObjForDataplane(service)
-
-		return true, service, r.Client.Create(ctx, service)
-	*/
-	return false, nil, fmt.Errorf("unimplemented")
+	deployment := generateNewDeploymentForControlPlane(controlplane)
+	setObjectOwner(controlplane, deployment)
+	labelObjForControlPlane(deployment)
+	return true, deployment, r.Client.Create(ctx, deployment)
 }

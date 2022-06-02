@@ -40,6 +40,11 @@ spec:
                   for the Deployment. \n If omitted a default image will be automatically
                   chosen."
                 type: string
+              dataplane:
+                description: DataPlanes refers to the named DataPlane objects which
+                  this ControlPlane is responsible for. Currently they must be in
+                  the same namespace as the Dataplane.
+                type: string
               env:
                 description: Env indicates the environment variables to set for the
                   Deployment.
