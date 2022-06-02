@@ -63,7 +63,9 @@ func TestDataplaneEssentials(t *testing.T) {
 	t.Log("verifying that the dataplane gets marked as provisioned")
 	require.Eventually(t, func() bool {
 		dataplane, err = operatorClient.V1alpha1().DataPlanes(namespace.Name).Get(ctx, dataplane.Name, metav1.GetOptions{})
-		require.NoError(t, err)
+		if err != nil {
+			return false
+		}
 		isProvisioned := false
 		for _, condition := range dataplane.Status.Conditions {
 			if condition.Type == string(controllers.DataPlaneConditionTypeProvisioned) && condition.Status == metav1.ConditionTrue {
