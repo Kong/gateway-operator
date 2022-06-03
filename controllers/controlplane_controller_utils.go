@@ -40,8 +40,8 @@ func setControlPlaneDefaults(controlplane *operatorv1alpha1.ControlPlane) {
 
 	// TODO: these need to be done after the fact, not as part of the setup
 	if controlplane.Spec.DataPlane != nil && *controlplane.Spec.DataPlane != "" {
-		controlplane.Spec.Env = updateEnv(controlplane.Spec.Env, "CONTROLLER_PUBLISH_SERVICE", fmt.Sprintf("%s/%s", controlplane.Namespace, *controlplane.Spec.DataPlane))
-		controlplane.Spec.Env = updateEnv(controlplane.Spec.Env, "CONTROLLER_KONG_ADMIN_URL", fmt.Sprintf("https://%s.%s.svc:%d", *controlplane.Spec.DataPlane, controlplane.Namespace, defaultKongAdminPort))
+		controlplane.Spec.Env = updateEnv(controlplane.Spec.Env, "CONTROLLER_PUBLISH_SERVICE", fmt.Sprintf("%s/svc-%s", controlplane.Namespace, *controlplane.Spec.DataPlane))
+		controlplane.Spec.Env = updateEnv(controlplane.Spec.Env, "CONTROLLER_KONG_ADMIN_URL", fmt.Sprintf("https://svc-%s.%s.svc:%d", *controlplane.Spec.DataPlane, controlplane.Namespace, defaultKongAdminPort))
 	}
 }
 

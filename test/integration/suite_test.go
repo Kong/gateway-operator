@@ -27,6 +27,11 @@ import (
 	"github.com/kong/gateway-operator/pkg/clientset"
 )
 
+// Testing Consts
+// -----------------------------------------------------------------------------
+
+const gatewayAPIsCRDs = "https://github.com/kubernetes-sigs/gateway-api.git/config/crd?ref=master"
+
 // -----------------------------------------------------------------------------
 // Testing Vars - Environment Overrideable
 // -----------------------------------------------------------------------------
@@ -103,6 +108,7 @@ func TestMain(m *testing.M) {
 
 	fmt.Println("INFO: deploying CRDs to test cluster")
 	exitOnErr(clusters.KustomizeDeployForCluster(ctx, env.Cluster(), "../../config/crd"))
+	exitOnErr(clusters.KustomizeDeployForCluster(ctx, env.Cluster(), gatewayAPIsCRDs))
 	exitOnErr(waitForCRDs(ctx))
 
 	fmt.Println("INFO: starting the operator's controller manager")

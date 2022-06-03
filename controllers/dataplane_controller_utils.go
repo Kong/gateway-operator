@@ -146,7 +146,7 @@ func generateNewServiceForDataplane(dataplane *operatorv1alpha1.DataPlane) *core
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:       dataplane.Namespace,
-			Name:            dataplane.Name, // TODO: generate instead
+			Name:            "svc-" + dataplane.Name, // TODO: generate instead
 			OwnerReferences: []metav1.OwnerReference{createObjectOwnerRef(dataplane)},
 		},
 		Spec: corev1.ServiceSpec{

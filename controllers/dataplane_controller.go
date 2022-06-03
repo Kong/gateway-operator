@@ -33,6 +33,7 @@ type DataPlaneReconciler struct {
 func (r *DataPlaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.DataPlane{}).
+		Named("DataPlane").
 		Complete(r)
 }
 

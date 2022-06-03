@@ -33,6 +33,7 @@ type GatewayReconciler struct {
 func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&gatewayv1alpha2.Gateway{}).
+		Named("Gateway").
 		Complete(r)
 }
 
@@ -153,7 +154,7 @@ func (r *GatewayReconciler) ensureGatewayMarkedReady(ctx context.Context, gatewa
 	if !ready {
 		// TODO: clean this up, put it somewhere else
 		svc := new(corev1.Service)
-		if err := r.Client.Get(ctx, types.NamespacedName{Namespace: gateway.Namespace, Name: fmt.Sprintf("dataplane-%s", gateway.Name)}, svc); err != nil {
+		if err := r.Client.Get(ctx, types.NamespacedName{Namespace: gateway.Namespace, Name: fmt.Sprintf("svc-dataplane-%s", gateway.Name)}, svc); err != nil {
 			return err
 		}
 

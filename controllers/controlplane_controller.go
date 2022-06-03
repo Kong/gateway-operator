@@ -32,6 +32,7 @@ type ControlPlaneReconciler struct {
 func (r *ControlPlaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.ControlPlane{}).
+		Named("ControlPlane").
 		Complete(r)
 }
 
