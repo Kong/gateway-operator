@@ -228,15 +228,23 @@ View this milestone and all its issues on Github [here][gom15].
 [ocap]:https://operatorframework.io/operator-capabilities/
 [gom15]:https://github.com/Kong/gateway-operator/milestone/15
 
+#### Milestone - Documentation
+
+This milestone covers getting full and published documentation for the Gateway
+Operator published on the [Kong Documentation Site][kongdocs] under it's own
+product listing.
+
+View this milestone and all its issues on Github [here][gom16].
+
+[kongdocs]:https://docs.konghq.com
+[gom16]:https://github.com/Kong/gateway-operator/milestone/16
+
 ## Production Readiness
 
 Production readiness of this operator is marked by the following requirements:
 
 - [ ] All milestones of the above `Graduation Criteria` have been completed
 - [ ] Unit, integration and E2E tests are present at a high level of coverage
-- [ ] Documentation is present in the [Kong Documentation][kongdocs]
-
-[kongdocs]:https://github.com/kong/docs.konghq.com
 
 ## Alternatives
 
