@@ -14,6 +14,10 @@ gateways for ingress traffic.
 
 ### Initial Features
 
+- The `GatewayConfiguration` API was added to enable configuring `Gateway`
+  resources with the options needed to influence the configuration of
+  the underlying `ControlPlane` and `DataPlane` resources.
+  [#43](https://github.com/Kong/gateway-operator/pull/43)
 - `GatewayClass` support was added to delineate which `Gateway` resources the
   operator supports.
   [#22](https://github.com/Kong/gateway-operator/issues/22)
