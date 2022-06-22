@@ -97,7 +97,8 @@ Finally, the `GatewayConfiguration` resource allows for implementation specific
 configuration of `Gateways`. Some things like listener configuration can be
 defined in the `Gateway` resource and that would work across all the
 implementations outside of Kong, but things like configuring the max number of
-nginx worker processes may not.
+nginx worker processes may not. `GatewayConfiguration` resources can be applied
+to `Gateway` resources by way of the `GatewayClass.Spec.ParametersReference`.
 
 [crds]:https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
 [gwapi]:https://github.com/kubernetes-sigs/gateway-api
