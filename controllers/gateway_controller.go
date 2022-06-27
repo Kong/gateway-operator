@@ -310,27 +310,13 @@ func (r *GatewayReconciler) verifyGatewayClassSupport(ctx context.Context, gatew
 }
 
 func (r *GatewayReconciler) getOrCreateGatewayConfiguration(ctx context.Context, gateway *gatewayv1alpha2.Gateway, gatewayClass *gatewayv1alpha2.GatewayClass) (*operatorv1alpha1.GatewayConfiguration, error) {
-	gatewayConfig, err := r.getGatewayConfigForGatewayClass(ctx, gateway.Namespace, gatewayClass)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return new(operatorv1alpha1.GatewayConfiguration), nil
-		}
-		return nil, err
+	if gatewayClass.Spec.ParametersRef == nil {
+		return new(operatorv1alpha1.GatewayConfiguration), nil
 	}
-
-	return gatewayConfig, nil
+	return r.getGatewayConfigForGatewayClass(ctx, gateway.Namespace, gatewayClass)
 }
 
 func (r *GatewayReconciler) getGatewayConfigForGatewayClass(ctx context.Context, namespace string, gatewayClass *gatewayv1alpha2.GatewayClass) (*operatorv1alpha1.GatewayConfiguration, error) {
-	if gatewayClass.Spec.ParametersRef == nil {
-		return nil, &k8serrors.StatusError{
-			ErrStatus: metav1.Status{
-				Status: metav1.StatusFailure,
-				Code:   http.StatusNotFound,
-				Reason: metav1.StatusReasonNotFound,
-			}}
-	}
-
 	if gatewayClass.Spec.ParametersRef.Namespace != nil && string(*gatewayClass.Spec.ParametersRef.Namespace) != namespace {
 		return nil, fmt.Errorf("GatewayConfiguration from GatewayClass %s had namespace %s but Gateway had namespace %s, cross-namespace Gateway configuration is not currently supported", gatewayClass.Name, *gatewayClass.Spec.ParametersRef.Namespace, namespace)
 	}
