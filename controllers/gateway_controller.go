@@ -126,7 +126,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	debug(log, "determining configuration", gateway)
-	gatewayConfig, err := r.getOrCreateGatewayConfiguration(ctx, gateway, gatewayClass)
+	gatewayConfig, err := r.getOrCreateGatewayConfiguration(ctx, gatewayClass)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -309,18 +309,14 @@ func (r *GatewayReconciler) verifyGatewayClassSupport(ctx context.Context, gatew
 	return gwc, nil
 }
 
-func (r *GatewayReconciler) getOrCreateGatewayConfiguration(ctx context.Context, gateway *gatewayv1alpha2.Gateway, gatewayClass *gatewayv1alpha2.GatewayClass) (*operatorv1alpha1.GatewayConfiguration, error) {
+func (r *GatewayReconciler) getOrCreateGatewayConfiguration(ctx context.Context, gatewayClass *gatewayv1alpha2.GatewayClass) (*operatorv1alpha1.GatewayConfiguration, error) {
 	if gatewayClass.Spec.ParametersRef == nil {
 		return new(operatorv1alpha1.GatewayConfiguration), nil
 	}
-	return r.getGatewayConfigForGatewayClass(ctx, gateway.Namespace, gatewayClass)
+	return r.getGatewayConfigForGatewayClass(ctx, gatewayClass)
 }
 
-func (r *GatewayReconciler) getGatewayConfigForGatewayClass(ctx context.Context, namespace string, gatewayClass *gatewayv1alpha2.GatewayClass) (*operatorv1alpha1.GatewayConfiguration, error) {
-	if gatewayClass.Spec.ParametersRef.Namespace != nil && string(*gatewayClass.Spec.ParametersRef.Namespace) != namespace {
-		return nil, fmt.Errorf("GatewayConfiguration from GatewayClass %s had namespace %s but Gateway had namespace %s, cross-namespace Gateway configuration is not currently supported", gatewayClass.Name, *gatewayClass.Spec.ParametersRef.Namespace, namespace)
-	}
-
+func (r *GatewayReconciler) getGatewayConfigForGatewayClass(ctx context.Context, gatewayClass *gatewayv1alpha2.GatewayClass) (*operatorv1alpha1.GatewayConfiguration, error) {
 	if string(gatewayClass.Spec.ParametersRef.Group) != operatorv1alpha1.GroupVersion.Group ||
 		string(gatewayClass.Spec.ParametersRef.Kind) != "GatewayConfiguration" {
 		return nil, &k8serrors.StatusError{
@@ -341,7 +337,7 @@ func (r *GatewayReconciler) getGatewayConfigForGatewayClass(ctx context.Context,
 
 	gatewayConfig := new(operatorv1alpha1.GatewayConfiguration)
 	return gatewayConfig, r.Client.Get(ctx, client.ObjectKey{
-		Namespace: namespace,
+		Namespace: string(*gatewayClass.Spec.ParametersRef.Namespace),
 		Name:      gatewayClass.Spec.ParametersRef.Name,
 	}, gatewayConfig)
 }
