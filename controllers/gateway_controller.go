@@ -326,8 +326,16 @@ func (r *GatewayReconciler) getGatewayConfigForGatewayClass(ctx context.Context,
 		return nil, &k8serrors.StatusError{
 			ErrStatus: metav1.Status{
 				Status: metav1.StatusFailure,
-				Code:   http.StatusNotFound,
-				Reason: metav1.StatusReasonNotFound,
+				Code:   http.StatusBadRequest,
+				Reason: metav1.StatusReasonInvalid,
+				Details: &metav1.StatusDetails{
+					Kind: string(gatewayClass.Spec.ParametersRef.Kind),
+					Causes: []metav1.StatusCause{{
+						Type: metav1.CauseTypeFieldValueNotSupported,
+						Message: fmt.Sprintf("controller only supports %s %s resources for GatewayClass parametersRef",
+							operatorv1alpha1.GroupVersion.Group, "GatewayConfiguration"),
+					}},
+				},
 			}}
 	}
 
