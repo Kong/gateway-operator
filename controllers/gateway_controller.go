@@ -471,7 +471,7 @@ func (r *GatewayReconciler) listGatewaysForGatewayConfig(obj client.Object) (rec
 	matchingGatewayClasses := make(map[string]struct{})
 	for _, gatewayClass := range gatewayClassList.Items {
 		if gatewayClass.Spec.ParametersRef != nil &&
-			string(gatewayClass.Spec.ParametersRef.Group) == "gateway-operator.konghq.com" &&
+			string(gatewayClass.Spec.ParametersRef.Group) == operatorv1alpha1.GroupVersion.Group &&
 			string(gatewayClass.Spec.ParametersRef.Kind) == "GatewayConfiguration" &&
 			gatewayClass.Spec.ParametersRef.Name == gatewayConfig.Name {
 			matchingGatewayClasses[gatewayClass.Name] = struct{}{}
