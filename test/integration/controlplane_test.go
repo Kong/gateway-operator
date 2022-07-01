@@ -17,8 +17,6 @@ import (
 	"github.com/kong/gateway-operator/api/v1alpha1"
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/controllers"
-	"github.com/kong/gateway-operator/internal/consts"
-	k8sutils "github.com/kong/gateway-operator/internal/utils/kubernetes"
 )
 
 func TestControlPlaneEssentials(t *testing.T) {
@@ -110,7 +108,9 @@ func TestDormantControlplane(t *testing.T) {
 	namespace, cleaner := setup(t)
 	defer func() { assert.NoError(t, cleaner.Cleanup(ctx)) }()
 
-	t.Log("deploying controlplane resource without dataplane attached")
+	dataplaneClient := operatorClient.V1alpha1().DataPlanes(namespace.Name)
+	controlplaneClient := operatorClient.V1alpha1().ControlPlanes(namespace.Name)
+
 	controlplane := &operatorv1alpha1.ControlPlane{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace.Name,
@@ -128,38 +128,73 @@ func TestDormantControlplane(t *testing.T) {
 			},
 		},
 	}
-	controlplane, err := operatorClient.V1alpha1().ControlPlanes(namespace.Name).Create(ctx, controlplane, metav1.CreateOptions{})
+
+	dataplane := &v1alpha1.DataPlane{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace.Name,
+			Name:      uuid.NewString(),
+		},
+	}
+
+	t.Log("deploying controlplane resource without dataplane attached")
+	controlplane, err := controlplaneClient.Create(ctx, controlplane, metav1.CreateOptions{})
 	require.NoError(t, err)
 	cleaner.Add(controlplane)
 
 	t.Log("verifying controlplane gets marked scheduled")
 	require.Eventually(t, func() bool {
-		controlplane, err = operatorClient.V1alpha1().ControlPlanes(namespace.Name).Get(ctx, controlplane.Name, metav1.GetOptions{})
+		controlplane, err = controlplaneClient.Get(ctx, controlplane.Name, metav1.GetOptions{})
 		require.NoError(t, err)
 		isScheduled := false
 		for _, condition := range controlplane.Status.Conditions {
-			if condition.Type == string(controllers.ControlPlaneConditionTypeProvisioned) {
+			if condition.Type == string(controllers.ControlPlaneConditionTypeProvisioned) &&
+				condition.Status == metav1.ConditionFalse &&
+				condition.Reason == controllers.ControlPlaneConditionReasonNoDataplane {
 				isScheduled = true
 			}
 		}
 		return isScheduled
 	}, time.Minute, time.Second)
 
-	t.Log("verifying controlplane created with no dataplane results in a deployment with no replicas")
+	t.Log("verifying controlplane deployment has no active replicas")
 	require.Eventually(t, func() bool {
-		deployments, err := k8sutils.ListDeploymentsForOwner(
-			ctx,
-			mgrClient,
-			consts.GatewayOperatorControlledLabel,
-			consts.ControlPlaneManagedLabelValue,
-			controlplane.Namespace,
-			controlplane.UID,
-		)
-		require.NoError(t, err)
+		deployments := mustListControlPlaneDeployments(t, controlplane)
 		return len(deployments) == 1 && deployments[0].Status.Replicas == 0
 	}, time.Minute, time.Second)
 
-	// TODO (jrsmroz: 2020-04-29): Add more tests for dormant state
-	// TODO (jrsmroz: 2020-04-29): Add tests for attaching dataplane
+	t.Log("deploying dataplane resource")
+	dataplane, err = dataplaneClient.Create(ctx, dataplane, metav1.CreateOptions{})
+	require.NoError(t, err)
+	cleaner.Add(dataplane)
 
+	t.Log("verifying deployments managed by the dataplane are ready")
+	require.Eventually(t, func() bool {
+		deployments := mustListDataPlaneDeployments(t, dataplane)
+		return len(deployments) == 1 &&
+			deployments[0].Status.AvailableReplicas >= deployments[0].Status.ReadyReplicas
+	}, time.Minute, time.Second)
+
+	t.Log("attaching dataplane to controlplane")
+	controlplane.Spec.DataPlane = &dataplane.Name
+	controlplane, err = controlplaneClient.Update(ctx, controlplane, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	t.Log("verifying controlplane deployment has active replicas")
+	require.Eventually(t, func() bool {
+		deployments := mustListControlPlaneDeployments(t, controlplane)
+		return len(deployments) == 1 &&
+			*deployments[0].Spec.Replicas > 0 &&
+			deployments[0].Status.AvailableReplicas >= deployments[0].Status.ReadyReplicas
+	}, time.Minute, time.Second)
+
+	t.Log("removing dataplane from controlplane")
+	controlplane.Spec.DataPlane = nil
+	controlplane, err = controlplaneClient.Update(ctx, controlplane, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	t.Log("verifying controlplane deployment has no active replicas")
+	require.Eventually(t, func() bool {
+		deployments := mustListControlPlaneDeployments(t, controlplane)
+		return len(deployments) == 1 && deployments[0].Status.Replicas == 0
+	}, time.Minute, time.Second)
 }
