@@ -29,8 +29,6 @@ const (
 	controlPlaneSchedulingTimeLimit = time.Minute * 3
 )
 
-var emptyDataPlaneName string = ""
-
 func TestGatewayConfigurationEssentials(t *testing.T) {
 	namespace, cleaner := setup(t)
 	defer func() { assert.NoError(t, cleaner.Cleanup(ctx)) }()

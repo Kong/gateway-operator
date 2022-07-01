@@ -30,7 +30,7 @@ const (
 	// reached fully Provisioned status.
 	ControlPlaneConditionReasonPodsReady = "PodsReady"
 
-	// ControllPlaneConditionsReasonNoDataplane is a reason which indicates that no DataPlane
+	// ControlPlaneConditionsReasonNoDataplane is a reason which indicates that no DataPlane
 	// has been provisioned.
 	ControlPlaneConditionReasonNoDataplane = "NoDataplane"
 )

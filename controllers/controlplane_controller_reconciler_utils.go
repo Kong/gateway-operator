@@ -101,8 +101,8 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 	ctx context.Context,
 	controlplane *operatorv1alpha1.ControlPlane,
 ) (bool, *appsv1.Deployment, error) {
-	var replicasDormantState int32 = 0
-	var replicasActiveState int32 = 1
+	replicasDormantState := int32(0)
+	replicasActiveState := int32(1)
 
 	dataplaneProvided := controlplane.Spec.DataPlane != nil && *controlplane.Spec.DataPlane != ""
 
