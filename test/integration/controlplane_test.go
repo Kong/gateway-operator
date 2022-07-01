@@ -10,11 +10,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/kong/gateway-operator/api/v1alpha1"
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/controllers"
+	"github.com/kong/gateway-operator/internal/consts"
+	k8sutils "github.com/kong/gateway-operator/internal/utils/kubernetes"
 )
 
 func TestControlPlaneEssentials(t *testing.T) {
@@ -100,4 +104,62 @@ func TestControlPlaneEssentials(t *testing.T) {
 			*deployments[0].Spec.Replicas > 0 &&
 			deployments[0].Status.AvailableReplicas >= deployments[0].Status.ReadyReplicas
 	}, time.Minute, time.Second)
+}
+
+func TestDormantControlplane(t *testing.T) {
+	namespace, cleaner := setup(t)
+	defer func() { assert.NoError(t, cleaner.Cleanup(ctx)) }()
+
+	t.Log("deploying controlplane resource without dataplane attached")
+	controlplane := &operatorv1alpha1.ControlPlane{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace.Name,
+			Name:      uuid.NewString(),
+		},
+		Spec: operatorv1alpha1.ControlPlaneSpec{
+			ControlPlaneDeploymentOptions: operatorv1alpha1.ControlPlaneDeploymentOptions{
+				DeploymentOptions: operatorv1alpha1.DeploymentOptions{
+					Env: []corev1.EnvVar{{
+						Name:  testEnvVar,
+						Value: testEnvVal,
+					}},
+				},
+				DataPlane: nil,
+			},
+		},
+	}
+	controlplane, err := operatorClient.V1alpha1().ControlPlanes(namespace.Name).Create(ctx, controlplane, metav1.CreateOptions{})
+	require.NoError(t, err)
+	cleaner.Add(controlplane)
+
+	t.Log("verifying controlplane gets marked scheduled")
+	require.Eventually(t, func() bool {
+		controlplane, err = operatorClient.V1alpha1().ControlPlanes(namespace.Name).Get(ctx, controlplane.Name, metav1.GetOptions{})
+		require.NoError(t, err)
+		isScheduled := false
+		for _, condition := range controlplane.Status.Conditions {
+			if condition.Type == string(controllers.ControlPlaneConditionTypeProvisioned) {
+				isScheduled = true
+			}
+		}
+		return isScheduled
+	}, time.Minute, time.Second)
+
+	t.Log("verifying controlplane created with no dataplane results in a deployment with no replicas")
+	require.Eventually(t, func() bool {
+		deployments, err := k8sutils.ListDeploymentsForOwner(
+			ctx,
+			mgrClient,
+			consts.GatewayOperatorControlledLabel,
+			consts.ControlPlaneManagedLabelValue,
+			controlplane.Namespace,
+			controlplane.UID,
+		)
+		require.NoError(t, err)
+		return len(deployments) == 1 && deployments[0].Status.Replicas == 0
+	}, time.Minute, time.Second)
+
+	// TODO (jrsmroz: 2020-04-29): Add more tests for dormant state
+	// TODO (jrsmroz: 2020-04-29): Add tests for attaching dataplane
+
 }
