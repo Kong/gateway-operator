@@ -141,7 +141,7 @@ func TestDormantControlplane(t *testing.T) {
 	require.NoError(t, err)
 	cleaner.Add(controlplane)
 
-	t.Log("verifying controlplane gets marked scheduled")
+	t.Log("verifying controlplane state reflects lack of dataplane")
 	require.Eventually(t, func() bool {
 		controlplane, err = controlplaneClient.Get(ctx, controlplane.Name, metav1.GetOptions{})
 		require.NoError(t, err)
@@ -179,6 +179,20 @@ func TestDormantControlplane(t *testing.T) {
 	controlplane, err = controlplaneClient.Update(ctx, controlplane, metav1.UpdateOptions{})
 	require.NoError(t, err)
 
+	t.Log("verifying controlplane is now provisioned")
+	require.Eventually(t, func() bool {
+		controlplane, err = controlplaneClient.Get(ctx, controlplane.Name, metav1.GetOptions{})
+		require.NoError(t, err)
+		isProvisioned := false
+		for _, condition := range controlplane.Status.Conditions {
+			if condition.Type == string(controllers.ControlPlaneConditionTypeProvisioned) &&
+				condition.Status == metav1.ConditionTrue {
+				isProvisioned = true
+			}
+		}
+		return isProvisioned
+	}, time.Minute, time.Second)
+
 	t.Log("verifying controlplane deployment has active replicas")
 	require.Eventually(t, func() bool {
 		deployments := mustListControlPlaneDeployments(t, controlplane)
@@ -188,6 +202,8 @@ func TestDormantControlplane(t *testing.T) {
 	}, time.Minute, time.Second)
 
 	t.Log("removing dataplane from controlplane")
+	controlplane, err = controlplaneClient.Get(ctx, controlplane.Name, metav1.GetOptions{})
+	require.NoError(t, err)
 	controlplane.Spec.DataPlane = nil
 	controlplane, err = controlplaneClient.Update(ctx, controlplane, metav1.UpdateOptions{})
 	require.NoError(t, err)

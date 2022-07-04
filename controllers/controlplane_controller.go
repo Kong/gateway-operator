@@ -52,10 +52,6 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		debug(log, "ControlPlane resource now marked as scheduled", controlplane)
 		return ctrl.Result{}, nil // no need to requeue, status update will requeue
 	}
-	dataplaneSet, err := r.ensureControlPlaneHasDataplane(ctx, controlplane)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
 
 	debug(log, "validating ControlPlane configuration", controlplane)
 	if len(controlplane.Spec.Env) == 0 && len(controlplane.Spec.EnvFrom) == 0 {
@@ -71,6 +67,20 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil // no need to requeue, the update will trigger.
 	}
 
+	debug(log, "validating ControlPlane's DataPlane is set", controlplane)
+	changed, dataplaneOK, err := r.ensureDataPlaneOK(ctx, controlplane)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if changed {
+		if !dataplaneOK {
+			debug(log, "DataPlane not set, deployment for ControlPlane will remain dormant", controlplane)
+		} else {
+			debug(log, "DataPlane was set, deployment for ControlPlane will be provisioned", controlplane)
+		}
+		return ctrl.Result{}, nil // no need to requeue, status update will requeue
+	}
+
 	debug(log, "looking for existing deployments for ControlPlane resource", controlplane)
 	mutated, controlplaneDeployment, err := r.ensureDeploymentForControlPlane(ctx, controlplane)
 	if err != nil {
@@ -81,12 +91,6 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// TODO: updates need to update sub-resources https://github.com/Kong/gateway-operator/issues/27
-
-	debug(log, "checking readiness of ControlPlane deployments", controlplane)
-	if !dataplaneSet {
-		debug(log, "dataplane not set, deployment for ControlPlane will remain dormant", controlplane)
-		return ctrl.Result{}, nil
-	}
 
 	debug(log, "checking readiness of ControlPlane deployments", controlplane)
 	if controlplaneDeployment.Status.Replicas == 0 || controlplaneDeployment.Status.AvailableReplicas < controlplaneDeployment.Status.Replicas {

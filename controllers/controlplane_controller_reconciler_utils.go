@@ -62,32 +62,50 @@ func (r *ControlPlaneReconciler) ensureControlPlaneIsMarkedProvisioned(
 	return r.Status().Update(ctx, controlplane)
 }
 
-func (r *ControlPlaneReconciler) ensureControlPlaneHasDataplane(
+func (r *ControlPlaneReconciler) ensureDataPlaneOK(
 	ctx context.Context,
 	controlplane *operatorv1alpha1.ControlPlane,
-) (dataplaneSet bool, err error) {
+) (controlPlaneChanged, dataplaneIsSet bool, err error) {
+	updatedConditions := make([]metav1.Condition, 0)
+	dataplaneIsSet = controlplane.Spec.DataPlane != nil && *controlplane.Spec.DataPlane != ""
 
-	if controlplane.Spec.DataPlane == nil || *controlplane.Spec.DataPlane == "" {
-		updatedConditions := make([]metav1.Condition, 0)
-		for _, condition := range controlplane.Status.Conditions {
-			if condition.Type == string(ControlPlaneConditionTypeProvisioned) {
-				if condition.Status != metav1.ConditionFalse || condition.Reason != ControlPlaneConditionReasonNoDataplane {
-					condition.Status = metav1.ConditionFalse
-					condition.Reason = ControlPlaneConditionReasonNoDataplane
-					condition.Message = "dataplane is not specified"
-					condition.ObservedGeneration = controlplane.Generation
-					condition.LastTransitionTime = metav1.Now()
+	for _, condition := range controlplane.Status.Conditions {
+		if condition.Type == string(ControlPlaneConditionTypeProvisioned) {
+			switch {
+
+			// Change state to NoDataplane if dataplane is not set.
+			case !dataplaneIsSet && condition.Reason != ControlPlaneConditionReasonNoDataplane:
+				condition = metav1.Condition{
+					Type:               string(ControlPlaneConditionTypeProvisioned),
+					Reason:             ControlPlaneConditionReasonNoDataplane,
+					Status:             metav1.ConditionFalse,
+					Message:            "DataPlane is not set",
+					ObservedGeneration: controlplane.Generation,
+					LastTransitionTime: metav1.Now(),
 				}
+				updatedConditions = append(updatedConditions, condition)
+
+			// Change state from NoDataplane to PodsNotReady to start provisioning.
+			case dataplaneIsSet && condition.Reason == ControlPlaneConditionReasonNoDataplane:
+				condition = metav1.Condition{
+					Type:               string(ControlPlaneConditionTypeProvisioned),
+					Reason:             ControlPlaneConditionReasonPodsNotReady,
+					Status:             metav1.ConditionFalse,
+					Message:            "ControlPlane resource is scheduled for provisioning",
+					ObservedGeneration: controlplane.Generation,
+					LastTransitionTime: metav1.Now(),
+				}
+				updatedConditions = append(updatedConditions, condition)
 			}
-			updatedConditions = append(updatedConditions, condition)
-		}
-		if len(updatedConditions) > 0 {
-			controlplane.Status.Conditions = updatedConditions
-			return false, r.Status().Update(ctx, controlplane)
 		}
 	}
 
-	return true, nil
+	if len(updatedConditions) > 0 {
+		controlplane.Status.Conditions = updatedConditions
+		return true, dataplaneIsSet, r.Status().Update(ctx, controlplane)
+	}
+
+	return false, dataplaneIsSet, nil
 }
 
 // -----------------------------------------------------------------------------
@@ -101,12 +119,17 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 	ctx context.Context,
 	controlplane *operatorv1alpha1.ControlPlane,
 ) (bool, *appsv1.Deployment, error) {
-	replicasDormantState := int32(0)
-	replicasActiveState := int32(1)
+	numReplicasWhenNoDataplane := int32(0)
+	dataplaneOK := controlplane.Spec.DataPlane != nil && *controlplane.Spec.DataPlane != ""
 
-	dataplaneProvided := controlplane.Spec.DataPlane != nil && *controlplane.Spec.DataPlane != ""
-
-	deployments, err := k8sutils.ListDeploymentsForOwner(ctx, r.Client, consts.GatewayOperatorControlledLabel, consts.ControlPlaneManagedLabelValue, controlplane.Namespace, controlplane.UID)
+	deployments, err := k8sutils.ListDeploymentsForOwner(
+		ctx,
+		r.Client,
+		consts.GatewayOperatorControlledLabel,
+		consts.ControlPlaneManagedLabelValue,
+		controlplane.Namespace,
+		controlplane.UID,
+	)
 	if err != nil {
 		return false, nil, err
 	}
@@ -117,17 +140,15 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 	}
 
 	if count == 1 {
-		deactivateReplicas := !dataplaneProvided &&
-			(deployments[0].Spec.Replicas == nil || *deployments[0].Spec.Replicas != replicasDormantState)
-		if deactivateReplicas {
-			deployments[0].Spec.Replicas = &replicasDormantState
+		replicas := deployments[0].Spec.Replicas
+
+		if !dataplaneOK && (replicas == nil || *replicas != numReplicasWhenNoDataplane) {
+			deployments[0].Spec.Replicas = &numReplicasWhenNoDataplane
 			return true, &deployments[0], r.Client.Update(ctx, &deployments[0])
 		}
 
-		activateReplicas := dataplaneProvided &&
-			(deployments[0].Spec.Replicas == nil || *deployments[0].Spec.Replicas == replicasDormantState)
-		if activateReplicas {
-			deployments[0].Spec.Replicas = &replicasActiveState
+		if dataplaneOK && (replicas != nil && *replicas == numReplicasWhenNoDataplane) {
+			deployments[0].Spec.Replicas = nil
 			return true, &deployments[0], r.Client.Update(ctx, &deployments[0])
 		}
 
@@ -138,8 +159,8 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 	k8sutils.SetOwnerForObject(deployment, controlplane)
 	labelObjForControlPlane(deployment)
 
-	if !dataplaneProvided {
-		deployment.Spec.Replicas = &replicasDormantState
+	if !dataplaneOK {
+		deployment.Spec.Replicas = &numReplicasWhenNoDataplane
 	}
 
 	return true, deployment, r.Client.Create(ctx, deployment)
