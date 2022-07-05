@@ -71,25 +71,27 @@ func TestControlPlaneEssentials(t *testing.T) {
 	cleaner.Add(controlplane)
 
 	t.Log("verifying controlplane gets marked scheduled")
-	require.Eventually(t, controlPlanePredicate(t, controlplane, func(controlplane *operatorv1alpha1.ControlPlane) bool {
-		for _, condition := range controlplane.Status.Conditions {
+	isScheduled := func(c *operatorv1alpha1.ControlPlane) bool {
+		for _, condition := range c.Status.Conditions {
 			if condition.Type == string(controllers.ControlPlaneConditionTypeProvisioned) {
 				return true
 			}
 		}
 		return false
-	}), time.Minute, time.Second)
+	}
+	require.Eventually(t, controlPlanePredicate(t, controlplane.Namespace, controlplane.Name, isScheduled), time.Minute, time.Second)
 
 	t.Log("verifying that the controlplane gets marked as provisioned")
-	require.Eventually(t, controlPlanePredicate(t, controlplane, func(controlplane *operatorv1alpha1.ControlPlane) bool {
-		for _, condition := range controlplane.Status.Conditions {
+	isProvisioned := func(c *operatorv1alpha1.ControlPlane) bool {
+		for _, condition := range c.Status.Conditions {
 			if condition.Type == string(controllers.ControlPlaneConditionTypeProvisioned) &&
 				condition.Status == metav1.ConditionTrue {
 				return true
 			}
 		}
 		return false
-	}), 2*time.Minute, time.Second)
+	}
+	require.Eventually(t, controlPlanePredicate(t, controlplane.Namespace, controlplane.Name, isProvisioned), 2*time.Minute, time.Second)
 
 	t.Log("verifying controlplane deployment has active replicas")
 	require.Eventually(t, func() bool {

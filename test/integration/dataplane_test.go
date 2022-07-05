@@ -35,24 +35,26 @@ func TestDataplaneEssentials(t *testing.T) {
 	cleaner.Add(dataplane)
 
 	t.Log("verifying dataplane gets marked scheduled")
-	require.Eventually(t, dataPlanePredicate(t, dataplane, func(dataplane *v1alpha1.DataPlane) bool {
+	isScheduled := func(dataplane *v1alpha1.DataPlane) bool {
 		for _, condition := range dataplane.Status.Conditions {
 			if condition.Type == string(controllers.DataPlaneConditionTypeProvisioned) {
 				return true
 			}
 		}
 		return false
-	}), time.Minute, time.Second)
+	}
+	require.Eventually(t, dataPlanePredicate(t, dataplane.Namespace, dataplane.Name, isScheduled), time.Minute, time.Second)
 
 	t.Log("verifying that the dataplane gets marked as provisioned")
-	require.Eventually(t, dataPlanePredicate(t, dataplane, func(dataplane *v1alpha1.DataPlane) bool {
+	isProvisioned := func(dataplane *v1alpha1.DataPlane) bool {
 		for _, condition := range dataplane.Status.Conditions {
 			if condition.Type == string(controllers.DataPlaneConditionTypeProvisioned) && condition.Status == metav1.ConditionTrue {
 				return true
 			}
 		}
 		return false
-	}), time.Minute, time.Second)
+	}
+	require.Eventually(t, dataPlanePredicate(t, dataplane.Namespace, dataplane.Name, isProvisioned), time.Minute, time.Second)
 
 	t.Log("verifying deployments managed by the dataplane")
 	require.Eventually(t, func() bool {

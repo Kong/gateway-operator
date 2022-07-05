@@ -16,12 +16,12 @@ import (
 // that can be used to check if a ControlPlane has a certain state.
 func controlPlanePredicate(
 	t *testing.T,
-	controlplane *operatorv1alpha1.ControlPlane,
+	controlPlaneNamespace, controlPlaneName string,
 	predicate func(controlplane *operatorv1alpha1.ControlPlane) bool,
 ) func() bool {
-	controlplaneClient := operatorClient.V1alpha1().ControlPlanes(controlplane.Namespace)
+	controlplaneClient := operatorClient.V1alpha1().ControlPlanes(controlPlaneNamespace)
 	return func() bool {
-		controlplane, err := controlplaneClient.Get(ctx, controlplane.Name, metav1.GetOptions{})
+		controlplane, err := controlplaneClient.Get(ctx, controlPlaneName, metav1.GetOptions{})
 		require.NoError(t, err)
 		return predicate(controlplane)
 	}
@@ -31,12 +31,12 @@ func controlPlanePredicate(
 // that can be used to check if a DataPlane has a certain state.
 func dataPlanePredicate(
 	t *testing.T,
-	dataplane *operatorv1alpha1.DataPlane,
+	dataplaneNamespace, dataplaneName string,
 	predicate func(dataplane *operatorv1alpha1.DataPlane) bool,
 ) func() bool {
-	dataPlaneClient := operatorClient.V1alpha1().DataPlanes(dataplane.Namespace)
+	dataPlaneClient := operatorClient.V1alpha1().DataPlanes(dataplaneNamespace)
 	return func() bool {
-		dataplane, err := dataPlaneClient.Get(ctx, dataplane.Name, metav1.GetOptions{})
+		dataplane, err := dataPlaneClient.Get(ctx, dataplaneName, metav1.GetOptions{})
 		require.NoError(t, err)
 		return predicate(dataplane)
 	}
