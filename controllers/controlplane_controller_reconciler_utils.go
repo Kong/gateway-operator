@@ -62,7 +62,7 @@ func (r *ControlPlaneReconciler) ensureControlPlaneIsMarkedProvisioned(
 	return r.Status().Update(ctx, controlplane)
 }
 
-func (r *ControlPlaneReconciler) ensureDataPlaneOK(
+func (r *ControlPlaneReconciler) validateDataPlaneIsSet(
 	ctx context.Context,
 	controlplane *operatorv1alpha1.ControlPlane,
 ) (controlPlaneChanged, dataplaneIsSet bool, err error) {
@@ -148,7 +148,8 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 		}
 
 		if dataplaneOK && (replicas != nil && *replicas == numReplicasWhenNoDataplane) {
-			deployments[0].Spec.Replicas = nil
+			// deployments[0].Spec.Replicas = nil
+			deployments[0] = *generateNewDeploymentForControlPlane(controlplane)
 			return true, &deployments[0], r.Client.Update(ctx, &deployments[0])
 		}
 

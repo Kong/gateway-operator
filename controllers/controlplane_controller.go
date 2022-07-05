@@ -53,6 +53,28 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil // no need to requeue, status update will requeue
 	}
 
+	debug(log, "validating ControlPlane's DataPlane is set", controlplane)
+	changed, dataplaneOK, err := r.validateDataPlaneIsSet(ctx, controlplane)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if changed {
+		if !dataplaneOK {
+			debug(log, "DataPlane not set, deployment for ControlPlane will remain dormant", controlplane)
+		} else {
+			debug(log, "DataPlane was set, deployment for ControlPlane will be provisioned", controlplane)
+		}
+		return ctrl.Result{}, nil // no need to requeue, status update will requeue
+	}
+	// if !dataplaneOK {
+	// 	debug(log, "DataPlane not set, deployment for ControlPlane will not be provisioned", controlplane)
+	// 	return ctrl.Result{}, nil // no need to requeue until data plane is set
+	// }
+	// if dataplaneOK && changed {
+	// 	debug(log, "DataPlane was set, deployment for ControlPlane will be provisioned", controlplane)
+	// 	return ctrl.Result{}, nil // no need to requeue, status update will requeue
+	// }
+
 	debug(log, "validating ControlPlane configuration", controlplane)
 	if len(controlplane.Spec.Env) == 0 && len(controlplane.Spec.EnvFrom) == 0 {
 		debug(log, "no ENV config found for ControlPlane resource, setting defaults", controlplane)
@@ -67,18 +89,19 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil // no need to requeue, the update will trigger.
 	}
 
-	debug(log, "validating ControlPlane's DataPlane is set", controlplane)
-	changed, dataplaneOK, err := r.ensureDataPlaneOK(ctx, controlplane)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if changed {
-		if !dataplaneOK {
-			debug(log, "DataPlane not set, deployment for ControlPlane will remain dormant", controlplane)
-		} else {
-			debug(log, "DataPlane was set, deployment for ControlPlane will be provisioned", controlplane)
+	if dataplaneOK {
+		debug(log, "dataplane changed, resetting DataPlane connectivity ENV defaults config", controlplane)
+		changed = setDataPlaneDependantServicesDefaults(&controlplane.Spec.ControlPlaneDeploymentOptions, controlplane.Namespace, nil)
+		if changed {
+			if err := r.Client.Update(ctx, controlplane); err != nil {
+				if errors.IsConflict(err) {
+					debug(log, "conflict found when updating ControlPlane resource, retrying", controlplane)
+					return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil
+				}
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil // no need to requeue, the update will trigger.
 		}
-		return ctrl.Result{}, nil // no need to requeue, status update will requeue
 	}
 
 	debug(log, "looking for existing deployments for ControlPlane resource", controlplane)

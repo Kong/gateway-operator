@@ -17,6 +17,8 @@ import (
 	"github.com/kong/gateway-operator/api/v1alpha1"
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/controllers"
+	"github.com/kong/gateway-operator/internal/consts"
+	k8sutils "github.com/kong/gateway-operator/internal/utils/kubernetes"
 )
 
 func TestControlPlaneEssentials(t *testing.T) {
@@ -173,6 +175,26 @@ func TestDormantControlplane(t *testing.T) {
 		return len(deployments) == 1 &&
 			deployments[0].Status.AvailableReplicas >= deployments[0].Status.ReadyReplicas
 	}, time.Minute, time.Second)
+
+	t.Log("verifying services managed by the dataplane")
+	// var dataplaneService *corev1.Service
+	require.Eventually(t, func() bool {
+		services, err := k8sutils.ListServicesForOwner(
+			ctx,
+			mgrClient,
+			consts.GatewayOperatorControlledLabel,
+			consts.DataPlaneManagedLabelValue,
+			dataplane.Namespace,
+			dataplane.UID,
+		)
+		require.NoError(t, err)
+		if len(services) == 1 {
+			// dataplaneService = &services[0]
+			return true
+		}
+		return false
+	}, time.Minute, time.Second)
+
 
 	t.Log("attaching dataplane to controlplane")
 	controlplane.Spec.DataPlane = &dataplane.Name
