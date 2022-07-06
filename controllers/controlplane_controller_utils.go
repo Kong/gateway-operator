@@ -40,33 +40,63 @@ func setControlPlaneDefaults(spec *operatorv1alpha1.ControlPlaneDeploymentOption
 		},
 	})
 
-	setDataPlaneDependantServicesDefaults(spec, namespace, dontOverride)
+	if spec.DataPlane != nil && *spec.DataPlane != "" {
+		if _, isOverrideDisabled := dontOverride["CONTROLLER_PUBLISH_SERVICE"]; !isOverrideDisabled {
+			spec.Env = updateEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE", controllerPublishService(*spec.DataPlane, namespace))
+		}
+		if _, isOverrideDisabled := dontOverride["CONTROLLER_KONG_ADMIN_URL"]; !isOverrideDisabled {
+			spec.Env = updateEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL", controllerKongAdminURL(*spec.DataPlane, namespace))
+		}
+	}
+
 }
 
-func setDataPlaneDependantServicesDefaults(
+func setControlPlaneEnvOnDataPlaneChange(
 	spec *operatorv1alpha1.ControlPlaneDeploymentOptions,
 	namespace string,
 	dontOverride map[string]struct{},
-) (changed bool) {
+) bool {
+	var changed bool
 
-	if spec.DataPlane != nil && *spec.DataPlane != "" {
-		if _, isOverrideDisabled := dontOverride["CONTROLLER_PUBLISH_SERVICE"]; !isOverrideDisabled {
-			newPublishServiceValue := fmt.Sprintf("%s/svc-%s", namespace, *spec.DataPlane)
+	dataplaneIsSet := spec.DataPlane != nil && *spec.DataPlane != ""
+
+	if _, isOverrideDisabled := dontOverride["CONTROLLER_PUBLISH_SERVICE"]; !isOverrideDisabled {
+		if dataplaneIsSet {
+			newPublishServiceValue := controllerPublishService(*spec.DataPlane, namespace)
 			if envValue(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != newPublishServiceValue {
 				spec.Env = updateEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE", newPublishServiceValue)
 				changed = true
 			}
+		} else if envValue(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != "" {
+			spec.Env = unsetEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE")
+			changed = true
+
 		}
-		if _, isOverrideDisabled := dontOverride["CONTROLLER_KONG_ADMIN_URL"]; !isOverrideDisabled {
-			newKongAdminURL := fmt.Sprintf("https://svc-%s.%s.svc:%d", *spec.DataPlane, namespace, dataplaneutils.DefaultKongAdminPort)
+	}
+
+	if _, isOverrideDisabled := dontOverride["CONTROLLER_KONG_ADMIN_URL"]; !isOverrideDisabled {
+		if dataplaneIsSet {
+			newKongAdminURL := controllerKongAdminURL(*spec.DataPlane, namespace)
 			if envValue(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != newKongAdminURL {
 				spec.Env = updateEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL", newKongAdminURL)
 				changed = true
 			}
+		} else if envValue(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != "" {
+			spec.Env = unsetEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL")
+			changed = true
 		}
 	}
 
 	return changed
+}
+
+func controllerKongAdminURL(dataplaneName, dataplaneNamespace string) string {
+	return fmt.Sprintf("https://svc-%s.%s.svc:%d",
+		dataplaneName, dataplaneName, dataplaneutils.DefaultKongAdminPort)
+}
+
+func controllerPublishService(dataplaneName, dataplaneNamespace string) string {
+	return fmt.Sprintf("%s/svc-%s", dataplaneNamespace, dataplaneName)
 }
 
 func envValue(env []corev1.EnvVar, name string) string {
@@ -91,6 +121,16 @@ func updateEnv(envVars []corev1.EnvVar, name, val string) []corev1.EnvVar {
 		Value: val,
 	})
 
+	return newEnvVars
+}
+
+func unsetEnv(envVars []corev1.EnvVar, name string) []corev1.EnvVar {
+	newEnvVars := make([]corev1.EnvVar, 0, len(envVars))
+	for _, envVar := range envVars {
+		if envVar.Name != name {
+			newEnvVars = append(newEnvVars, envVar)
+		}
+	}
 	return newEnvVars
 }
 

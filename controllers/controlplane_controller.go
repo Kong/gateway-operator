@@ -53,20 +53,6 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil // no need to requeue, status update will requeue
 	}
 
-	debug(log, "validating ControlPlane's DataPlane is set", controlplane)
-	changed, dataplaneOK, err := r.validateDataPlaneIsSet(ctx, controlplane)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if changed {
-		if !dataplaneOK {
-			debug(log, "DataPlane not set, deployment for ControlPlane will remain dormant", controlplane)
-		} else {
-			debug(log, "DataPlane was set, deployment for ControlPlane will be provisioned", controlplane)
-		}
-		return ctrl.Result{}, nil // no need to requeue, status update will requeue
-	}
-
 	debug(log, "validating ControlPlane configuration", controlplane)
 	if len(controlplane.Spec.Env) == 0 && len(controlplane.Spec.EnvFrom) == 0 {
 		debug(log, "no ENV config found for ControlPlane resource, setting defaults", controlplane)
@@ -81,19 +67,24 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil // no need to requeue, the update will trigger.
 	}
 
-	if dataplaneOK {
-		debug(log, "dataplane changed, resetting DataPlane connectivity ENV defaults config", controlplane)
-		changed = setDataPlaneDependantServicesDefaults(&controlplane.Spec.ControlPlaneDeploymentOptions, controlplane.Namespace, nil)
-		if changed {
-			if err := r.Client.Update(ctx, controlplane); err != nil {
-				if errors.IsConflict(err) {
-					debug(log, "conflict found when updating ControlPlane resource, retrying", controlplane)
-					return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil
-				}
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil // no need to requeue, the update will trigger.
+	debug(log, "validating ControlPlane's DataPlane configuration", controlplane)
+	if err = r.ensureDataPlaneConfiguration(ctx, controlplane, nil); err != nil {
+		if errors.IsConflict(err) {
+			debug(log, "conflict found when updating ControlPlane resource, retrying", controlplane)
+			return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil
 		}
+		return ctrl.Result{}, err
+	}
+
+	debug(log, "validating ControlPlane's DataPlane status", controlplane)
+	changed, dataplaneIsSet, err := r.ensureDataPlaneStatus(ctx, controlplane, nil)
+	if changed {
+		if dataplaneIsSet {
+			debug(log, "DataPlane was set, deployment for ControlPlane will be provisioned", controlplane)
+		} else {
+			debug(log, "DataPlane not set, deployment for ControlPlane will remain dormant", controlplane)
+		}
+		return ctrl.Result{}, nil // no need to requeue, status update will requeue
 	}
 
 	debug(log, "looking for existing deployments for ControlPlane resource", controlplane)
@@ -102,8 +93,8 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 	if mutated {
-		if !dataplaneOK {
-			debug(log, "DataPlane not set, deployment for ControlPlane will remain scaled to 0 replicas", controlplane)
+		if !dataplaneIsSet {
+			debug(log, "DataPlane not set, deployment for ControlPlane is scaled down to 0 replicas", controlplane)
 			return ctrl.Result{}, nil // no need to requeue until dataplane is set
 		}
 		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil // TODO: remove after https://github.com/Kong/gateway-operator/issues/26

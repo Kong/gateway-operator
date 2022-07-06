@@ -17,68 +17,7 @@ import (
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 )
 
-func TestControlPlaneEssentials(t *testing.T) {
-	namespace, cleaner := setup(t)
-	defer func() { assert.NoError(t, cleaner.Cleanup(ctx)) }()
-
-	dataplaneClient := operatorClient.V1alpha1().DataPlanes(namespace.Name)
-	controlplaneClient := operatorClient.V1alpha1().ControlPlanes(namespace.Name)
-
-	// Control plane needs a dataplane to exist to properly function.
-	dataplaneName := types.NamespacedName{
-		Namespace: namespace.Name,
-		Name:      uuid.NewString(),
-	}
-	dataplane := &v1alpha1.DataPlane{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: dataplaneName.Namespace,
-			Name:      dataplaneName.Name,
-		},
-	}
-
-	controlplaneName := types.NamespacedName{
-		Namespace: namespace.Name,
-		Name:      uuid.NewString(),
-	}
-	controlplane := &operatorv1alpha1.ControlPlane{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: controlplaneName.Namespace,
-			Name:      controlplaneName.Name,
-		},
-		Spec: operatorv1alpha1.ControlPlaneSpec{
-			ControlPlaneDeploymentOptions: operatorv1alpha1.ControlPlaneDeploymentOptions{
-				DataPlane: &dataplane.Name,
-			},
-		},
-	}
-
-	t.Log("deploying dataplane resource")
-	dataplane, err := dataplaneClient.Create(ctx, dataplane, metav1.CreateOptions{})
-	require.NoError(t, err)
-	cleaner.Add(dataplane)
-
-	t.Log("verifying deployments managed by the dataplane are ready")
-	require.Eventually(t, dataPlaneHasActiveDeployment(t, dataplaneName), time.Minute, time.Second)
-
-	t.Log("verifying services managed by the dataplane")
-	require.Eventually(t, dataPlaneHasActiveService(t, dataplaneName, nil), 2*time.Minute, time.Second)
-
-	t.Log("deploying controlplane resource")
-	controlplane, err = controlplaneClient.Create(ctx, controlplane, metav1.CreateOptions{})
-	require.NoError(t, err)
-	cleaner.Add(controlplane)
-
-	t.Log("verifying controlplane gets marked scheduled")
-	require.Eventually(t, controlPlaneIsScheduled(t, controlplaneName), 2*time.Minute, time.Second)
-
-	t.Log("verifying that the controlplane gets marked as provisioned")
-	require.Eventually(t, controlPlaneIsProvisioned(t, controlplaneName), 2*time.Minute, time.Second)
-
-	t.Log("verifying controlplane deployment has active replicas")
-	require.Eventually(t, controlPlaneHasActiveDeployment(t, controlplaneName), 2*time.Minute, time.Second)
-}
-
-func TestDormantControlplane(t *testing.T) {
+func TestControlPlaneWhenNoDataPlane(t *testing.T) {
 	namespace, cleaner := setup(t)
 	defer func() { assert.NoError(t, cleaner.Cleanup(ctx)) }()
 
@@ -158,4 +97,65 @@ func TestDormantControlplane(t *testing.T) {
 
 	t.Log("verifying controlplane deployment has no active replicas")
 	require.Eventually(t, Not(controlPlaneHasActiveDeployment(t, controlplaneName)), 2*time.Minute, time.Second)
+}
+
+func TestControlPlaneEssentials(t *testing.T) {
+	namespace, cleaner := setup(t)
+	defer func() { assert.NoError(t, cleaner.Cleanup(ctx)) }()
+
+	dataplaneClient := operatorClient.V1alpha1().DataPlanes(namespace.Name)
+	controlplaneClient := operatorClient.V1alpha1().ControlPlanes(namespace.Name)
+
+	// Control plane needs a dataplane to exist to properly function.
+	dataplaneName := types.NamespacedName{
+		Namespace: namespace.Name,
+		Name:      uuid.NewString(),
+	}
+	dataplane := &v1alpha1.DataPlane{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: dataplaneName.Namespace,
+			Name:      dataplaneName.Name,
+		},
+	}
+
+	controlplaneName := types.NamespacedName{
+		Namespace: namespace.Name,
+		Name:      uuid.NewString(),
+	}
+	controlplane := &operatorv1alpha1.ControlPlane{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: controlplaneName.Namespace,
+			Name:      controlplaneName.Name,
+		},
+		Spec: operatorv1alpha1.ControlPlaneSpec{
+			ControlPlaneDeploymentOptions: operatorv1alpha1.ControlPlaneDeploymentOptions{
+				DataPlane: &dataplane.Name,
+			},
+		},
+	}
+
+	t.Log("deploying dataplane resource")
+	dataplane, err := dataplaneClient.Create(ctx, dataplane, metav1.CreateOptions{})
+	require.NoError(t, err)
+	cleaner.Add(dataplane)
+
+	t.Log("verifying deployments managed by the dataplane are ready")
+	require.Eventually(t, dataPlaneHasActiveDeployment(t, dataplaneName), time.Minute, time.Second)
+
+	t.Log("verifying services managed by the dataplane")
+	require.Eventually(t, dataPlaneHasActiveService(t, dataplaneName, nil), 2*time.Minute, time.Second)
+
+	t.Log("deploying controlplane resource")
+	controlplane, err = controlplaneClient.Create(ctx, controlplane, metav1.CreateOptions{})
+	require.NoError(t, err)
+	cleaner.Add(controlplane)
+
+	t.Log("verifying controlplane gets marked scheduled")
+	require.Eventually(t, controlPlaneIsScheduled(t, controlplaneName), 2*time.Minute, time.Second)
+
+	t.Log("verifying that the controlplane gets marked as provisioned")
+	require.Eventually(t, controlPlaneIsProvisioned(t, controlplaneName), 2*time.Minute, time.Second)
+
+	t.Log("verifying controlplane deployment has active replicas")
+	require.Eventually(t, controlPlaneHasActiveDeployment(t, controlplaneName), 2*time.Minute, time.Second)
 }

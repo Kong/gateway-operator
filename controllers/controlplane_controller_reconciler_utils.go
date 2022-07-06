@@ -62,9 +62,10 @@ func (r *ControlPlaneReconciler) ensureControlPlaneIsMarkedProvisioned(
 	return r.Status().Update(ctx, controlplane)
 }
 
-func (r *ControlPlaneReconciler) validateDataPlaneIsSet(
+func (r *ControlPlaneReconciler) ensureDataPlaneStatus(
 	ctx context.Context,
 	controlplane *operatorv1alpha1.ControlPlane,
+	envDontOverride map[string]struct{},
 ) (controlPlaneChanged, dataplaneIsSet bool, err error) {
 	updatedConditions := make([]metav1.Condition, 0)
 	dataplaneIsSet = controlplane.Spec.DataPlane != nil && *controlplane.Spec.DataPlane != ""
@@ -91,7 +92,7 @@ func (r *ControlPlaneReconciler) validateDataPlaneIsSet(
 					Type:               string(ControlPlaneConditionTypeProvisioned),
 					Reason:             ControlPlaneConditionReasonPodsNotReady,
 					Status:             metav1.ConditionFalse,
-					Message:            "ControlPlane resource is scheduled for provisioning",
+					Message:            "DataPlane was set, ControlPlane resource is scheduled for provisioning",
 					ObservedGeneration: controlplane.Generation,
 					LastTransitionTime: metav1.Now(),
 				}
@@ -109,6 +110,26 @@ func (r *ControlPlaneReconciler) validateDataPlaneIsSet(
 }
 
 // -----------------------------------------------------------------------------
+// ControlPlaneReconciler - Spec Management
+// -----------------------------------------------------------------------------
+
+func (r *ControlPlaneReconciler) ensureDataPlaneConfiguration(
+	ctx context.Context,
+	controlplane *operatorv1alpha1.ControlPlane,
+	envDontOverride map[string]struct{},
+) error {
+	changed := setControlPlaneEnvOnDataPlaneChange(
+		&controlplane.Spec.ControlPlaneDeploymentOptions,
+		controlplane.Namespace,
+		envDontOverride,
+	)
+	if changed {
+		return r.Client.Update(ctx, controlplane)
+	}
+	return nil
+}
+
+// -----------------------------------------------------------------------------
 // ControlPlaneReconciler - Owned Resource Management
 // -----------------------------------------------------------------------------
 
@@ -120,7 +141,7 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 	controlplane *operatorv1alpha1.ControlPlane,
 ) (bool, *appsv1.Deployment, error) {
 	numReplicasWhenNoDataplane := int32(0)
-	dataplaneOK := controlplane.Spec.DataPlane != nil && *controlplane.Spec.DataPlane != ""
+	dataplaneIsSet := controlplane.Spec.DataPlane != nil && *controlplane.Spec.DataPlane != ""
 
 	deployments, err := k8sutils.ListDeploymentsForOwner(
 		ctx,
@@ -145,14 +166,14 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 		switch {
 
 		// Dataplane was just unset, so we need to scale down the Deployment.
-		case !dataplaneOK && (replicas == nil || *replicas != numReplicasWhenNoDataplane):
+		case !dataplaneIsSet && (replicas == nil || *replicas != numReplicasWhenNoDataplane):
 			deployments[0].Spec.Replicas = &numReplicasWhenNoDataplane
 			return true, &deployments[0], r.Client.Update(ctx, &deployments[0])
 
 		// Dataplane was just set, so we need to scale up the Deployment
 		// and ensure the env variables that might have been changed in
 		// deployment are updated.
-		case dataplaneOK && (replicas != nil && *replicas == numReplicasWhenNoDataplane):
+		case dataplaneIsSet && (replicas != nil && *replicas == numReplicasWhenNoDataplane):
 			deployments[0].Spec.Replicas = nil
 			if len(deployments[0].Spec.Template.Spec.Containers[0].Env) > 0 {
 				deployments[0].Spec.Template.Spec.Containers[0].Env = controlplane.Spec.Env
@@ -169,7 +190,7 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 	k8sutils.SetOwnerForObject(deployment, controlplane)
 	labelObjForControlPlane(deployment)
 
-	if !dataplaneOK {
+	if !dataplaneIsSet {
 		deployment.Spec.Replicas = &numReplicasWhenNoDataplane
 	}
 
