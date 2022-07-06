@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -26,10 +25,14 @@ func TestControlPlaneEssentials(t *testing.T) {
 	controlplaneClient := operatorClient.V1alpha1().ControlPlanes(namespace.Name)
 
 	// Control plane needs a dataplane to exist to properly function.
+	dataplaneName := types.NamespacedName{
+		Namespace: namespace.Name,
+		Name:      uuid.NewString(),
+	}
 	dataplane := &v1alpha1.DataPlane{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace.Name,
-			Name:      uuid.NewString(),
+			Namespace: dataplaneName.Namespace,
+			Name:      dataplaneName.Name,
 		},
 	}
 
@@ -55,20 +58,10 @@ func TestControlPlaneEssentials(t *testing.T) {
 	cleaner.Add(dataplane)
 
 	t.Log("verifying deployments managed by the dataplane are ready")
-	require.Eventually(t, func() bool {
-		deployments := mustListDataPlaneDeployments(t, dataplane)
-		return len(deployments) == 1 &&
-			deployments[0].Status.AvailableReplicas >= deployments[0].Status.ReadyReplicas
-	}, time.Minute, time.Second)
+	require.Eventually(t, dataPlaneHasActiveDeployment(t, dataplaneName), time.Minute, time.Second)
 
 	t.Log("verifying services managed by the dataplane")
-	require.Eventually(t, func() bool {
-		services := mustListDataPlaneServices(t, dataplane)
-		if len(services) == 1 {
-			return true
-		}
-		return false
-	}, 2*time.Minute, time.Second)
+	require.Eventually(t, dataPlaneHasActiveService(t, dataplaneName, nil), 2*time.Minute, time.Second)
 
 	t.Log("deploying controlplane resource")
 	controlplane, err = controlplaneClient.Create(ctx, controlplane, metav1.CreateOptions{})
@@ -82,7 +75,7 @@ func TestControlPlaneEssentials(t *testing.T) {
 	require.Eventually(t, controlPlaneIsProvisioned(t, controlplaneName), 2*time.Minute, time.Second)
 
 	t.Log("verifying controlplane deployment has active replicas")
-	require.Eventually(t, controlPlaneHasActiveReplicasDeployment(t, controlplaneName), 2*time.Minute, time.Second)
+	require.Eventually(t, controlPlaneHasActiveDeployment(t, controlplaneName), 2*time.Minute, time.Second)
 }
 
 func TestDormantControlplane(t *testing.T) {
@@ -109,10 +102,15 @@ func TestDormantControlplane(t *testing.T) {
 		},
 	}
 
+	// Control plane needs a dataplane to exist to properly function.
+	dataplaneName := types.NamespacedName{
+		Namespace: namespace.Name,
+		Name:      uuid.NewString(),
+	}
 	dataplane := &v1alpha1.DataPlane{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace.Name,
-			Name:      uuid.NewString(),
+			Namespace: dataplaneName.Namespace,
+			Name:      dataplaneName.Name,
 		},
 	}
 
@@ -125,7 +123,7 @@ func TestDormantControlplane(t *testing.T) {
 	require.Eventually(t, controlPlaneDetectedNoDataplane(t, controlplaneName), time.Minute, time.Second)
 
 	t.Log("verifying controlplane deployment has no active replicas")
-	require.Eventually(t, Not(controlPlaneHasActiveReplicasDeployment(t, controlplaneName)), time.Minute, time.Second)
+	require.Eventually(t, Not(controlPlaneHasActiveDeployment(t, controlplaneName)), time.Minute, time.Second)
 
 	t.Log("deploying dataplane resource")
 	dataplane, err = dataplaneClient.Create(ctx, dataplane, metav1.CreateOptions{})
@@ -133,22 +131,10 @@ func TestDormantControlplane(t *testing.T) {
 	cleaner.Add(dataplane)
 
 	t.Log("verifying deployments managed by the dataplane are ready")
-	require.Eventually(t, func() bool {
-		deployments := mustListDataPlaneDeployments(t, dataplane)
-		return len(deployments) == 1 &&
-			deployments[0].Status.AvailableReplicas >= deployments[0].Status.ReadyReplicas
-	}, time.Minute, time.Second)
+	require.Eventually(t, dataPlaneHasActiveDeployment(t, dataplaneName), time.Minute, time.Second)
 
 	t.Log("verifying services managed by the dataplane")
-	// var dataplaneService *corev1.Service
-	require.Eventually(t, func() bool {
-		services := mustListDataPlaneServices(t, dataplane)
-		if len(services) == 1 {
-			// dataplaneService = &services[0]
-			return true
-		}
-		return false
-	}, time.Minute, time.Second)
+	require.Eventually(t, dataPlaneHasService(t, dataplaneName), time.Minute, time.Second)
 
 	t.Log("attaching dataplane to controlplane")
 	controlplane, err = controlplaneClient.Get(ctx, controlplane.Name, metav1.GetOptions{})
@@ -161,18 +147,15 @@ func TestDormantControlplane(t *testing.T) {
 	require.Eventually(t, controlPlaneIsProvisioned(t, controlplaneName), 2*time.Minute, time.Second)
 
 	t.Log("verifying controlplane deployment has active replicas")
-	require.Eventually(t, controlPlaneHasActiveReplicasDeployment(t, controlplaneName), 2*time.Minute, time.Second)
+	require.Eventually(t, controlPlaneHasActiveDeployment(t, controlplaneName), 2*time.Minute, time.Second)
 
 	t.Log("removing dataplane from controlplane")
-	require.Eventually(t, func() bool {
-		controlplane, err = controlplaneClient.Get(ctx, controlplane.Name, metav1.GetOptions{})
-		require.NoError(t, err)
-		controlplane.Spec.DataPlane = nil
-		controlplane, err = controlplaneClient.Update(ctx, controlplane, metav1.UpdateOptions{})
-		require.NoError(t, err)
-		return true
-	}, 2*time.Minute, time.Second)
+	controlplane, err = controlplaneClient.Get(ctx, controlplane.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	controlplane.Spec.DataPlane = nil
+	controlplane, err = controlplaneClient.Update(ctx, controlplane, metav1.UpdateOptions{})
+	require.NoError(t, err)
 
 	t.Log("verifying controlplane deployment has no active replicas")
-	require.Eventually(t, Not(controlPlaneHasActiveReplicasDeployment(t, controlplaneName)), 2*time.Minute, time.Second)
+	require.Eventually(t, Not(controlPlaneHasActiveDeployment(t, controlplaneName)), 2*time.Minute, time.Second)
 }
