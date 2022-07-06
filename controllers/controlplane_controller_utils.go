@@ -92,7 +92,7 @@ func setControlPlaneEnvOnDataPlaneChange(
 
 func controllerKongAdminURL(dataplaneName, dataplaneNamespace string) string {
 	return fmt.Sprintf("https://svc-%s.%s.svc:%d",
-		dataplaneName, dataplaneName, dataplaneutils.DefaultKongAdminPort)
+		dataplaneName, dataplaneNamespace, dataplaneutils.DefaultKongAdminPort)
 }
 
 func controllerPublishService(dataplaneName, dataplaneNamespace string) string {

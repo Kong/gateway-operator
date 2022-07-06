@@ -77,7 +77,10 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	debug(log, "validating ControlPlane's DataPlane status", controlplane)
-	changed, dataplaneIsSet, err := r.ensureDataPlaneStatus(ctx, controlplane, nil)
+	changed, dataplaneIsSet, err := r.ensureDataPlaneStatus(ctx, controlplane)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	if changed {
 		if dataplaneIsSet {
 			debug(log, "DataPlane was set, deployment for ControlPlane will be provisioned", controlplane)

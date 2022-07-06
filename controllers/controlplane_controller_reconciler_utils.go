@@ -65,7 +65,6 @@ func (r *ControlPlaneReconciler) ensureControlPlaneIsMarkedProvisioned(
 func (r *ControlPlaneReconciler) ensureDataPlaneStatus(
 	ctx context.Context,
 	controlplane *operatorv1alpha1.ControlPlane,
-	envDontOverride map[string]struct{},
 ) (controlPlaneChanged, dataplaneIsSet bool, err error) {
 	updatedConditions := make([]metav1.Condition, 0)
 	dataplaneIsSet = controlplane.Spec.DataPlane != nil && *controlplane.Spec.DataPlane != ""
