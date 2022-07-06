@@ -66,14 +66,6 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		return ctrl.Result{}, nil // no need to requeue, status update will requeue
 	}
-	// if !dataplaneOK {
-	// 	debug(log, "DataPlane not set, deployment for ControlPlane will not be provisioned", controlplane)
-	// 	return ctrl.Result{}, nil // no need to requeue until data plane is set
-	// }
-	// if dataplaneOK && changed {
-	// 	debug(log, "DataPlane was set, deployment for ControlPlane will be provisioned", controlplane)
-	// 	return ctrl.Result{}, nil // no need to requeue, status update will requeue
-	// }
 
 	debug(log, "validating ControlPlane configuration", controlplane)
 	if len(controlplane.Spec.Env) == 0 && len(controlplane.Spec.EnvFrom) == 0 {
@@ -110,6 +102,10 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 	if mutated {
+		if !dataplaneOK {
+			debug(log, "DataPlane not set, deployment for ControlPlane will remain scaled to 0 replicas", controlplane)
+			return ctrl.Result{}, nil // no need to requeue until dataplane is set
+		}
 		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil // TODO: remove after https://github.com/Kong/gateway-operator/issues/26
 	}
 

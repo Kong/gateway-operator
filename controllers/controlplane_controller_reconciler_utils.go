@@ -142,18 +142,27 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 	if count == 1 {
 		replicas := deployments[0].Spec.Replicas
 
-		if !dataplaneOK && (replicas == nil || *replicas != numReplicasWhenNoDataplane) {
+		switch {
+
+		// Dataplane was just unset, so we need to scale down the Deployment.
+		case !dataplaneOK && (replicas == nil || *replicas != numReplicasWhenNoDataplane):
 			deployments[0].Spec.Replicas = &numReplicasWhenNoDataplane
 			return true, &deployments[0], r.Client.Update(ctx, &deployments[0])
-		}
 
-		if dataplaneOK && (replicas != nil && *replicas == numReplicasWhenNoDataplane) {
-			// deployments[0].Spec.Replicas = nil
-			deployments[0] = *generateNewDeploymentForControlPlane(controlplane)
+		// Dataplane was just set, so we need to scale up the Deployment
+		// and ensure the env variables that might have been changed in
+		// deployment are updated.
+		case dataplaneOK && (replicas != nil && *replicas == numReplicasWhenNoDataplane):
+			deployments[0].Spec.Replicas = nil
+			if len(deployments[0].Spec.Template.Spec.Containers[0].Env) > 0 {
+				deployments[0].Spec.Template.Spec.Containers[0].Env = controlplane.Spec.Env
+			}
 			return true, &deployments[0], r.Client.Update(ctx, &deployments[0])
-		}
 
-		return false, &deployments[0], nil
+		// Dataplane is unchanged, so we don't need to do anything.
+		default:
+			return false, &deployments[0], nil
+		}
 	}
 
 	deployment := generateNewDeploymentForControlPlane(controlplane)

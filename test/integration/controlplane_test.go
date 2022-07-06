@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -104,13 +103,8 @@ func TestDormantControlplane(t *testing.T) {
 		},
 		Spec: operatorv1alpha1.ControlPlaneSpec{
 			ControlPlaneDeploymentOptions: operatorv1alpha1.ControlPlaneDeploymentOptions{
-				DeploymentOptions: operatorv1alpha1.DeploymentOptions{
-					Env: []corev1.EnvVar{{
-						Name:  testEnvVar,
-						Value: testEnvVal,
-					}},
-				},
-				DataPlane: nil,
+				DeploymentOptions: operatorv1alpha1.DeploymentOptions{},
+				DataPlane:         nil,
 			},
 		},
 	}
