@@ -97,7 +97,7 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 	if mutated {
 		if !dataplaneIsSet {
-			debug(log, "DataPlane not set, deployment for ControlPlane is scaled down to 0 replicas", controlplane)
+			debug(log, "DataPlane not set, deployment for ControlPlane has been scaled down to 0 replicas", controlplane)
 			return ctrl.Result{}, nil // no need to requeue until dataplane is set
 		}
 		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil // TODO: remove after https://github.com/Kong/gateway-operator/issues/26
