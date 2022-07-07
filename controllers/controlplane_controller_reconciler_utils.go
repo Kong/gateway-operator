@@ -6,11 +6,16 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/pointer"
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/internal/consts"
 	k8sutils "github.com/kong/gateway-operator/internal/utils/kubernetes"
 )
+
+// numReplicasWhenNoDataplane represents the desired number of replicas
+// for the controlplane deployment when no dataplane is set.
+const numReplicasWhenNoDataplane = 0
 
 // -----------------------------------------------------------------------------
 // ControlPlaneReconciler - Status Management
@@ -115,12 +120,10 @@ func (r *ControlPlaneReconciler) ensureDataPlaneStatus(
 func (r *ControlPlaneReconciler) ensureDataPlaneConfiguration(
 	ctx context.Context,
 	controlplane *operatorv1alpha1.ControlPlane,
-	envDontOverride map[string]struct{},
 ) error {
 	changed := setControlPlaneEnvOnDataPlaneChange(
 		&controlplane.Spec.ControlPlaneDeploymentOptions,
 		controlplane.Namespace,
-		envDontOverride,
 	)
 	if changed {
 		return r.Client.Update(ctx, controlplane)
@@ -139,7 +142,6 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 	ctx context.Context,
 	controlplane *operatorv1alpha1.ControlPlane,
 ) (bool, *appsv1.Deployment, error) {
-	numReplicasWhenNoDataplane := int32(0)
 	dataplaneIsSet := controlplane.Spec.DataPlane != nil && *controlplane.Spec.DataPlane != ""
 
 	deployments, err := k8sutils.ListDeploymentsForOwner(
@@ -166,7 +168,7 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 
 		// Dataplane was just unset, so we need to scale down the Deployment.
 		case !dataplaneIsSet && (replicas == nil || *replicas != numReplicasWhenNoDataplane):
-			deployments[0].Spec.Replicas = &numReplicasWhenNoDataplane
+			deployments[0].Spec.Replicas = pointer.Int32(numReplicasWhenNoDataplane)
 			return true, &deployments[0], r.Client.Update(ctx, &deployments[0])
 
 		// Dataplane was just set, so we need to scale up the Deployment
@@ -190,7 +192,7 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 	labelObjForControlPlane(deployment)
 
 	if !dataplaneIsSet {
-		deployment.Spec.Replicas = &numReplicasWhenNoDataplane
+		deployment.Spec.Replicas = pointer.Int32(numReplicasWhenNoDataplane)
 	}
 
 	return true, deployment, r.Client.Create(ctx, deployment)

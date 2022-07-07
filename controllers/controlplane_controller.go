@@ -67,10 +67,14 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil // no need to requeue, the update will trigger.
 	}
 
-	debug(log, "validating ControlPlane's DataPlane configuration", controlplane)
-	if err = r.ensureDataPlaneConfiguration(ctx, controlplane, nil); err != nil {
+	debug(log, "validating that the ControlPlane DataPlane configuration is up to date", controlplane)
+	if err = r.ensureDataPlaneConfiguration(ctx, controlplane); err != nil {
 		if errors.IsConflict(err) {
-			debug(log, "conflict found when updating ControlPlane resource, retrying", controlplane)
+			debug(
+				log,
+				"conflict found when trying to ensure ControlPlane configuration was up to date, retrying",
+				controlplane,
+			)
 			return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil
 		}
 		return ctrl.Result{}, err

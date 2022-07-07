@@ -54,37 +54,32 @@ func setControlPlaneDefaults(spec *operatorv1alpha1.ControlPlaneDeploymentOption
 func setControlPlaneEnvOnDataPlaneChange(
 	spec *operatorv1alpha1.ControlPlaneDeploymentOptions,
 	namespace string,
-	dontOverride map[string]struct{},
 ) bool {
 	var changed bool
 
 	dataplaneIsSet := spec.DataPlane != nil && *spec.DataPlane != ""
 
-	if _, isOverrideDisabled := dontOverride["CONTROLLER_PUBLISH_SERVICE"]; !isOverrideDisabled {
-		if dataplaneIsSet {
-			newPublishServiceValue := controllerPublishService(*spec.DataPlane, namespace)
-			if envValue(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != newPublishServiceValue {
-				spec.Env = updateEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE", newPublishServiceValue)
-				changed = true
-			}
-		} else if envValue(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != "" {
-			spec.Env = unsetEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE")
+	if dataplaneIsSet {
+		newPublishServiceValue := controllerPublishService(*spec.DataPlane, namespace)
+		if envValue(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != newPublishServiceValue {
+			spec.Env = updateEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE", newPublishServiceValue)
 			changed = true
-
 		}
+	} else if envValue(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != "" {
+		spec.Env = unsetEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE")
+		changed = true
+
 	}
 
-	if _, isOverrideDisabled := dontOverride["CONTROLLER_KONG_ADMIN_URL"]; !isOverrideDisabled {
-		if dataplaneIsSet {
-			newKongAdminURL := controllerKongAdminURL(*spec.DataPlane, namespace)
-			if envValue(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != newKongAdminURL {
-				spec.Env = updateEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL", newKongAdminURL)
-				changed = true
-			}
-		} else if envValue(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != "" {
-			spec.Env = unsetEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL")
+	if dataplaneIsSet {
+		newKongAdminURL := controllerKongAdminURL(*spec.DataPlane, namespace)
+		if envValue(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != newKongAdminURL {
+			spec.Env = updateEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL", newKongAdminURL)
 			changed = true
 		}
+	} else if envValue(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != "" {
+		spec.Env = unsetEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL")
+		changed = true
 	}
 
 	return changed
