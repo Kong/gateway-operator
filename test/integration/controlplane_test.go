@@ -83,10 +83,10 @@ func TestControlPlaneWhenNoDataPlane(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Log("verifying controlplane is now provisioned")
-	require.Eventually(t, controlPlaneIsProvisioned(t, controlplaneName), 2*time.Minute, time.Second)
+	require.Eventually(t, controlPlaneIsProvisioned(t, controlplaneName), time.Minute, time.Second)
 
 	t.Log("verifying controlplane deployment has active replicas")
-	require.Eventually(t, controlPlaneHasActiveDeployment(t, controlplaneName), 2*time.Minute, time.Second)
+	require.Eventually(t, controlPlaneHasActiveDeployment(t, controlplaneName), time.Minute, time.Second)
 
 	t.Log("removing dataplane from controlplane")
 	controlplane, err = controlplaneClient.Get(ctx, controlplane.Name, metav1.GetOptions{})
@@ -96,7 +96,7 @@ func TestControlPlaneWhenNoDataPlane(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Log("verifying controlplane deployment has no active replicas")
-	require.Eventually(t, Not(controlPlaneHasActiveDeployment(t, controlplaneName)), 2*time.Minute, time.Second)
+	require.Eventually(t, Not(controlPlaneHasActiveDeployment(t, controlplaneName)), time.Minute, time.Second)
 }
 
 func TestControlPlaneEssentials(t *testing.T) {
@@ -143,7 +143,7 @@ func TestControlPlaneEssentials(t *testing.T) {
 	require.Eventually(t, dataPlaneHasActiveDeployment(t, dataplaneName), time.Minute, time.Second)
 
 	t.Log("verifying services managed by the dataplane")
-	require.Eventually(t, dataPlaneHasActiveService(t, dataplaneName, nil), 2*time.Minute, time.Second)
+	require.Eventually(t, dataPlaneHasActiveService(t, dataplaneName, nil), time.Minute, time.Second)
 
 	t.Log("deploying controlplane resource")
 	controlplane, err = controlplaneClient.Create(ctx, controlplane, metav1.CreateOptions{})
@@ -151,11 +151,11 @@ func TestControlPlaneEssentials(t *testing.T) {
 	cleaner.Add(controlplane)
 
 	t.Log("verifying controlplane gets marked scheduled")
-	require.Eventually(t, controlPlaneIsScheduled(t, controlplaneName), 2*time.Minute, time.Second)
+	require.Eventually(t, controlPlaneIsScheduled(t, controlplaneName), time.Minute, time.Second)
 
 	t.Log("verifying that the controlplane gets marked as provisioned")
-	require.Eventually(t, controlPlaneIsProvisioned(t, controlplaneName), 2*time.Minute, time.Second)
+	require.Eventually(t, controlPlaneIsProvisioned(t, controlplaneName), time.Minute, time.Second)
 
 	t.Log("verifying controlplane deployment has active replicas")
-	require.Eventually(t, controlPlaneHasActiveDeployment(t, controlplaneName), 2*time.Minute, time.Second)
+	require.Eventually(t, controlPlaneHasActiveDeployment(t, controlplaneName), time.Minute, time.Second)
 }
