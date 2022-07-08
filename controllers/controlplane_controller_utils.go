@@ -58,28 +58,26 @@ func setControlPlaneEnvOnDataPlaneChange(
 	var changed bool
 
 	dataplaneIsSet := spec.DataPlane != nil && *spec.DataPlane != ""
-
 	if dataplaneIsSet {
 		newPublishServiceValue := controllerPublishService(*spec.DataPlane, namespace)
 		if envValue(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != newPublishServiceValue {
 			spec.Env = updateEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE", newPublishServiceValue)
 			changed = true
 		}
-	} else if envValue(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != "" {
-		spec.Env = rejectEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE")
-		changed = true
-
-	}
-
-	if dataplaneIsSet {
 		newKongAdminURL := controllerKongAdminURL(*spec.DataPlane, namespace)
 		if envValue(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != newKongAdminURL {
 			spec.Env = updateEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL", newKongAdminURL)
 			changed = true
 		}
-	} else if envValue(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != "" {
-		spec.Env = rejectEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL")
-		changed = true
+	} else {
+		if envValue(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != "" {
+			spec.Env = rejectEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE")
+			changed = true
+		}
+		if envValue(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != "" {
+			spec.Env = rejectEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL")
+			changed = true
+		}
 	}
 
 	return changed
