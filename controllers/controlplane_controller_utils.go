@@ -66,7 +66,7 @@ func setControlPlaneEnvOnDataPlaneChange(
 			changed = true
 		}
 	} else if envValue(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != "" {
-		spec.Env = unsetEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE")
+		spec.Env = rejectEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE")
 		changed = true
 
 	}
@@ -78,7 +78,7 @@ func setControlPlaneEnvOnDataPlaneChange(
 			changed = true
 		}
 	} else if envValue(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != "" {
-		spec.Env = unsetEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL")
+		spec.Env = rejectEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL")
 		changed = true
 	}
 
@@ -119,7 +119,7 @@ func updateEnv(envVars []corev1.EnvVar, name, val string) []corev1.EnvVar {
 	return newEnvVars
 }
 
-func unsetEnv(envVars []corev1.EnvVar, name string) []corev1.EnvVar {
+func rejectEnv(envVars []corev1.EnvVar, name string) []corev1.EnvVar {
 	newEnvVars := make([]corev1.EnvVar, 0, len(envVars))
 	for _, envVar := range envVars {
 		if envVar.Name != name {
