@@ -92,7 +92,7 @@ func controllerPublishService(dataplaneName, dataplaneNamespace string) string {
 	return fmt.Sprintf("%s/svc-%s", dataplaneNamespace, dataplaneName)
 }
 
-func envValue(env []corev1.EnvVar, name string) string {
+func envValueByName(env []corev1.EnvVar, name string) string {
 	for _, envVar := range env {
 		if envVar.Name == name {
 			return envVar.Value
