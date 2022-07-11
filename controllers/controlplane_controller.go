@@ -72,7 +72,7 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if errors.IsConflict(err) {
 			debug(
 				log,
-				"conflict found when trying to ensure ControlPlane configuration was up to date, retrying",
+				"conflict found when trying to ensure ControlPlane's DataPlane configuration was up to date, retrying",
 				controlplane,
 			)
 			return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil
