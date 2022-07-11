@@ -60,22 +60,22 @@ func setControlPlaneEnvOnDataPlaneChange(
 	dataplaneIsSet := spec.DataPlane != nil && *spec.DataPlane != ""
 	if dataplaneIsSet {
 		newPublishServiceValue := controllerPublishService(*spec.DataPlane, namespace)
-		if envValue(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != newPublishServiceValue {
+		if envValueByName(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != newPublishServiceValue {
 			spec.Env = updateEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE", newPublishServiceValue)
 			changed = true
 		}
 		newKongAdminURL := controllerKongAdminURL(*spec.DataPlane, namespace)
-		if envValue(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != newKongAdminURL {
+		if envValueByName(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != newKongAdminURL {
 			spec.Env = updateEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL", newKongAdminURL)
 			changed = true
 		}
 	} else {
-		if envValue(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != "" {
-			spec.Env = rejectEnv(spec.Env, "CONTROLLER_PUBLISH_SERVICE")
+		if envValueByName(spec.Env, "CONTROLLER_PUBLISH_SERVICE") != "" {
+			spec.Env = rejectEnvByName(spec.Env, "CONTROLLER_PUBLISH_SERVICE")
 			changed = true
 		}
-		if envValue(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != "" {
-			spec.Env = rejectEnv(spec.Env, "CONTROLLER_KONG_ADMIN_URL")
+		if envValueByName(spec.Env, "CONTROLLER_KONG_ADMIN_URL") != "" {
+			spec.Env = rejectEnvByName(spec.Env, "CONTROLLER_KONG_ADMIN_URL")
 			changed = true
 		}
 	}
@@ -92,6 +92,8 @@ func controllerPublishService(dataplaneName, dataplaneNamespace string) string {
 	return fmt.Sprintf("%s/svc-%s", dataplaneNamespace, dataplaneName)
 }
 
+// envValueByName returns the value of the first env var with the given name.
+// If no env var with the given name is found, an empty string is returned.
 func envValueByName(env []corev1.EnvVar, name string) string {
 	for _, envVar := range env {
 		if envVar.Name == name {
@@ -117,7 +119,9 @@ func updateEnv(envVars []corev1.EnvVar, name, val string) []corev1.EnvVar {
 	return newEnvVars
 }
 
-func rejectEnv(envVars []corev1.EnvVar, name string) []corev1.EnvVar {
+// rejectEnvByName returns a copy of the given env vars,
+// but with the env vars with the given name removed.
+func rejectEnvByName(envVars []corev1.EnvVar, name string) []corev1.EnvVar {
 	newEnvVars := make([]corev1.EnvVar, 0, len(envVars))
 	for _, envVar := range envVars {
 		if envVar.Name != name {

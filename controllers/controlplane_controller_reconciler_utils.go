@@ -67,6 +67,9 @@ func (r *ControlPlaneReconciler) ensureControlPlaneIsMarkedProvisioned(
 	return r.Status().Update(ctx, controlplane)
 }
 
+// ensureDataPlaneStatus ensures that the dataplane is in the correct state
+// to carry on with the controlplane deployments reconciliation.
+// Information about the missing dataplane is stored in the controlplane status.
 func (r *ControlPlaneReconciler) ensureDataPlaneStatus(
 	ctx context.Context,
 	controlplane *operatorv1alpha1.ControlPlane,
