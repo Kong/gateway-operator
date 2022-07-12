@@ -164,7 +164,7 @@ func setupControllerLogger() (closeLogFile func() error) {
 	var destWriter io.Writer = os.Stdout
 
 	if controllerManagerOut != "stdout" {
-		out, err := os.CreateTemp(os.TempDir(), "gateway-operator-controller-logs")
+		out, err := os.CreateTemp("", "gateway-operator-controller-logs")
 		exitOnErr(err)
 		fmt.Printf("INFO: controller output is being logged to %s\n", out.Name())
 		destWriter = out
