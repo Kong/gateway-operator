@@ -125,15 +125,15 @@ generate.apis:
 generate.clientsets: client-gen
 	@$(CLIENT_GEN) --go-header-file ./hack/boilerplate.go.txt \
 		--clientset-name clientset \
-		--input-base github.com/kong/gateway-operator/api/  \
-		--input "operator/v1alpha1" \
-		--input-dirs github.com/kong/gateway-operator/api/ \
+		--input-base ''  \
+		--input github.com/kong/gateway-operator/apis/v1alpha1 \
 		--output-base client-gen-tmp/ \
 		--output-package github.com/kong/gateway-operator/pkg/
 	@rm -rf pkg/clientset/
 	@mkdir -p pkg/clientset
 	@mv client-gen-tmp/github.com/kong/gateway-operator/pkg/clientset/* pkg/clientset/
 	@rm -rf client-gen-tmp/
+
 
 # ------------------------------------------------------------------------------
 # Build - Manifests

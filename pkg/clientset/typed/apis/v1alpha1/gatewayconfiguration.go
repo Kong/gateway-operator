@@ -22,7 +22,7 @@ import (
 	"context"
 	"time"
 
-	v1alpha1 "github.com/kong/gateway-operator/api/operator/v1alpha1"
+	v1alpha1 "github.com/kong/gateway-operator/apis/v1alpha1"
 	scheme "github.com/kong/gateway-operator/pkg/clientset/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -57,7 +57,7 @@ type gatewayConfigurations struct {
 }
 
 // newGatewayConfigurations returns a GatewayConfigurations
-func newGatewayConfigurations(c *OperatorV1alpha1Client, namespace string) *gatewayConfigurations {
+func newGatewayConfigurations(c *ApisV1alpha1Client, namespace string) *gatewayConfigurations {
 	return &gatewayConfigurations{
 		client: c.RESTClient(),
 		ns:     namespace,

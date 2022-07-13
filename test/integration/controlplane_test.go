@@ -13,7 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	operatorv1alpha1 "github.com/kong/gateway-operator/api/operator/v1alpha1"
+	operatorv1alpha1 "github.com/kong/gateway-operator/apis/v1alpha1"
 )
 
 const controlPlanetCondDeadline = time.Minute
@@ -23,8 +23,8 @@ func TestControlPlaneWhenNoDataPlane(t *testing.T) {
 	namespace, cleaner := setup(t)
 	defer func() { assert.NoError(t, cleaner.Cleanup(ctx)) }()
 
-	dataplaneClient := operatorClient.OperatorV1alpha1().DataPlanes(namespace.Name)
-	controlplaneClient := operatorClient.OperatorV1alpha1().ControlPlanes(namespace.Name)
+	dataplaneClient := operatorClient.ApisV1alpha1().DataPlanes(namespace.Name)
+	controlplaneClient := operatorClient.ApisV1alpha1().ControlPlanes(namespace.Name)
 
 	controlplaneName := types.NamespacedName{
 		Namespace: namespace.Name,
@@ -105,8 +105,8 @@ func TestControlPlaneEssentials(t *testing.T) {
 	namespace, cleaner := setup(t)
 	defer func() { assert.NoError(t, cleaner.Cleanup(ctx)) }()
 
-	dataplaneClient := operatorClient.OperatorV1alpha1().DataPlanes(namespace.Name)
-	controlplaneClient := operatorClient.OperatorV1alpha1().ControlPlanes(namespace.Name)
+	dataplaneClient := operatorClient.ApisV1alpha1().DataPlanes(namespace.Name)
+	controlplaneClient := operatorClient.ApisV1alpha1().ControlPlanes(namespace.Name)
 
 	// Control plane needs a dataplane to exist to properly function.
 	dataplaneName := types.NamespacedName{

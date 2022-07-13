@@ -20,8 +20,8 @@ package fake
 
 import (
 	clientset "github.com/kong/gateway-operator/pkg/clientset"
-	operatorv1alpha1 "github.com/kong/gateway-operator/pkg/clientset/typed/operator/v1alpha1"
-	fakeoperatorv1alpha1 "github.com/kong/gateway-operator/pkg/clientset/typed/operator/v1alpha1/fake"
+	apisv1alpha1 "github.com/kong/gateway-operator/pkg/clientset/typed/apis/v1alpha1"
+	fakeapisv1alpha1 "github.com/kong/gateway-operator/pkg/clientset/typed/apis/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -79,7 +79,7 @@ var (
 	_ testing.FakeClient  = &Clientset{}
 )
 
-// OperatorV1alpha1 retrieves the OperatorV1alpha1Client
-func (c *Clientset) OperatorV1alpha1() operatorv1alpha1.OperatorV1alpha1Interface {
-	return &fakeoperatorv1alpha1.FakeOperatorV1alpha1{Fake: &c.Fake}
+// ApisV1alpha1 retrieves the ApisV1alpha1Client
+func (c *Clientset) ApisV1alpha1() apisv1alpha1.ApisV1alpha1Interface {
+	return &fakeapisv1alpha1.FakeApisV1alpha1{Fake: &c.Fake}
 }
