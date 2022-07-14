@@ -22,35 +22,20 @@ func ListDeploymentsForOwner(
 	namespace string,
 	uid types.UID,
 ) ([]appsv1.Deployment, error) {
-	requirement, err := labels.NewRequirement(
-		requiredLabel,
-		selection.Equals,
-		[]string{requiredValue},
-	)
+	listSelector, err := NewListSelectorOption(namespace, requiredLabel, selection.Equals, requiredValue)
 	if err != nil {
 		return nil, err
 	}
-	selector := labels.NewSelector().Add(*requirement)
-
-	listOptions := &client.ListOptions{
-		LabelSelector: selector,
-	}
-	if namespace != "" {
-		listOptions.Namespace = namespace
-	}
 
 	deploymentList := &appsv1.DeploymentList{}
-	if err := c.List(ctx, deploymentList, listOptions); err != nil {
+	if err := c.List(ctx, deploymentList, listSelector); err != nil {
 		return nil, err
 	}
 
 	deployments := make([]appsv1.Deployment, 0)
 	for _, deployment := range deploymentList.Items {
-		for _, ownerRef := range deployment.ObjectMeta.OwnerReferences {
-			if ownerRef.UID == uid {
-				deployments = append(deployments, deployment)
-				break
-			}
+		if IsOwnedByRefUID(&deployment.ObjectMeta, uid) {
+			deployments = append(deployments, deployment)
 		}
 	}
 
@@ -68,37 +53,45 @@ func ListServicesForOwner(
 	namespace string,
 	uid types.UID,
 ) ([]corev1.Service, error) {
-	requirement, err := labels.NewRequirement(
-		requiredLabel,
-		selection.Equals,
-		[]string{requiredValue},
-	)
+
+	listSelector, err := NewListSelectorOption(namespace, requiredLabel, selection.Equals, requiredValue)
 	if err != nil {
 		return nil, err
 	}
-	selector := labels.NewSelector().Add(*requirement)
-
-	listOptions := &client.ListOptions{
-		LabelSelector: selector,
-	}
-	if namespace != "" {
-		listOptions.Namespace = namespace
-	}
 
 	serviceList := &corev1.ServiceList{}
-	if err := c.List(ctx, serviceList, listOptions); err != nil {
+	if err := c.List(ctx, serviceList, listSelector); err != nil {
 		return nil, err
 	}
 
 	services := make([]corev1.Service, 0)
 	for _, service := range serviceList.Items {
-		for _, ownerRef := range service.ObjectMeta.OwnerReferences {
-			if ownerRef.UID == uid {
-				services = append(services, service)
-				break
-			}
+		if IsOwnedByRefUID(&service.ObjectMeta, uid) {
+			services = append(services, service)
 		}
 	}
 
 	return services, nil
+}
+
+// NewListSelectorOption is a helper function to create a ListSelectorOption
+// from a namespace, label key and label values.
+func NewListSelectorOption(
+	namespace string,
+	labelKey string,
+	op selection.Operator,
+	labelValues ...string,
+) (*client.ListOptions, error) {
+
+	requirement, err := labels.NewRequirement(labelKey, op, labelValues)
+	if err != nil {
+		return nil, err
+	}
+
+	selector := labels.NewSelector().Add(*requirement)
+
+	return &client.ListOptions{
+		Namespace:     namespace,
+		LabelSelector: selector,
+	}, nil
 }

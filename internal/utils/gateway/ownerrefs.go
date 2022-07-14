@@ -4,9 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -32,19 +29,19 @@ func ListDataPlanesForGateway(
 		return nil, fmt.Errorf("can't list dataplanes for gateway: gateway resource was missing namespace")
 	}
 
-	selectManagedByGateway, err := newManagedByGatewayListSelector(gateway)
+	listGatewayManaged, err := NewGatewayManagedListSelectorOption(gateway)
 	if err != nil {
 		return nil, err
 	}
 
 	dataplaneList := &operatorv1alpha1.DataPlaneList{}
-	if err := c.List(ctx, dataplaneList, selectManagedByGateway); err != nil {
+	if err := c.List(ctx, dataplaneList, listGatewayManaged); err != nil {
 		return nil, err
 	}
 
 	dataplanes := make([]operatorv1alpha1.DataPlane, 0)
 	for _, dataplane := range dataplaneList.Items {
-		if isOwnedByRefUID(&dataplane.ObjectMeta, gateway.UID) {
+		if k8sutils.IsOwnedByRefUID(&dataplane.ObjectMeta, gateway.UID) {
 			dataplanes = append(dataplanes, dataplane)
 		}
 	}
@@ -63,19 +60,19 @@ func ListControlPlanesForGateway(
 		return nil, fmt.Errorf("can't list dataplanes for gateway: gateway resource was missing namespace")
 	}
 
-	selectManagedByGateway, err := newManagedByGatewayListSelector(gateway)
+	listGatewayManaged, err := NewGatewayManagedListSelectorOption(gateway)
 	if err != nil {
 		return nil, err
 	}
 
 	controlplaneList := &operatorv1alpha1.ControlPlaneList{}
-	if err := c.List(ctx, controlplaneList, selectManagedByGateway); err != nil {
+	if err := c.List(ctx, controlplaneList, listGatewayManaged); err != nil {
 		return nil, err
 	}
 
 	controlplanes := make([]operatorv1alpha1.ControlPlane, 0)
 	for _, controlplane := range controlplaneList.Items {
-		if isOwnedByRefUID(&controlplane.ObjectMeta, gateway.UID) {
+		if k8sutils.IsOwnedByRefUID(&controlplane.ObjectMeta, gateway.UID) {
 			controlplanes = append(controlplanes, controlplane)
 		}
 	}
@@ -121,37 +118,4 @@ func GetDataplaneServiceNameForControlplane(
 	}
 
 	return services[0].Name, nil
-}
-
-// -----------------------------------------------------------------------------
-// Gateway Utils - Private Functions - Owner References
-// -----------------------------------------------------------------------------
-
-func newManagedByGatewayListSelector(gateway *gatewayv1alpha2.Gateway) (*client.ListOptions, error) {
-	requirement, err := labels.NewRequirement(
-		consts.GatewayOperatorControlledLabel,
-		selection.Equals,
-		[]string{consts.GatewayManagedLabelValue},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	selector := labels.NewSelector().Add(*requirement)
-
-	listOptions := &client.ListOptions{
-		Namespace:     gateway.Namespace,
-		LabelSelector: selector,
-	}
-
-	return listOptions, nil
-}
-
-func isOwnedByRefUID(obj metav1.Object, uid types.UID) bool {
-	for _, ref := range obj.GetOwnerReferences() {
-		if ref.UID == uid {
-			return true
-		}
-	}
-	return false
 }
