@@ -29,13 +29,16 @@ func ListDataPlanesForGateway(
 		return nil, fmt.Errorf("can't list dataplanes for gateway: gateway resource was missing namespace")
 	}
 
-	listGatewayManaged, err := NewGatewayManagedListSelectorOption(gateway)
-	if err != nil {
-		return nil, err
-	}
-
 	dataplaneList := &operatorv1alpha1.DataPlaneList{}
-	if err := c.List(ctx, dataplaneList, listGatewayManaged); err != nil {
+
+	err := c.List(
+		ctx,
+		dataplaneList,
+		client.InNamespace(gateway.Namespace),
+		client.MatchingLabels{consts.GatewayOperatorControlledLabel: consts.GatewayManagedLabelValue},
+	)
+
+	if err != nil {
 		return nil, err
 	}
 
@@ -60,13 +63,15 @@ func ListControlPlanesForGateway(
 		return nil, fmt.Errorf("can't list dataplanes for gateway: gateway resource was missing namespace")
 	}
 
-	listGatewayManaged, err := NewGatewayManagedListSelectorOption(gateway)
-	if err != nil {
-		return nil, err
-	}
-
 	controlplaneList := &operatorv1alpha1.ControlPlaneList{}
-	if err := c.List(ctx, controlplaneList, listGatewayManaged); err != nil {
+
+	err := c.List(
+		ctx,
+		controlplaneList,
+		client.InNamespace(gateway.Namespace),
+		client.MatchingLabels{consts.GatewayOperatorControlledLabel: consts.GatewayManagedLabelValue},
+	)
+	if err != nil {
 		return nil, err
 	}
 

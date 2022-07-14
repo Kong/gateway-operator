@@ -5,8 +5,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -22,13 +20,15 @@ func ListDeploymentsForOwner(
 	namespace string,
 	uid types.UID,
 ) ([]appsv1.Deployment, error) {
-	listSelector, err := NewListSelectorOption(namespace, requiredLabel, selection.Equals, requiredValue)
-	if err != nil {
-		return nil, err
-	}
-
 	deploymentList := &appsv1.DeploymentList{}
-	if err := c.List(ctx, deploymentList, listSelector); err != nil {
+
+	err := c.List(
+		ctx,
+		deploymentList,
+		client.InNamespace(namespace),
+		client.MatchingLabels{requiredLabel: requiredValue},
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -53,14 +53,15 @@ func ListServicesForOwner(
 	namespace string,
 	uid types.UID,
 ) ([]corev1.Service, error) {
-
-	listSelector, err := NewListSelectorOption(namespace, requiredLabel, selection.Equals, requiredValue)
-	if err != nil {
-		return nil, err
-	}
-
 	serviceList := &corev1.ServiceList{}
-	if err := c.List(ctx, serviceList, listSelector); err != nil {
+
+	err := c.List(
+		ctx,
+		serviceList,
+		client.InNamespace(namespace),
+		client.MatchingLabels{requiredLabel: requiredValue},
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -72,26 +73,4 @@ func ListServicesForOwner(
 	}
 
 	return services, nil
-}
-
-// NewListSelectorOption is a helper function to create a ListSelectorOption
-// from a namespace, label key and label values.
-func NewListSelectorOption(
-	namespace string,
-	labelKey string,
-	op selection.Operator,
-	labelValues ...string,
-) (*client.ListOptions, error) {
-
-	requirement, err := labels.NewRequirement(labelKey, op, labelValues)
-	if err != nil {
-		return nil, err
-	}
-
-	selector := labels.NewSelector().Add(*requirement)
-
-	return &client.ListOptions{
-		Namespace:     namespace,
-		LabelSelector: selector,
-	}, nil
 }
