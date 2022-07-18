@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -12,10 +13,9 @@ import (
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/apis/v1alpha1"
 	"github.com/kong/gateway-operator/internal/consts"
-	"github.com/kong/gateway-operator/internal/errors"
+	operatorerrors "github.com/kong/gateway-operator/internal/errors"
 	gatewayutils "github.com/kong/gateway-operator/internal/utils/gateway"
 	k8sutils "github.com/kong/gateway-operator/internal/utils/kubernetes"
-	operatorerrors "github.com/kong/gateway-operator/pkg/errors"
 	"github.com/kong/gateway-operator/pkg/vars"
 )
 
@@ -147,7 +147,7 @@ func (r *GatewayReconciler) verifyGatewayClassSupport(ctx context.Context, gatew
 func (r *GatewayReconciler) getOrCreateGatewayConfiguration(ctx context.Context, gatewayClass *gatewayv1alpha2.GatewayClass) (*operatorv1alpha1.GatewayConfiguration, error) {
 	gatewayConfig, err := r.getGatewayConfigForGatewayClass(ctx, gatewayClass)
 	if err != nil {
-		if errors.IsObjectMissingParametersRef(err) {
+		if errors.Is(err, operatorerrors.ErrObjectMissingParametersRef) {
 			return new(operatorv1alpha1.GatewayConfiguration), nil
 		}
 		return nil, err
@@ -158,7 +158,7 @@ func (r *GatewayReconciler) getOrCreateGatewayConfiguration(ctx context.Context,
 
 func (r *GatewayReconciler) getGatewayConfigForGatewayClass(ctx context.Context, gatewayClass *gatewayv1alpha2.GatewayClass) (*operatorv1alpha1.GatewayConfiguration, error) {
 	if gatewayClass.Spec.ParametersRef == nil {
-		return nil, errors.NewObjectMissingParametersRef(gatewayClass)
+		return nil, fmt.Errorf("%w, gatewayClass = %s", operatorerrors.ErrObjectMissingParametersRef, gatewayClass.Name)
 	}
 
 	if string(gatewayClass.Spec.ParametersRef.Group) != operatorv1alpha1.SchemeGroupVersion.Group ||
@@ -182,7 +182,7 @@ func (r *GatewayReconciler) getGatewayConfigForGatewayClass(ctx context.Context,
 	if gatewayClass.Spec.ParametersRef.Namespace == nil ||
 		*gatewayClass.Spec.ParametersRef.Namespace == "" ||
 		gatewayClass.Spec.ParametersRef.Name == "" {
-		return nil, fmt.Errorf("GatewayClass %s has invalid ParametersRef", gatewayClass.Name)
+		return nil, fmt.Errorf("GatewayClass %s has invalid ParametersRef: both namespace and name must be provided", gatewayClass.Name)
 	}
 
 	gatewayConfig := new(operatorv1alpha1.GatewayConfiguration)
