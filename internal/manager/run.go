@@ -66,6 +66,7 @@ type Config struct {
 	Out             *os.File
 	NewClientFunc   cluster.NewClientFunc
 	ControllerName  string
+	ClusterCASecret string
 }
 
 var DefaultConfig = Config{
@@ -106,14 +107,16 @@ func Run(cfg Config) error {
 	}
 
 	if err = (&controllers.DataPlaneReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		ClusterCASecret: cfg.ClusterCASecret,
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create controller DataPlane: %w", err)
 	}
 	if err = (&controllers.ControlPlaneReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		ClusterCASecret: cfg.ClusterCASecret,
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create controller ControlPlane: %w", err)
 	}

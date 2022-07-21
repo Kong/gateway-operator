@@ -40,6 +40,27 @@ import (
 
 const gatewayAPIsCRDs = "https://github.com/kubernetes-sigs/gateway-api.git/config/crd?ref=bcfe3da78648b4206a627fe7f3b2d0db7e755ba8"
 
+const (
+	caCert = `-----BEGIN CERTIFICATE-----
+MIIB4DCCAYWgAwIBAgIUeGJbIyu3J7czUSm+i7eeOZHyTPwwCgYIKoZIzj0EAwIw
+RTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAfBgNVBAoMGElu
+dGVybmV0IFdpZGdpdHMgUHR5IEx0ZDAeFw0yMjA3MTQyMjU1MzJaFw0yMzA3MTQy
+MjU1MzJaMEUxCzAJBgNVBAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYD
+VQQKDBhJbnRlcm5ldCBXaWRnaXRzIFB0eSBMdGQwWTATBgcqhkjOPQIBBggqhkjO
+PQMBBwNCAATGBZpZx193PxWx9t+FB0XZ1YyJJdcL/wCpsTlYLJD+UXjuOvjZfXiw
+41g87W6Y9d9zwLjUDpZbQETxYw8UcVkoo1MwUTAdBgNVHQ4EFgQUbHBpPfdAMSWu
+KxYQc8HD/rord6owHwYDVR0jBBgwFoAUbHBpPfdAMSWuKxYQc8HD/rord6owDwYD
+VR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNJADBGAiEAibT5b9sLbnMc/Hj6BbXu
+JYnSJ/ytGGKqhwsGt9qsaaACIQDHKHcpvw8GcNtBzr9xPuuXNgxiCe53k4drHeia
+ogh8Fg==
+-----END CERTIFICATE-----`
+	caKey = `-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEINqMHuOAeh5S6Oe2aO0eSV+JZWUEL5QbylLQn/ViAL31oAoGCCqGSM49
+AwEHoUQDQgAExgWaWcdfdz8VsfbfhQdF2dWMiSXXC/8AqbE5WCyQ/lF47jr42X14
+sONYPO1umPXfc8C41A6WW0BE8WMPFHFZKA==
+-----END EC PRIVATE KEY-----`
+)
+
 // -----------------------------------------------------------------------------
 // Testing Vars - Environment Overrideable
 // -----------------------------------------------------------------------------
@@ -70,11 +91,6 @@ var (
 
 	httpc = http.Client{
 		Timeout: time.Second * 10,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, //nolint:gosec
-			},
-		},
 	}
 )
 
@@ -92,6 +108,17 @@ func TestMain(m *testing.M) {
 	var skipClusterCleanup bool
 	var existingCluster clusters.Cluster
 	var err error
+
+	cert, err := tls.X509KeyPair([]byte(caCert), []byte(caKey))
+	exitOnErr(err)
+
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			Certificates:       []tls.Certificate{cert},
+			InsecureSkipVerify: true, //nolint:gosec
+		},
+	}
+	httpc.Transport = transport
 
 	fmt.Println("INFO: setting up test cluster")
 	if existingClusterName != "" {
@@ -128,6 +155,20 @@ func TestMain(m *testing.M) {
 	fmt.Println("INFO: creating system namespaces and serviceaccounts")
 	exitOnErr(clusters.CreateNamespace(ctx, env.Cluster(), "kong-system"))
 	exitOnErr(clusters.KustomizeDeployForCluster(ctx, env.Cluster(), "../../config/rbac"))
+
+	fmt.Println("INFO: creating cluster CA")
+	_, err = k8sClient.CoreV1().Secrets("kong-system").Create(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-cluster-ca",
+		},
+		Type: corev1.SecretTypeTLS,
+		StringData: map[string]string{
+			"tls.crt": caCert,
+			"tls.key": caKey,
+		},
+	}, metav1.CreateOptions{})
+	exitOnErr(err)
+	defer k8sClient.CoreV1().Secrets("kong-system").Delete(ctx, "test-cluster-ca", metav1.DeleteOptions{})
 
 	fmt.Println("INFO: deploying CRDs to test cluster")
 	exitOnErr(clusters.KustomizeDeployForCluster(ctx, env.Cluster(), "../../config/crd"))
@@ -210,6 +251,7 @@ func startControllerManager() {
 	cfg.LeaderElection = false
 	cfg.DevelopmentMode = true
 	cfg.ControllerName = "konghq.com/gateway-operator-integration-tests"
+	cfg.ClusterCASecret = "test-cluster-ca"
 
 	if runWebhookTests {
 		cfg.WebhookCertDir = webhookCertDir
