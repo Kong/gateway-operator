@@ -2,11 +2,11 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/apis/v1alpha1"
 	"github.com/kong/gateway-operator/internal/consts"
@@ -118,7 +118,7 @@ func (r *DataPlaneReconciler) ensureDataPlaneIsMarkedNotProvisioned(
 func (r *DataPlaneReconciler) ensureDeploymentForDataPlane(
 	ctx context.Context,
 	dataplane *operatorv1alpha1.DataPlane,
-) (bool, *appsv1.Deployment, error) {
+) (*appsv1.Deployment, error) {
 	deployments, err := k8sutils.ListDeploymentsForOwner(
 		ctx,
 		r.Client,
@@ -128,28 +128,41 @@ func (r *DataPlaneReconciler) ensureDeploymentForDataPlane(
 		dataplane.UID,
 	)
 	if err != nil {
-		return false, nil, err
+		return nil, err
 	}
 
 	count := len(deployments)
 	if count > 1 {
-		return false, nil, fmt.Errorf("found %d deployments for DataPlane currently unsupported: expected 1 or less", count)
+		// if there is more than one Deployment owned by the same DataPlane,
+		// delete all of them and recreate only one as follows below
+		if err := r.Client.DeleteAllOf(ctx, &appsv1.Deployment{},
+			client.InNamespace(dataplane.Namespace),
+			client.MatchingLabels{consts.GatewayOperatorControlledLabel: consts.DataPlaneManagedLabelValue},
+		); err != nil {
+			return nil, err
+		}
 	}
+
+	generatedDeployment := generateNewDeploymentForDataPlane(dataplane)
+	k8sutils.SetOwnerForObject(generatedDeployment, dataplane)
+	labelObjForDataplane(generatedDeployment)
 
 	if count == 1 {
-		return false, &deployments[0], nil
+		var updated bool
+		existingDeployment := &deployments[0]
+		if updated, existingDeployment.ObjectMeta = k8sutils.EnsureObjectMetaIsUpdated(existingDeployment.ObjectMeta, generatedDeployment.ObjectMeta); updated {
+			return existingDeployment, r.Client.Update(ctx, existingDeployment)
+		}
+		return existingDeployment, nil
 	}
 
-	deployment := generateNewDeploymentForDataPlane(dataplane)
-	k8sutils.SetOwnerForObject(deployment, dataplane)
-	labelObjForDataplane(deployment)
-	return true, deployment, r.Client.Create(ctx, deployment)
+	return generatedDeployment, r.Client.Create(ctx, generatedDeployment)
 }
 
 func (r *DataPlaneReconciler) ensureServiceForDataPlane(
 	ctx context.Context,
 	dataplane *operatorv1alpha1.DataPlane,
-) (bool, *corev1.Service, error) {
+) (*corev1.Service, error) {
 	services, err := k8sutils.ListServicesForOwner(
 		ctx,
 		r.Client,
@@ -159,19 +172,33 @@ func (r *DataPlaneReconciler) ensureServiceForDataPlane(
 		dataplane.UID,
 	)
 	if err != nil {
-		return false, nil, err
+		return nil, err
 	}
 
 	count := len(services)
 	if count > 1 {
-		return false, nil, fmt.Errorf("found %d services for DataPlane currently unsupported: expected 1 or less", count)
+		// if there is more than one Service owned by the same DataPlane,
+		// delete all of them and recreate only one as follows below
+		if err := r.Client.DeleteAllOf(ctx, &corev1.Service{},
+			client.InNamespace(dataplane.Namespace),
+			client.MatchingLabels{consts.GatewayOperatorControlledLabel: consts.DataPlaneManagedLabelValue},
+		); err != nil {
+			return nil, err
+		}
 	}
+
+	generatedService := generateNewServiceForDataplane(dataplane)
+	k8sutils.SetOwnerForObject(generatedService, dataplane)
+	labelObjForDataplane(generatedService)
 
 	if count == 1 {
-		return false, &services[0], nil
+		var updated bool
+		existingService := &services[0]
+		if updated, existingService.ObjectMeta = k8sutils.EnsureObjectMetaIsUpdated(existingService.ObjectMeta, generatedService.ObjectMeta); updated {
+			return existingService, r.Client.Update(ctx, existingService)
+		}
+		return existingService, nil
 	}
 
-	service := generateNewServiceForDataplane(dataplane)
-	labelObjForDataplane(service)
-	return true, service, r.Client.Create(ctx, service)
+	return generatedService, r.Client.Create(ctx, generatedService)
 }

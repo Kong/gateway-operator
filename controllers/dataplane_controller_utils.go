@@ -12,7 +12,6 @@ import (
 	operatorv1alpha1 "github.com/kong/gateway-operator/apis/v1alpha1"
 	"github.com/kong/gateway-operator/internal/consts"
 	dataplaneutils "github.com/kong/gateway-operator/internal/utils/dataplane"
-	k8sutils "github.com/kong/gateway-operator/internal/utils/kubernetes"
 )
 
 // -----------------------------------------------------------------------------
@@ -115,9 +114,8 @@ func generateNewDeploymentForDataPlane(dataplane *operatorv1alpha1.DataPlane) *a
 func generateNewServiceForDataplane(dataplane *operatorv1alpha1.DataPlane) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace:       dataplane.Namespace,
-			GenerateName:    fmt.Sprintf("%s-%s-", consts.DataPlanePrefix, dataplane.Name),
-			OwnerReferences: []metav1.OwnerReference{k8sutils.GenerateOwnerReferenceForObject(dataplane)},
+			Namespace:    dataplane.Namespace,
+			GenerateName: fmt.Sprintf("%s-%s-", consts.DataPlanePrefix, dataplane.Name),
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeLoadBalancer,

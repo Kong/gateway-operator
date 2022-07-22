@@ -64,10 +64,26 @@ func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// watch for updates to GatewayConfigurations, if any configuration targets a
 	// Gateway that is supported, enqueue that Gateway.
-	return c.Watch(
+	if err = c.Watch(
 		&source.Kind{Type: &operatorv1alpha1.GatewayConfiguration{}},
 		handler.EnqueueRequestsFromMapFunc(r.listGatewaysForGatewayConfig),
 		predicate.NewPredicateFuncs(r.gatewayConfigurationMatchesController),
+	); err != nil {
+		return err
+	}
+
+	// watch for any event on the owned dataplanes
+	if err = c.Watch(
+		&source.Kind{Type: &operatorv1alpha1.DataPlane{}},
+		&handler.EnqueueRequestForOwner{OwnerType: &gatewayv1alpha2.Gateway{}, IsController: true},
+	); err != nil {
+		return err
+	}
+
+	// watch for any event on the owned controlplanes
+	return c.Watch(
+		&source.Kind{Type: &operatorv1alpha1.ControlPlane{}},
+		&handler.EnqueueRequestForOwner{OwnerType: &gatewayv1alpha2.Gateway{}, IsController: true},
 	)
 }
 
@@ -114,32 +130,10 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	r.setDataplaneGatewayConfigDefaults(gatewayConfig)
 
-	debug(log, "looking for associated dataplanes", gateway)
-	dataplanes, err := gatewayutils.ListDataPlanesForGateway(
-		ctx,
-		r.Client,
-		gateway,
-	)
+	debug(log, "ensuring DataPlane for Gateway exists", gateway)
+	dataplane, err := r.ensureDataPlaneForGateway(ctx, gateway, gatewayConfig)
 	if err != nil {
 		return ctrl.Result{}, err
-	}
-
-	count := len(dataplanes)
-	if count > 1 {
-		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, fmt.Errorf("data plane deployments found: %d, expected: 1, requeing", count)
-	}
-	if count == 0 {
-		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, r.createDataPlane(ctx, gateway, gatewayConfig)
-	}
-	dataplane := dataplanes[0].DeepCopy()
-
-	debug(log, "ensuring dataplane config is up to date", gateway)
-	if gatewayConfig.Spec.DataPlaneDeploymentOptions != nil {
-		if !dataplaneSpecDeepEqual(&dataplane.Spec.DataPlaneDeploymentOptions, gatewayConfig.Spec.DataPlaneDeploymentOptions) {
-			debug(log, "dataplane config is out of date, updating", gateway)
-			dataplane.Spec.DataPlaneDeploymentOptions = *gatewayConfig.Spec.DataPlaneDeploymentOptions
-			return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, r.Client.Update(ctx, dataplane)
-		}
 	}
 
 	debug(log, "waiting for dataplane readiness", gateway)
@@ -166,39 +160,21 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	count = len(services)
+	count := len(services)
 	if count > 1 {
 		return ctrl.Result{}, fmt.Errorf("found %d services for DataPlane currently unsupported: expected 1 or less", count)
 	}
 
 	if count == 0 {
-		return ctrl.Result{}, fmt.Errorf("no services found for dataplane %s/%s", dataplane.Namespace, dataplane.Name)
+		return ctrl.Result{}, fmt.Errorf("no services found for DataPlane %s/%s", dataplane.Namespace, dataplane.Name)
 	}
 
 	r.setControlplaneGatewayConfigDefaults(gateway, gatewayConfig, dataplane.Name, services[0].Name)
 
-	debug(log, "looking for associated controlplanes", gateway)
-	controlplanes, err := gatewayutils.ListControlPlanesForGateway(ctx, r.Client, gateway)
+	debug(log, "ensuring ControlPlane for Gateway exists", gateway)
+	controlplane, err := r.ensureControlPlaneForGateway(ctx, gatewayClass, gateway, gatewayConfig, dataplane.Name)
 	if err != nil {
 		return ctrl.Result{}, err
-	}
-
-	count = len(controlplanes)
-	if count > 1 {
-		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, fmt.Errorf("control plane deployments found: %d, expected: 1, requeing", count)
-	}
-	if count == 0 {
-		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, r.createControlPlane(ctx, gatewayClass, gateway, gatewayConfig, dataplane.Name)
-	}
-	controlplane := controlplanes[0].DeepCopy()
-
-	debug(log, "ensuring controlplane config is up to date", gateway)
-	if gatewayConfig.Spec.ControlPlaneDeploymentOptions != nil {
-		if !controlplaneSpecDeepEqual(&controlplane.Spec.ControlPlaneDeploymentOptions, gatewayConfig.Spec.ControlPlaneDeploymentOptions) {
-			debug(log, "controlplane config is out of date, updating", gateway)
-			controlplane.Spec.ControlPlaneDeploymentOptions = *gatewayConfig.Spec.ControlPlaneDeploymentOptions
-			return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, r.Client.Update(ctx, controlplane)
-		}
 	}
 
 	debug(log, "waiting for controlplane readiness", gateway)

@@ -2,13 +2,13 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/apis/v1alpha1"
 	"github.com/kong/gateway-operator/internal/consts"
@@ -166,95 +166,130 @@ func (r *ControlPlaneReconciler) ensureDeploymentForControlPlane(
 
 	count := len(deployments)
 	if count > 1 {
-		return false, nil, fmt.Errorf("found %d deployments for ControlPlane currently unsupported: expected 1 or less", count)
+		// if there is more than one Deployment owned by the same ControlPlane,
+		// delete all of them and recreate only one as follows below
+		if err := r.Client.DeleteAllOf(ctx, &appsv1.Deployment{},
+			client.InNamespace(controlplane.Namespace),
+			client.MatchingLabels{consts.GatewayOperatorControlledLabel: consts.ControlPlaneManagedLabelValue},
+		); err != nil {
+			return false, nil, err
+		}
 	}
 
-	if count == 1 {
-		replicas := deployments[0].Spec.Replicas
+	generatedDeployment := generateNewDeploymentForControlPlane(controlplane, serviceAccountName)
+	k8sutils.SetOwnerForObject(generatedDeployment, controlplane)
+	labelObjForControlPlane(generatedDeployment)
 
+	if count == 1 {
+		var updated bool
+		existingDeployment := &deployments[0]
+		updated, existingDeployment.ObjectMeta = k8sutils.EnsureObjectMetaIsUpdated(existingDeployment.ObjectMeta, generatedDeployment.ObjectMeta)
+		replicas := existingDeployment.Spec.Replicas
 		switch {
 
 		// Dataplane was just unset, so we need to scale down the Deployment.
 		case !dataplaneIsSet && (replicas == nil || *replicas != numReplicasWhenNoDataplane):
-			deployments[0].Spec.Replicas = pointer.Int32(numReplicasWhenNoDataplane)
-			return true, &deployments[0], r.Client.Update(ctx, &deployments[0])
+			existingDeployment.Spec.Replicas = pointer.Int32(numReplicasWhenNoDataplane)
+			updated = true
 
 		// Dataplane was just set, so we need to scale up the Deployment
 		// and ensure the env variables that might have been changed in
 		// deployment are updated.
 		case dataplaneIsSet && (replicas != nil && *replicas == numReplicasWhenNoDataplane):
-			deployments[0].Spec.Replicas = nil
-			if len(deployments[0].Spec.Template.Spec.Containers[0].Env) > 0 {
-				deployments[0].Spec.Template.Spec.Containers[0].Env = controlplane.Spec.Env
+			existingDeployment.Spec.Replicas = nil
+			if len(existingDeployment.Spec.Template.Spec.Containers[0].Env) > 0 {
+				existingDeployment.Spec.Template.Spec.Containers[0].Env = controlplane.Spec.Env
 			}
-			return true, &deployments[0], r.Client.Update(ctx, &deployments[0])
-
-		// Dataplane is unchanged, so we don't need to do anything.
-		default:
-			return false, &deployments[0], nil
+			updated = true
 		}
+		if updated {
+			return true, existingDeployment, r.Client.Update(ctx, existingDeployment)
+		}
+		return false, existingDeployment, nil
 	}
-
-	deployment := generateNewDeploymentForControlPlane(controlplane, serviceAccountName)
-	k8sutils.SetOwnerForObject(deployment, controlplane)
-	labelObjForControlPlane(deployment)
 
 	if !dataplaneIsSet {
-		deployment.Spec.Replicas = pointer.Int32(numReplicasWhenNoDataplane)
+		generatedDeployment.Spec.Replicas = pointer.Int32(numReplicasWhenNoDataplane)
 	}
 
-	return true, deployment, r.Client.Create(ctx, deployment)
+	return true, generatedDeployment, r.Client.Create(ctx, generatedDeployment)
 }
 
 func (r *ControlPlaneReconciler) ensureServiceAccountForControlPlane(
 	ctx context.Context,
 	controlplane *operatorv1alpha1.ControlPlane,
-) (created bool, sa *corev1.ServiceAccount, err error) {
+) (sa *corev1.ServiceAccount, err error) {
 	serviceAccounts, err := k8sutils.ListServiceAccountsForOwner(ctx, r.Client, consts.GatewayOperatorControlledLabel, consts.ControlPlaneManagedLabelValue, controlplane.Namespace, controlplane.UID)
 	if err != nil {
-		return false, nil, err
+		return nil, err
 	}
 
 	count := len(serviceAccounts)
 	if count > 1 {
-		return false, nil, fmt.Errorf("found %d serviceAccounts for ControlPlane currently unsupported: expected 1 or less", count)
+		// if there is more than one ServiceAccount owned by the same ControlPlane,
+		// delete all of them and recreate only one as follows below
+		if err := r.Client.DeleteAllOf(ctx, &corev1.ServiceAccount{},
+			client.InNamespace(controlplane.Namespace),
+			client.MatchingLabels{consts.GatewayOperatorControlledLabel: consts.ControlPlaneManagedLabelValue},
+		); err != nil {
+			return nil, err
+		}
 	}
+
+	generatedServiceAccount := k8sresources.GenerateNewServiceAccountForControlPlane(controlplane.Namespace, controlplane.Name)
+	k8sutils.SetOwnerForObject(generatedServiceAccount, controlplane)
+	labelObjForControlPlane(generatedServiceAccount)
 
 	if count == 1 {
-		return false, &serviceAccounts[0], nil
+		var updated bool
+		existingServiceAccount := &serviceAccounts[0]
+		if updated, existingServiceAccount.ObjectMeta = k8sutils.EnsureObjectMetaIsUpdated(existingServiceAccount.ObjectMeta, generatedServiceAccount.ObjectMeta); updated {
+			return existingServiceAccount, r.Client.Update(ctx, existingServiceAccount)
+		}
+		return existingServiceAccount, nil
 	}
 
-	serviceAccount := k8sresources.GenerateNewServiceAccountForControlPlane(controlplane.Namespace, controlplane.Name)
-	k8sutils.SetOwnerForObject(serviceAccount, controlplane)
-	labelObjForControlPlane(serviceAccount)
-	return true, serviceAccount, r.Client.Create(ctx, serviceAccount)
+	return generatedServiceAccount, r.Client.Create(ctx, generatedServiceAccount)
 }
 
 func (r *ControlPlaneReconciler) ensureClusterRoleForControlPlane(
 	ctx context.Context,
 	controlplane *operatorv1alpha1.ControlPlane,
-) (created bool, cr *rbacv1.ClusterRole, err error) {
+) (cr *rbacv1.ClusterRole, err error) {
 	clusterRoles, err := k8sutils.ListClusterRolesForOwner(ctx, r.Client, consts.GatewayOperatorControlledLabel, consts.ControlPlaneManagedLabelValue, controlplane.UID)
 	if err != nil {
-		return false, nil, err
+		return nil, err
 	}
 
 	count := len(clusterRoles)
 	if count > 1 {
-		return false, nil, fmt.Errorf("found %d deployments for ControlPlane currently unsupported: expected 1 or less", count)
+		// if there is more than one ClusterRole owned by the same ControlPlane,
+		// delete all of them and recreate only one as follows below
+		if err := r.Client.DeleteAllOf(ctx, &rbacv1.ClusterRole{},
+			client.InNamespace(controlplane.Namespace),
+			client.MatchingLabels{consts.GatewayOperatorControlledLabel: consts.ControlPlaneManagedLabelValue},
+		); err != nil {
+			return nil, err
+		}
 	}
+
+	generatedClusterRole, err := k8sresources.GenerateNewClusterRoleForControlPlane(controlplane.Name, controlplane.Spec.ContainerImage)
+	if err != nil {
+		return nil, err
+	}
+	k8sutils.SetOwnerForObject(generatedClusterRole, controlplane)
+	labelObjForControlPlane(generatedClusterRole)
 
 	if count == 1 {
-		return false, &clusterRoles[0], nil
+		var updated bool
+		existingClusterRoles := &clusterRoles[0]
+		if updated, existingClusterRoles.ObjectMeta = k8sutils.EnsureObjectMetaIsUpdated(existingClusterRoles.ObjectMeta, generatedClusterRole.ObjectMeta); updated {
+			return existingClusterRoles, r.Client.Update(ctx, existingClusterRoles)
+		}
+		return existingClusterRoles, nil
 	}
 
-	clusterRole, err := k8sresources.GenerateNewClusterRoleForControlPlane(controlplane.Name, controlplane.Spec.ContainerImage)
-	if err != nil {
-		return false, nil, err
-	}
-	k8sutils.SetOwnerForObject(clusterRole, controlplane)
-	labelObjForControlPlane(clusterRole)
-	return true, clusterRole, r.Client.Create(ctx, clusterRole)
+	return generatedClusterRole, r.Client.Create(ctx, generatedClusterRole)
 }
 
 func (r *ControlPlaneReconciler) ensureClusterRoleBindingForControlPlane(
@@ -262,23 +297,36 @@ func (r *ControlPlaneReconciler) ensureClusterRoleBindingForControlPlane(
 	controlplane *operatorv1alpha1.ControlPlane,
 	serviceAccountName string,
 	clusterRoleName string,
-) (created bool, crb *rbacv1.ClusterRoleBinding, err error) {
+) (crb *rbacv1.ClusterRoleBinding, err error) {
 	clusterRoleBindings, err := k8sutils.ListClusterRoleBindingsForOwner(ctx, r.Client, consts.GatewayOperatorControlledLabel, consts.ControlPlaneManagedLabelValue, controlplane.UID)
 	if err != nil {
-		return false, nil, err
+		return nil, err
 	}
 
 	count := len(clusterRoleBindings)
 	if count > 1 {
-		return false, nil, fmt.Errorf("found %d deployments for ControlPlane currently unsupported: expected 1 or less", count)
+		// if there is more than one ClusterRoleBinding owned by the same ControlPlane,
+		// delete all of them and recreate only one as follows below
+		if err := r.Client.DeleteAllOf(ctx, &rbacv1.ClusterRoleBinding{},
+			client.InNamespace(controlplane.Namespace),
+			client.MatchingLabels{consts.GatewayOperatorControlledLabel: consts.ControlPlaneManagedLabelValue},
+		); err != nil {
+			return nil, err
+		}
 	}
+
+	generatedClusterRoleBinding := k8sresources.GenerateNewClusterRoleBindingForControlPlane(controlplane.Namespace, controlplane.Name, serviceAccountName, clusterRoleName)
+	k8sutils.SetOwnerForObject(generatedClusterRoleBinding, controlplane)
+	labelObjForControlPlane(generatedClusterRoleBinding)
 
 	if count == 1 {
-		return false, &clusterRoleBindings[0], nil
+		var updated bool
+		existingClusterRoleBinding := &clusterRoleBindings[0]
+		if updated, existingClusterRoleBinding.ObjectMeta = k8sutils.EnsureObjectMetaIsUpdated(existingClusterRoleBinding.ObjectMeta, generatedClusterRoleBinding.ObjectMeta); updated {
+			return existingClusterRoleBinding, r.Client.Update(ctx, existingClusterRoleBinding)
+		}
+		return existingClusterRoleBinding, nil
 	}
 
-	clusterRoleBinding := k8sresources.GenerateNewClusterRoleBindingForControlPlane(controlplane.Namespace, controlplane.Name, serviceAccountName, clusterRoleName)
-	k8sutils.SetOwnerForObject(clusterRoleBinding, controlplane)
-	labelObjForControlPlane(clusterRoleBinding)
-	return true, clusterRoleBinding, r.Client.Create(ctx, clusterRoleBinding)
+	return generatedClusterRoleBinding, r.Client.Create(ctx, generatedClusterRoleBinding)
 }

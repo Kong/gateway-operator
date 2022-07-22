@@ -4,11 +4,19 @@ import (
 	"context"
 	"errors"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/apis/v1alpha1"
 	operatorerrors "github.com/kong/gateway-operator/internal/errors"
@@ -27,9 +35,31 @@ type ControlPlaneReconciler struct {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ControlPlaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	clusterRolePredicate := predicate.NewPredicateFuncs(r.clusterRoleHasControlplaneOwner)
+	clusterRolePredicate.UpdateFunc = func(e event.UpdateEvent) bool {
+		return r.clusterRoleHasControlplaneOwner(e.ObjectOld)
+	}
+
+	clusterRoleBindingPredicate := predicate.NewPredicateFuncs(r.clusterRoleBindingHasControlplaneOwner)
+	clusterRoleBindingPredicate.UpdateFunc = func(e event.UpdateEvent) bool {
+		return r.clusterRoleBindingHasControlplaneOwner(e.ObjectOld)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.ControlPlane{}).
 		Named("ControlPlane").
+		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.ServiceAccount{}).
+		Watches(
+			&source.Kind{Type: &rbacv1.ClusterRole{}},
+			handler.EnqueueRequestsFromMapFunc(r.getControlplaneForClusterRole),
+			builder.WithPredicates(clusterRolePredicate),
+		).
+		Watches(
+			&source.Kind{Type: &rbacv1.ClusterRoleBinding{}},
+			handler.EnqueueRequestsFromMapFunc(r.getControlplaneForClusterRoleBinding),
+			builder.WithPredicates(clusterRoleBindingPredicate),
+		).
 		Complete(r)
 }
 
@@ -108,30 +138,21 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	debug(log, "ensuring ServiceAccount for ControlPlane deployment exists", controlplane)
-	created, controlplaneServiceAccount, err := r.ensureServiceAccountForControlPlane(ctx, controlplane)
+	controlplaneServiceAccount, err := r.ensureServiceAccountForControlPlane(ctx, controlplane)
 	if err != nil {
 		return ctrl.Result{}, err
-	}
-	if created {
-		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil // TODO: remove after https://github.com/Kong/gateway-operator/issues/26
 	}
 
 	debug(log, "ensuring ClusterRoles for ControlPlane deployment exist", controlplane)
-	created, controlplaneClusterRole, err := r.ensureClusterRoleForControlPlane(ctx, controlplane)
+	controlplaneClusterRole, err := r.ensureClusterRoleForControlPlane(ctx, controlplane)
 	if err != nil {
 		return ctrl.Result{}, err
-	}
-	if created {
-		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil // TODO: remove after https://github.com/Kong/gateway-operator/issues/26
 	}
 
 	debug(log, "ensuring that ClusterRoleBindings for ControlPlane Deployment exist", controlplane)
-	created, _, err = r.ensureClusterRoleBindingForControlPlane(ctx, controlplane, controlplaneServiceAccount.Name, controlplaneClusterRole.Name)
+	_, err = r.ensureClusterRoleBindingForControlPlane(ctx, controlplane, controlplaneServiceAccount.Name, controlplaneClusterRole.Name)
 	if err != nil {
 		return ctrl.Result{}, err
-	}
-	if created {
-		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil // TODO: remove after https://github.com/Kong/gateway-operator/issues/26
 	}
 
 	debug(log, "looking for existing Deployments for ControlPlane resource", controlplane)
@@ -144,7 +165,6 @@ func (r *ControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			debug(log, "DataPlane not set, deployment for ControlPlane has been scaled down to 0 replicas", controlplane)
 			return ctrl.Result{}, nil // no need to requeue until dataplane is set
 		}
-		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil // TODO: remove after https://github.com/Kong/gateway-operator/issues/26
 	}
 
 	// TODO: updates need to update sub-resources https://github.com/Kong/gateway-operator/issues/27

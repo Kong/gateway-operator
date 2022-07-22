@@ -16,6 +16,7 @@ import (
 	operatorerrors "github.com/kong/gateway-operator/internal/errors"
 	gatewayutils "github.com/kong/gateway-operator/internal/utils/gateway"
 	k8sutils "github.com/kong/gateway-operator/internal/utils/kubernetes"
+	k8sresources "github.com/kong/gateway-operator/internal/utils/kubernetes/resources"
 	"github.com/kong/gateway-operator/pkg/vars"
 )
 
@@ -23,49 +24,101 @@ import (
 // GatewayReconciler - Reconciler Helpers
 // -----------------------------------------------------------------------------
 
-func (r *GatewayReconciler) createDataPlane(ctx context.Context,
+func (r *GatewayReconciler) ensureDataPlaneForGateway(ctx context.Context,
 	gateway *gatewayv1alpha2.Gateway,
 	gatewayConfig *operatorv1alpha1.GatewayConfiguration,
-) error {
-	dataplane := &operatorv1alpha1.DataPlane{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:    gateway.Namespace,
-			GenerateName: fmt.Sprintf("%s-", gateway.Name),
-		},
+) (*operatorv1alpha1.DataPlane, error) {
+	dataplanes, err := gatewayutils.ListDataPlanesForGateway(
+		ctx,
+		r.Client,
+		gateway,
+	)
+	if err != nil {
+		return nil, err
 	}
-	if gatewayConfig.Spec.DataPlaneDeploymentOptions != nil {
-		dataplane.Spec.DataPlaneDeploymentOptions = *gatewayConfig.Spec.DataPlaneDeploymentOptions
+
+	count := len(dataplanes)
+	if count > 1 {
+		// if there is more than one Dataplane owned by the same Gateway,
+		// delete all of them and recreate only one as follows
+		if err := r.Client.DeleteAllOf(ctx, &operatorv1alpha1.DataPlane{},
+			client.InNamespace(gateway.Namespace),
+			client.MatchingLabels{consts.GatewayOperatorControlledLabel: consts.GatewayManagedLabelValue},
+		); err != nil {
+			return nil, err
+		}
 	}
-	k8sutils.SetOwnerForObject(dataplane, gateway)
-	gatewayutils.LabelObjectAsGatewayManaged(dataplane)
-	return r.Client.Create(ctx, dataplane)
+
+	generatedDataplane := k8sresources.GenerateNewDataPlaneForGateway(*gateway, gatewayConfig)
+	k8sutils.SetOwnerForObject(generatedDataplane, gateway)
+	gatewayutils.LabelObjectAsGatewayManaged(generatedDataplane)
+
+	if count == 1 {
+		var updated bool
+		existingDataplane := &dataplanes[0]
+		updated, existingDataplane.ObjectMeta = k8sutils.EnsureObjectMetaIsUpdated(existingDataplane.ObjectMeta, generatedDataplane.ObjectMeta)
+
+		if gatewayConfig.Spec.DataPlaneDeploymentOptions != nil {
+			if !dataplaneSpecDeepEqual(&existingDataplane.Spec.DataPlaneDeploymentOptions, gatewayConfig.Spec.DataPlaneDeploymentOptions) {
+				existingDataplane.Spec.DataPlaneDeploymentOptions = *gatewayConfig.Spec.DataPlaneDeploymentOptions
+				updated = true
+			}
+		}
+		if updated {
+			return existingDataplane, r.Client.Update(ctx, existingDataplane)
+		}
+		return existingDataplane, nil
+	}
+
+	return generatedDataplane, r.Client.Create(ctx, generatedDataplane)
 }
 
-func (r *GatewayReconciler) createControlPlane(
+func (r *GatewayReconciler) ensureControlPlaneForGateway(
 	ctx context.Context,
 	gatewayClass *gatewayv1alpha2.GatewayClass,
 	gateway *gatewayv1alpha2.Gateway,
 	gatewayConfig *operatorv1alpha1.GatewayConfiguration,
 	dataplaneName string,
-) error {
-	controlplane := &operatorv1alpha1.ControlPlane{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:    gateway.Namespace,
-			GenerateName: fmt.Sprintf("%s-", gateway.Name),
-		},
-		Spec: operatorv1alpha1.ControlPlaneSpec{
-			GatewayClass: (*gatewayv1alpha2.ObjectName)(&gatewayClass.Name),
-		},
+) (*operatorv1alpha1.ControlPlane, error) {
+	controlplanes, err := gatewayutils.ListControlPlanesForGateway(ctx, r.Client, gateway)
+	if err != nil {
+		return nil, err
 	}
-	if gatewayConfig.Spec.ControlPlaneDeploymentOptions != nil {
-		controlplane.Spec.ControlPlaneDeploymentOptions = *gatewayConfig.Spec.ControlPlaneDeploymentOptions
+
+	count := len(controlplanes)
+	if count > 1 {
+		// if there is more than one ControlPlane owned by the same Gateway,
+		// delete all of them and recreate only one as follows
+		if err := r.Client.DeleteAllOf(ctx, &operatorv1alpha1.DataPlane{},
+			client.InNamespace(gateway.Namespace),
+			client.MatchingLabels{consts.GatewayOperatorControlledLabel: consts.GatewayManagedLabelValue},
+		); err != nil {
+			return nil, err
+		}
 	}
-	if controlplane.Spec.DataPlane == nil {
-		controlplane.Spec.DataPlane = &dataplaneName
+
+	generatedControlplane := k8sresources.GenerateNewControlPlaneForGateway(gatewayClass, gateway, gatewayConfig, dataplaneName)
+	k8sutils.SetOwnerForObject(generatedControlplane, gateway)
+	gatewayutils.LabelObjectAsGatewayManaged(generatedControlplane)
+
+	if count == 1 {
+		var updated bool
+		existingControlplane := &controlplanes[0]
+		updated, existingControlplane.ObjectMeta = k8sutils.EnsureObjectMetaIsUpdated(existingControlplane.ObjectMeta, generatedControlplane.ObjectMeta)
+
+		if gatewayConfig.Spec.ControlPlaneDeploymentOptions != nil {
+			if !controlplaneSpecDeepEqual(&existingControlplane.Spec.ControlPlaneDeploymentOptions, gatewayConfig.Spec.ControlPlaneDeploymentOptions) {
+				existingControlplane.Spec.ControlPlaneDeploymentOptions = *gatewayConfig.Spec.ControlPlaneDeploymentOptions
+				updated = true
+			}
+		}
+		if updated {
+			return existingControlplane, r.Client.Update(ctx, existingControlplane)
+		}
+		return existingControlplane, nil
 	}
-	k8sutils.SetOwnerForObject(controlplane, gateway)
-	gatewayutils.LabelObjectAsGatewayManaged(controlplane)
-	return r.Client.Create(ctx, controlplane)
+
+	return generatedControlplane, r.Client.Create(ctx, generatedControlplane)
 }
 
 func (r *GatewayReconciler) ensureGatewayMarkedReady(ctx context.Context, gateway *gatewayv1alpha2.Gateway, dataplane *operatorv1alpha1.DataPlane) error {

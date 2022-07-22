@@ -3,6 +3,8 @@ package controllers
 import (
 	"context"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -28,11 +30,12 @@ type DataPlaneReconciler struct {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *DataPlaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
-
 	r.eventRecorder = mgr.GetEventRecorderFor("dataplane")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.DataPlane{}).
 		Named("DataPlane").
+		Owns(&corev1.Service{}).
+		Owns(&appsv1.Deployment{}).
 		Complete(r)
 }
 
@@ -88,12 +91,9 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	debug(log, "looking for existing deployments for DataPlane resource", dataplane)
-	created, dataplaneDeployment, err := r.ensureDeploymentForDataPlane(ctx, dataplane)
+	dataplaneDeployment, err := r.ensureDeploymentForDataPlane(ctx, dataplane)
 	if err != nil {
 		return ctrl.Result{}, err
-	}
-	if created {
-		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil // TODO: remove after https://github.com/Kong/gateway-operator/issues/26
 	}
 
 	// TODO: updates need to update owned deployment https://github.com/Kong/gateway-operator/issues/27
@@ -105,12 +105,9 @@ func (r *DataPlaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	debug(log, "exposing DataPlane deployment via service", dataplane)
-	created, dataplaneService, err := r.ensureServiceForDataPlane(ctx, dataplane)
+	dataplaneService, err := r.ensureServiceForDataPlane(ctx, dataplane)
 	if err != nil {
 		return ctrl.Result{}, err
-	}
-	if created {
-		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, nil // TODO: remove after https://github.com/Kong/gateway-operator/issues/26
 	}
 
 	// TODO: updates need to update owned service https://github.com/Kong/gateway-operator/issues/27
