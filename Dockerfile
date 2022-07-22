@@ -1,5 +1,15 @@
 FROM golang:1.18 as builder
 
+ARG TARGETPLATFORM
+ARG TARGETOS
+ARG TARGETARCH
+
+RUN printf "Building for TARGETPLATFORM=${TARGETPLATFORM}" \
+    && printf ", TARGETARCH=${TARGETARCH}" \
+    && printf ", TARGETOS=${TARGETOS}" \
+    && printf ", TARGETVARIANT=${TARGETVARIANT} \n" \
+    && printf "With 'uname -s': $(uname -s) and 'uname -m': $(uname -m)"
+
 WORKDIR /workspace
 
 COPY go.mod go.mod
@@ -16,7 +26,8 @@ COPY internal/ internal/
 ### Distroless/default
 # Use distroless as minimal base image to package the operator binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH="${TARGETARCH}" go build -a -o manager main.go
+
 
 ### Distroless/default
 # Use distroless as minimal base image to package the operator binary
@@ -40,7 +51,6 @@ USER 65532:65532
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
-
 
 
 ENTRYPOINT ["/manager"]
