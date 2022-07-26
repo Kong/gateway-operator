@@ -110,9 +110,6 @@ func (r *DataPlaneReconciler) ensureCertificate(
 	secretName := dataplane.Name + "-data-mtls-cert"
 	usages := []certificatesv1beta1.KeyUsage{certificatesv1beta1.UsageKeyEncipherment,
 		certificatesv1beta1.UsageDigitalSignature, certificatesv1beta1.UsageServerAuth}
-	// TODO for data planes the subject is the service name because that's what the controller will expect. here it...
-	// doesn't really matter since we just trust any correctly signed client certificate on the Kong side. Do we care
-	// what subject we use?
 	created, err := maybeCreateCertificateSecret(ctx, fmt.Sprintf("%s.%s.svc", serviceName, dataplane.Namespace),
 		dataplane.Namespace, secretName, r.ClusterCASecret, usages, r.Client)
 

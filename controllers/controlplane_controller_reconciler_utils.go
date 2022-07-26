@@ -257,10 +257,9 @@ func (r *ControlPlaneReconciler) ensureCertificate(
 	secretName := controlplane.Name + "-control-mtls-cert"
 	usages := []certificatesv1beta1.KeyUsage{certificatesv1beta1.UsageKeyEncipherment,
 		certificatesv1beta1.UsageDigitalSignature, certificatesv1beta1.UsageClientAuth}
-	// TODO for data planes the subject is the service name because that's what the controller will expect. here it...
-	// doesn't really matter since we just trust any correctly signed client certificate on the Kong side. Do we care
-	// what subject we use?
-	created, err := maybeCreateCertificateSecret(ctx, controlplane.Name+".controlplane.kong.example",
+	// this subject is arbitrary. data planes only care that client certificates are signed by the trusted CA, and will
+	// accept a certificate with any subject
+	created, err := maybeCreateCertificateSecret(ctx, fmt.Sprintf("%s.%s", controlplane.Name, controlplane.Namespace),
 		controlplane.Namespace, secretName, r.ClusterCASecret, usages, r.Client)
 
 	return created, secretName, err
