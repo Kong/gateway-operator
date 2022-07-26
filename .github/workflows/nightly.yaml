@@ -4,18 +4,24 @@ on:
   schedule:
     - cron: '30 3 * * *'
   workflow_dispatch: {}
+  push:
+    branches:
+      - "*"
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   RH_SCAN_REGISTRY: scan.connect.redhat.com
-  RH_IMAGE_NAME: ospid-62c721d5ea2ed524ce4af71b/gateway-operator
+  RH_IMAGE_NAME: ${{ secrets.RH_PROJECT_ID }}/gateway-operator
 
 jobs:
   build-push-images:
     environment: 'Docker Push'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository (actions)
+        uses: actions/checkout@v3
+
       - name: Add standard tags
         run: |
           echo 'TAGS_STANDARD<<EOF' >> $GITHUB_ENV
@@ -36,8 +42,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Log in to the Container registry
-        uses: docker/login-action@v2.0.0
+        uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -55,6 +69,8 @@ jobs:
         uses: docker/metadata-action@v4.0.1
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
           tags: ${{ env.TAGS_STANDARD }}
 
       - name: Docker meta (RedHat)
@@ -66,20 +82,20 @@ jobs:
             latest=false
           tags: ${{ env.REDHAT_STANDARD }}
 
-      - name: Build binary
-        id: docker_build_binary
-        uses: docker/build-push-action@v3
-        with:
-          push: false
-          file: Dockerfile
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
-          target: builder
-          platforms: linux/amd64, linux/arm64
-          build-args: |
-            TAG=${{ steps.meta.outputs.version }}
-            COMMIT=${{ github.sha }}
-            REPO_INFO=https://github.com/${{ github.repository }}.git
+      # - name: Build binary
+      #   id: docker_build_binary
+      #   uses: docker/build-push-action@v3
+      #   with:
+      #     push: false
+      #     file: Dockerfile
+      #     cache-from: type=local,src=/tmp/.buildx-cache
+      #     cache-to: type=local,dest=/tmp/.buildx-cache
+      #     target: builder
+      #     platforms: linux/amd64, linux/arm64
+      #     build-args: |
+      #       TAG=${{ steps.meta.outputs.version }}
+      #       COMMIT=${{ github.sha }}
+      #       REPO_INFO=https://github.com/${{ github.repository }}.git
           
       - name: Build and push
         id: docker_build
@@ -114,19 +130,11 @@ jobs:
             COMMIT=${{ github.sha }}
             REPO_INFO=https://github.com/${{ github.repository }}.git
 
-      - name: Setup DOCKER_HOME for preflight
-        run: |
-          echo "DOCKER_HOME=$HOME/.docker/" >> $GITHUB_ENV
-
-      - name: Run preflight
-        uses: addnab/docker-run-action@v3
+      - name: Run Red Hat certification
+        uses: ./.github/actions/redhat-certification-action
         with:
-          image: quay.io/opdev/preflight:stable
-          options: -v ${{ env.DOCKER_HOME }}:/docker
-          run: |
-            IMAGE_TAG=$(echo ${{ steps.meta_redhat.outputs.tags }} | head -1)
-            /usr/local/bin/preflight check container $IMAGE_TAG \
-              --docker-config=/docker/config.json \
-              --submit \
-              --pyxis-api-token=${{ secrets.RH_PYXIS_TOKEN }} \
-              --certification-project-id=${{ secrets.RH_PROJECT_ID }}
+          image: ${{ env.RH_SCAN_REGISTRY }}/${{ env.RH_IMAGE_NAME }}:${{ steps.meta_redhat.outputs.version }}
+          username: ${{ secrets.RH_USERNAME }}
+          password: ${{ secrets.RH_TOKEN }}
+          apitoken: ${{ secrets.RH_PYXIS_TOKEN }}
+          projectid: ${{ secrets.RH_PROJECT_ID }}
