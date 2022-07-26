@@ -3,8 +3,6 @@ name: nightly
 on:
   schedule:
     - cron: '30 3 * * *'
-  push:
-    branches: ['jrsmroz-rh-registry']
   workflow_dispatch: {}
 
 env:

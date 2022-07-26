@@ -2,13 +2,11 @@ name: build
 
 on:
   push:
-    branches: ['main', 'jrsmroz-rh-registry']
+    branches: ['main']
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  RH_SCAN_REGISTRY: scan.connect.redhat.com
-  RH_IMAGE_NAME: ospid-62c721d5ea2ed524ce4af71b/gateway-operator
 
 jobs:
   build-and-push-image:
@@ -21,25 +19,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Log in to the Container Registry
+      - name: Log in to the Container registry
         uses: docker/login-action@v2.0.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to RH Scan Registry
-        uses: docker/login-action@v2
-        with:
-          registry: scan.connect.redhat.com
-          username: ${{ secrets.RH_USERNAME }}
-          password: ${{ secrets.RH_TOKEN }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -50,56 +35,11 @@ jobs:
             type=sha
             type=ref,event=branch
 
-      - name: Extract metadata (tags, labels) for RedHat Scan Registry
-        id: meta_redhat
-        uses: docker/metadata-action@v4.0.1
-        with:
-          images: ${{ env.RH_SCAN_REGISTRY }}/${{ env.RH_IMAGE_NAME }}
-          flavor: |
-            latest=false
-          tags: |
-            # type=sha,prefix={{branch}}-
-            type=ref,event=branch
-            type=sha
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v3.1.0
         with:
+          context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           target: distroless
-
-      - name: Build and push RedHat image
-        id: docker_build_redhat
-        env:
-          TAG: ${{ steps.meta_redhat.outputs.version }}
-        uses: docker/build-push-action@v3.1.0
-        with:
-          push: true
-          tags: ${{ steps.meta_redhat.outputs.tags }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          target: redhat
-          # platforms: linux/amd64, linux/arm64
-          platforms: linux/amd64
-          build-args: |
-            TAG=${{ steps.meta_redhat.outputs.version }}
-            COMMIT=${{ github.sha }}
-            REPO_INFO=https://github.com/${{ github.repository }}.git
-
-      - name: Setup DOCKER_HOME for preflight
-        run: |
-          echo "DOCKER_HOME=$HOME/.docker/" >> $GITHUB_ENV
-
-      - name: Run preflight
-        uses: addnab/docker-run-action@v3
-        with:
-          image: quay.io/opdev/preflight:stable
-          options: -v ${{ env.DOCKER_HOME }}:/docker
-          run: |
-            IMAGE_TAG=$(echo ${{ steps.meta_redhat.outputs.tags }} | head -1)
-            /usr/local/bin/preflight check container $IMAGE_TAG \
-              --docker-config=/docker/config.json \
-              --submit \
-              --pyxis-api-token=${{ secrets.RH_PYXIS_TOKEN }} \
-              --certification-project-id=${{ secrets.RH_PROJECT_ID }}
