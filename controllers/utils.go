@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"os"
 	"reflect"
 	"time"
 
@@ -177,8 +178,7 @@ func maybeCreateCertificateSecret(ctx context.Context, subject, namespace, name,
 	}
 
 	ca := &corev1.Secret{}
-	// TODO get the operator namespace dynamically
-	err = k8sClient.Get(ctx, client.ObjectKey{Namespace: "kong-system", Name: mtlsCASecretName}, ca)
+	err = k8sClient.Get(ctx, client.ObjectKey{Namespace: os.Getenv("POD_NAMESPACE"), Name: mtlsCASecretName}, ca)
 	if err != nil {
 		return false, err
 	}

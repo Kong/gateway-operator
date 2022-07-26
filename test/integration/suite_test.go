@@ -169,6 +169,9 @@ func TestMain(m *testing.M) {
 	}, metav1.CreateOptions{})
 	exitOnErr(err)
 	defer k8sClient.CoreV1().Secrets("kong-system").Delete(ctx, "test-cluster-ca", metav1.DeleteOptions{})
+	// normally this is obtained from the downward API. the tests fake it.
+	err = os.Setenv("POD_NAMESPACE", "kong-system")
+	exitOnErr(err)
 
 	fmt.Println("INFO: deploying CRDs to test cluster")
 	exitOnErr(clusters.KustomizeDeployForCluster(ctx, env.Cluster(), "../../config/crd"))
