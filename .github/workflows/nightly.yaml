@@ -82,20 +82,20 @@ jobs:
             latest=false
           tags: ${{ env.REDHAT_STANDARD }}
 
-      # - name: Build binary
-      #   id: docker_build_binary
-      #   uses: docker/build-push-action@v3
-      #   with:
-      #     push: false
-      #     file: Dockerfile
-      #     cache-from: type=local,src=/tmp/.buildx-cache
-      #     cache-to: type=local,dest=/tmp/.buildx-cache
-      #     target: builder
-      #     platforms: linux/amd64, linux/arm64
-      #     build-args: |
-      #       TAG=${{ steps.meta.outputs.version }}
-      #       COMMIT=${{ github.sha }}
-      #       REPO_INFO=https://github.com/${{ github.repository }}.git
+      - name: Build binary
+        id: docker_build_binary
+        uses: docker/build-push-action@v3
+        with:
+          push: false
+          file: Dockerfile
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
+          target: builder
+          platforms: linux/amd64, linux/arm64
+          build-args: |
+            TAG=${{ steps.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+            REPO_INFO=https://github.com/${{ github.repository }}.git
           
       - name: Build and push
         id: docker_build
