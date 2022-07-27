@@ -14,4 +14,4 @@ docker run                                                          \
     --docker-config=/docker/config.json                             \
     --submit                                                        \
     --certification-project-id="${INPUT_PROJECTID}"  \
-    --pyxis-api-token=${INPUT_APITOKEN}
+    --pyxis-api-token="${INPUT_APITOKEN}"
