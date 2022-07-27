@@ -125,7 +125,10 @@ func Run(cfg Config) error {
 		secretName:      cfg.ClusterCASecret,
 		secretNamespace: os.Getenv("POD_NAMESPACE"),
 	}
-	mgr.Add(caMgr)
+	err = mgr.Add(caMgr)
+	if err != nil {
+		return fmt.Errorf("unable to start manager: %w", err)
+	}
 
 	if err = (&controllers.DataPlaneReconciler{
 		Client:          mgr.GetClient(),
