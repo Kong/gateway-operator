@@ -142,7 +142,7 @@ func TestMain(m *testing.M) {
 	go startControllerManager()
 
 	for i := 0; i < 60; i++ {
-		err := func() error {
+		err = func() error {
 			ca, err := k8sClient.CoreV1().Secrets("kong-system").Get(ctx, manager.DefaultConfig.ClusterCASecret, metav1.GetOptions{})
 			if err != nil {
 				return err
@@ -165,6 +165,7 @@ func TestMain(m *testing.M) {
 			time.Sleep(time.Second)
 		}
 	}
+	exitOnErr(err)
 
 	// wait for webhook server in controller to be ready after controller started.
 	if runWebhookTests {
@@ -234,7 +235,6 @@ func startControllerManager() {
 	cfg.LeaderElection = false
 	cfg.DevelopmentMode = true
 	cfg.ControllerName = "konghq.com/gateway-operator-integration-tests"
-	cfg.ClusterCASecret = "test-cluster-ca"
 
 	if runWebhookTests {
 		cfg.WebhookCertDir = webhookCertDir
