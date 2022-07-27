@@ -17,14 +17,27 @@ limitations under the License.
 package manager
 
 import (
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"os"
 	"path"
+	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -75,6 +88,7 @@ var DefaultConfig = Config{
 	WebhookPort:     9443,
 	DevelopmentMode: false,
 	LeaderElection:  true,
+	ClusterCASecret: "kong-operator-ca",
 }
 
 func Run(cfg Config) error {
@@ -105,6 +119,13 @@ func Run(cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("unable to start manager: %w", err)
 	}
+
+	caMgr := &caManager{
+		client:          mgr.GetClient(),
+		secretName:      cfg.ClusterCASecret,
+		secretNamespace: os.Getenv("POD_NAMESPACE"),
+	}
+	mgr.Add(caMgr)
 
 	if err = (&controllers.DataPlaneReconciler{
 		Client:          mgr.GetClient(),
@@ -181,4 +202,86 @@ func runWebhookServer(mgr manager.Manager, cfg Config) {
 		setupLog.Info("start webhook server", "listen_address", fmt.Sprintf("%s:%d", hookServer.Host, hookServer.Port))
 	}
 
+}
+
+type caManager struct {
+	client          client.Client
+	secretName      string
+	secretNamespace string
+}
+
+func (m *caManager) Start(ctx context.Context) error {
+	return m.maybeCreateCACertificate()
+}
+
+func (m *caManager) maybeCreateCACertificate() error {
+	// TODO https://github.com/Kong/gateway-operator/issues/108 this also needs to check if the CA is expired and
+	// managed, and needs to reissue it (and all issued certificates) if so
+	ca := &corev1.Secret{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	err := m.client.Get(ctx, client.ObjectKey{Namespace: m.secretNamespace, Name: m.secretName}, ca)
+	if errors.IsNotFound(err) {
+		serial, err := rand.Int(rand.Reader, big.NewInt(9999999999))
+		if err != nil {
+			return err
+		}
+		setupLog.Info(fmt.Sprintf("no CA certificate Secret %s found, generating CA certificate", m.secretName))
+		template := x509.Certificate{
+			Subject: pkix.Name{
+				CommonName:   "Kong Gateway Operator CA",
+				Organization: []string{"Kong, Inc."},
+				Country:      []string{"US"},
+			},
+			SerialNumber:       serial,
+			SignatureAlgorithm: x509.ECDSAWithSHA256,
+			NotBefore:          time.Now(),
+			NotAfter:           time.Now().Add(time.Second * 315400000),
+			//DNSNames:           []string{subject},
+			KeyUsage:              x509.KeyUsageCertSign + x509.KeyUsageKeyEncipherment + x509.KeyUsageDigitalSignature,
+			BasicConstraintsValid: true,
+			IsCA:                  true,
+		}
+
+		priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return err
+		}
+		privDer, err := x509.MarshalECPrivateKey(priv)
+		if err != nil {
+			return err
+		}
+
+		der, err := x509.CreateCertificate(rand.Reader, &template, &template, priv.Public(), priv)
+		if err != nil {
+			return err
+		}
+
+		signedSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: m.secretNamespace,
+				Name:      m.secretName,
+			},
+			Type: corev1.SecretTypeTLS,
+			StringData: map[string]string{
+				"tls.crt": string(pem.EncodeToMemory(&pem.Block{
+					Type:  "CERTIFICATE",
+					Bytes: der,
+				})),
+
+				"tls.key": string(pem.EncodeToMemory(&pem.Block{
+					Type:  "EC PRIVATE KEY",
+					Bytes: privDer,
+				})),
+			},
+		}
+		err = m.client.Create(ctx, signedSecret)
+		if err != nil {
+			return err
+		}
+
+	} else if err != nil {
+		return err
+	}
+	return nil
 }

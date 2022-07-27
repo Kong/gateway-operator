@@ -39,7 +39,7 @@ func main() {
 	flag.BoolVar(&disableLeaderElection, "no-leader-election", false,
 		"Disable leader election for controller manager. Disabling this will not ensure there is only one active controller manager.")
 	flag.StringVar(&controllerName, "controller-name", "", "a controller name to use if other than the default, only needed for multi-tenancy")
-	flag.StringVar(&clusterCASecret, "cluster-ca-secret", "", "name of the Secret containing the cluster CA certificate")
+	flag.StringVar(&clusterCASecret, "cluster-ca-secret", "kong-operator-ca", "name of the Secret containing the cluster CA certificate")
 	flag.Parse()
 
 	developmentModeEnabled := manager.DefaultConfig.DevelopmentMode
