@@ -76,7 +76,7 @@ func controlPlaneDetectedNoDataplane(t *testing.T, ctx context.Context, controlp
 		for _, condition := range c.Status.Conditions {
 			if condition.Type == string(controllers.ControlPlaneConditionTypeProvisioned) &&
 				condition.Status == metav1.ConditionFalse &&
-				condition.Reason == controllers.ControlPlaneConditionReasonNoDataplane {
+				condition.Reason == string(controllers.ControlPlaneConditionReasonNoDataplane) {
 				return true
 			}
 		}
