@@ -170,7 +170,7 @@ func gatewayIsReady(t *testing.T, ctx context.Context, gatewayNSN types.Namespac
 	}
 }
 
-func gatewayDataPlanesIsProvisioned(t *testing.T, gateway *v1alpha2.Gateway) func() bool {
+func gatewayDataPlaneIsProvisioned(t *testing.T, gateway *v1alpha2.Gateway) func() bool {
 	return func() bool {
 		dataplanes := mustListDataPlanesForGateway(t, gateway)
 
@@ -186,7 +186,7 @@ func gatewayDataPlanesIsProvisioned(t *testing.T, gateway *v1alpha2.Gateway) fun
 	}
 }
 
-func gatewayControlPlanesIsProvisioned(t *testing.T, gateway *v1alpha2.Gateway) func() bool {
+func gatewayControlPlaneIsProvisioned(t *testing.T, gateway *v1alpha2.Gateway) func() bool {
 	return func() bool {
 		controlplanes := mustListControlPlanesForGateway(t, gateway)
 

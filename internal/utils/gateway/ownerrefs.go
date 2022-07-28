@@ -126,6 +126,8 @@ func GetDataplaneServiceNameForControlplane(
 	return services[0].Name, nil
 }
 
+// ListNetworkPoliciesForGateway is a helper function that returns a list of NetworkPolicies
+// that are owned and managed by a Gateway.
 func ListNetworkPoliciesForGateway(
 	ctx context.Context,
 	c client.Client,
