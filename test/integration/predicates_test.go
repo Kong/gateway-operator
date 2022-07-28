@@ -153,20 +153,14 @@ func dataPlaneHasActiveService(t *testing.T, ctx context.Context, dataplaneName 
 }
 
 func gatewayIsScheduled(t *testing.T, ctx context.Context, gatewayNSN types.NamespacedName) func() bool {
-	client := gatewayClient.GatewayV1alpha2().Gateways(gatewayNSN.Namespace)
 	return func() bool {
-		gateway, err := client.Get(ctx, gatewayNSN.Name, metav1.GetOptions{})
-		require.NoError(t, err)
-		return gatewayutils.IsGatewayScheduled(gateway)
+		return gatewayutils.IsScheduled(mustGetGateway(t, gatewayNSN))
 	}
 }
 
 func gatewayIsReady(t *testing.T, ctx context.Context, gatewayNSN types.NamespacedName) func() bool {
-	client := gatewayClient.GatewayV1alpha2().Gateways(gatewayNSN.Namespace)
 	return func() bool {
-		gateway, err := client.Get(ctx, gatewayNSN.Name, metav1.GetOptions{})
-		require.NoError(t, err)
-		return gatewayutils.IsGatewayReady(gateway)
+		return gatewayutils.IsReady(mustGetGateway(t, gatewayNSN))
 	}
 }
 
@@ -218,6 +212,16 @@ func gatewayNetworkPoliciesExist(t *testing.T, ctx context.Context, gateway *v1a
 	}
 }
 
+func gatewayIpAddressExist(t *testing.T, ctx context.Context, gatewayNSN types.NamespacedName) func() bool {
+	return func() bool {
+		gateway := mustGetGateway(t, gatewayNSN)
+		if len(gateway.Status.Addresses) > 0 && *gateway.Status.Addresses[0].Type == gatewayv1alpha2.IPAddressType {
+			return true
+		}
+		return false
+	}
+}
+
 func getResponseBodyContains(t *testing.T, ctx context.Context, url string, responseContains string) func() bool {
 	return func() bool {
 
@@ -235,19 +239,6 @@ func getResponseBodyContains(t *testing.T, ctx context.Context, url string, resp
 		require.NoError(t, err)
 
 		return strings.Contains(string(body), responseContains)
-	}
-}
-
-func gatewayIpAddressExist(t *testing.T, ctx context.Context, gatewayNSN types.NamespacedName) func() bool {
-	gateways := gatewayClient.GatewayV1alpha2().Gateways(gatewayNSN.Namespace)
-	return func() bool {
-		gateway, err := gateways.Get(ctx, gatewayNSN.Name, metav1.GetOptions{})
-		require.NoError(t, err)
-
-		if len(gateway.Status.Addresses) > 0 && *gateway.Status.Addresses[0].Type == gatewayv1alpha2.IPAddressType {
-			return true
-		}
-		return false
 	}
 }
 

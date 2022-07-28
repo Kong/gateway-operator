@@ -192,11 +192,11 @@ func (r *GatewayReconciler) getGatewayConfigForGatewayClass(ctx context.Context,
 
 func (r *GatewayReconciler) ensureDataPlaneNetworkPolicy(
 	ctx context.Context,
-	gateway *gatewayv1alpha2.Gateway,
+	gateway *gatewayDecorator,
 	dataplane *operatorv1alpha1.DataPlane,
 	controlplane *operatorv1alpha1.ControlPlane,
 ) error {
-	networkPolicies, err := gatewayutils.ListNetworkPoliciesForGateway(ctx, r.Client, gateway)
+	networkPolicies, err := gatewayutils.ListNetworkPoliciesForGateway(ctx, r.Client, gateway.Gateway)
 	if err != nil {
 		if !k8serrors.IsNotFound(err) {
 			return err

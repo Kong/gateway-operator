@@ -144,11 +144,17 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// ControlPlane
-	r.provisionControlPlane(ctx, gatewayClass, gateway, gatewayConfig, dataplane, services)
+	controlplane := r.provisionControlPlane(ctx, gatewayClass, gateway, gatewayConfig, dataplane, services)
 
 	if !k8sutils.IsValidCondition(ControlPlaneReadyType, gateway) {
 		err := r.updateStatus(ctx, gateway)
 		return ctrl.Result{Requeue: true, RequeueAfter: requeueWithoutBackoff}, err
+	}
+
+	// DataPlane NetworkPolicies
+	debug(log, "ensuring DataPlane's NetworkPolicy are is created", gateway)
+	if err := r.ensureDataPlaneNetworkPolicy(ctx, gateway, dataplane, controlplane); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Mark Gateway Ready
@@ -238,7 +244,7 @@ func (r *GatewayReconciler) provisionControlPlane(
 	gatewayConfig *operatorv1alpha1.GatewayConfiguration,
 	dataplane *operatorv1alpha1.DataPlane,
 	services []corev1.Service,
-) {
+) *operatorv1alpha1.ControlPlane {
 	log := log.FromContext(ctx).WithName("gateway")
 
 	r.setControlplaneGatewayConfigDefaults(gateway, gatewayConfig, dataplane.Name, services[0].Name)
@@ -247,14 +253,14 @@ func (r *GatewayReconciler) provisionControlPlane(
 	controlplanes, err := gatewayutils.ListControlPlanesForGateway(ctx, r.Client, gateway.Gateway)
 	if err != nil {
 		k8sutils.SetCondition(createControlPlaneCondition(metav1.ConditionFalse, k8sutils.UnableToProvisionReason, err.Error()), gateway)
-		return
+		return nil
 	}
 
 	count := len(controlplanes)
 	if count > 1 {
 		err := fmt.Errorf("control plane deployments found: %d, expected: 1, requeing", count)
 		k8sutils.SetCondition(createControlPlaneCondition(metav1.ConditionFalse, k8sutils.UnableToProvisionReason, err.Error()), gateway)
-		return
+		return nil
 	}
 	if count == 0 {
 		err := r.createControlPlane(ctx, gatewayClass, gateway, gatewayConfig, dataplane.Name)
@@ -263,7 +269,7 @@ func (r *GatewayReconciler) provisionControlPlane(
 		} else {
 			k8sutils.SetCondition(createControlPlaneCondition(metav1.ConditionFalse, k8sutils.ResourceCreatedOrUpdatedReason, k8sutils.ResourceCreatedMessage), gateway)
 		}
-		return
+		return nil
 	}
 	controlplane := controlplanes[0].DeepCopy()
 
@@ -275,18 +281,21 @@ func (r *GatewayReconciler) provisionControlPlane(
 			err = r.Client.Update(ctx, controlplane)
 			if err != nil {
 				k8sutils.SetCondition(createControlPlaneCondition(metav1.ConditionFalse, k8sutils.UnableToProvisionReason, err.Error()), gateway)
-				return
+				return nil
 			}
 			k8sutils.SetCondition(createControlPlaneCondition(metav1.ConditionFalse, k8sutils.ResourceCreatedOrUpdatedReason, k8sutils.ResourceUpdatedMessage), gateway)
 		}
 	}
 
 	debug(log, "waiting for controlplane readiness", gateway)
-	if k8sutils.IsReady(controlplane) {
-		k8sutils.SetCondition(createControlPlaneCondition(metav1.ConditionTrue, k8sutils.ResourceReadyReason, ""), gateway)
-	} else {
+	if !k8sutils.IsReady(controlplane) {
 		k8sutils.SetCondition(createControlPlaneCondition(metav1.ConditionFalse, k8sutils.WaitingToBecomeReadyReason, k8sutils.WaitingToBecomeReadyMessage), gateway)
+		return nil
 	}
+
+	k8sutils.SetCondition(createControlPlaneCondition(metav1.ConditionTrue, k8sutils.ResourceReadyReason, ""), gateway)
+	return controlplane
+
 }
 
 func createDataPlaneCondition(status metav1.ConditionStatus, reason k8sutils.ConditionReason, message string) metav1.Condition {
