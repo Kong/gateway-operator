@@ -208,6 +208,11 @@ func (r *GatewayReconciler) ensureDataPlaneNetworkPolicy(
 		}
 	}
 
+	numNetworkPolicies := len(networkPolicies)
+	if len(networkPolicies) > 1 {
+		return fmt.Errorf("%w, got %d, expected 1", operatorerrors.ErrTooManyDataPlaneNetworkPolicies, numNetworkPolicies)
+	}
+
 	if len(networkPolicies) == 0 {
 		policy := generateDataPlaneNetworkPolicy(gateway.Namespace, dataplane, controlplane)
 		k8sutils.SetOwnerForObject(policy, gateway)
