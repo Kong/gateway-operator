@@ -4,7 +4,10 @@
 package e2e
 
 import (
+	"errors"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -60,7 +63,14 @@ func TestDataplaneValidatingWebhook(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			dataplaneClient := operatorClient.ApisV1alpha1().DataPlanes(testNamespace.Name)
-			_, err := dataplaneClient.Create(ctx, tc.dataplane, metav1.CreateOptions{})
+			var err error
+			require.Eventually(t, func() bool {
+				_, err = dataplaneClient.Create(ctx, tc.dataplane, metav1.CreateOptions{})
+				if tc.errMsg == "" {
+					return err == nil
+				}
+				return !errors.Is(err, syscall.ECONNREFUSED)
+			}, time.Minute*3, time.Second)
 			if tc.errMsg == "" {
 				require.NoErrorf(t, err, "test case %s: should not return error when creating dataplane", tc.name)
 			} else {
