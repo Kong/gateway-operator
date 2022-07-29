@@ -141,7 +141,8 @@ func TestMain(m *testing.M) {
 	fmt.Println("INFO: starting the operator's controller manager")
 	go startControllerManager()
 
-	for i := 0; i < 60; i++ {
+	timeout := time.Now().Add(time.Minute)
+	for timeout.After(time.Now()) {
 		err = func() error {
 			ca, err := k8sClient.CoreV1().Secrets("kong-system").Get(ctx, manager.DefaultConfig.ClusterCASecret, metav1.GetOptions{})
 			if err != nil {
