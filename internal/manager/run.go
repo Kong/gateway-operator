@@ -25,6 +25,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"math"
 	"math/big"
 	"os"
 	"path"
@@ -225,7 +226,7 @@ func (m *caManager) maybeCreateCACertificate() error {
 	defer cancel()
 	err := m.client.Get(ctx, client.ObjectKey{Namespace: m.secretNamespace, Name: m.secretName}, ca)
 	if errors.IsNotFound(err) {
-		serial, err := rand.Int(rand.Reader, big.NewInt(9999999999))
+		serial, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
 		if err != nil {
 			return err
 		}
