@@ -147,7 +147,7 @@ func TestGatewayDataPlaneNetworkPolicy(t *testing.T) {
 		map[string]string{"kubernetes.io/metadata.name": dataplane.Namespace},
 	)
 
-	// DataPlane's proxy ingress traffic should be allowed
+	t.Log("verifying that the DataPlane's proxy ingress traffic is allowed")
 	var expectAllowProxyIngress networkPolicyIngressRuleDecorator
 	expectAllowProxyIngress.withProtocolPort(corev1.ProtocolTCP, consts.DataPlaneProxyPort)
 	expectAllowProxyIngress.withProtocolPort(corev1.ProtocolTCP, consts.DataPlaneProxySSLPort)
