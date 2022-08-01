@@ -4,6 +4,7 @@
 package integration
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -91,4 +92,10 @@ func mustGetGateway(t *testing.T, gatewayNSN types.NamespacedName) *v1alpha2.Gat
 	gateway, err := gateways.Get(ctx, gatewayNSN.Name, metav1.GetOptions{})
 	require.NoError(t, err)
 	return gateway
+}
+
+func mustListGatewayNetworkPolicies(t *testing.T, ctx context.Context, gateway *gatewayv1alpha2.Gateway) []networkingv1.NetworkPolicy {
+	networkpolicies, err := gatewayutils.ListNetworkPoliciesForGateway(ctx, mgrClient, gateway)
+	require.NoError(t, err)
+	return networkpolicies
 }

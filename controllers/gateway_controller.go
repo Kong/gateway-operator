@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,6 +41,14 @@ type GatewayReconciler struct {
 func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	c, err := controller.New("gateway", mgr, controller.Options{Reconciler: r})
 	if err != nil {
+		return err
+	}
+
+	// watch for changes in the networkpolicies created by the gateway operator
+	if err := c.Watch(
+		&source.Kind{Type: &networkingv1.NetworkPolicy{}},
+		&handler.EnqueueRequestForOwner{OwnerType: &gatewayv1alpha2.Gateway{}},
+	); err != nil {
 		return err
 	}
 
@@ -152,8 +161,8 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// DataPlane NetworkPolicies
-	debug(log, "ensuring DataPlane's NetworkPolicy are is created", gateway)
-	if err := r.ensureDataPlaneNetworkPolicy(ctx, gateway, dataplane, controlplane); err != nil {
+	debug(log, "ensuring DataPlane's NetworkPolicy is created", gateway)
+	if err := r.ensureDataPlaneHasNetworkPolicy(ctx, gateway, dataplane, controlplane); err != nil {
 		return ctrl.Result{}, err
 	}
 

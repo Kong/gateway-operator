@@ -190,7 +190,7 @@ func (r *GatewayReconciler) getGatewayConfigForGatewayClass(ctx context.Context,
 	}, gatewayConfig)
 }
 
-func (r *GatewayReconciler) ensureDataPlaneNetworkPolicy(
+func (r *GatewayReconciler) ensureDataPlaneHasNetworkPolicy(
 	ctx context.Context,
 	gateway *gatewayDecorator,
 	dataplane *operatorv1alpha1.DataPlane,
@@ -205,7 +205,7 @@ func (r *GatewayReconciler) ensureDataPlaneNetworkPolicy(
 
 	numNetworkPolicies := len(networkPolicies)
 	if len(networkPolicies) > 1 {
-		return fmt.Errorf("%w, got %d, expected 1", operatorerrors.ErrTooManyDataPlaneNetworkPolicies, numNetworkPolicies)
+		return fmt.Errorf("%w, got: %d, expected 1", operatorerrors.ErrTooManyDataPlaneNetworkPolicies, numNetworkPolicies)
 	}
 
 	if len(networkPolicies) == 0 {
