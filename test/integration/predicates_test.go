@@ -154,19 +154,19 @@ func dataPlaneHasActiveService(t *testing.T, ctx context.Context, dataplaneName 
 
 func gatewayIsScheduled(t *testing.T, ctx context.Context, gatewayNSN types.NamespacedName) func() bool {
 	return func() bool {
-		return gatewayutils.IsScheduled(mustGetGateway(t, gatewayNSN))
+		return gatewayutils.IsScheduled(mustGetGateway(t, ctx, gatewayNSN))
 	}
 }
 
 func gatewayIsReady(t *testing.T, ctx context.Context, gatewayNSN types.NamespacedName) func() bool {
 	return func() bool {
-		return gatewayutils.IsReady(mustGetGateway(t, gatewayNSN))
+		return gatewayutils.IsReady(mustGetGateway(t, ctx, gatewayNSN))
 	}
 }
 
 func gatewayDataPlaneIsProvisioned(t *testing.T, gateway *v1alpha2.Gateway) func() bool {
 	return func() bool {
-		dataplanes := mustListDataPlanesForGateway(t, gateway)
+		dataplanes := mustListDataPlanesForGateway(t, ctx, gateway)
 
 		if len(dataplanes) == 1 {
 			for _, condition := range dataplanes[0].Status.Conditions {
@@ -214,7 +214,7 @@ func gatewayNetworkPoliciesExist(t *testing.T, ctx context.Context, gateway *v1a
 
 func gatewayIpAddressExist(t *testing.T, ctx context.Context, gatewayNSN types.NamespacedName) func() bool {
 	return func() bool {
-		gateway := mustGetGateway(t, gatewayNSN)
+		gateway := mustGetGateway(t, ctx, gatewayNSN)
 		if len(gateway.Status.Addresses) > 0 && *gateway.Status.Addresses[0].Type == gatewayv1alpha2.IPAddressType {
 			return true
 		}

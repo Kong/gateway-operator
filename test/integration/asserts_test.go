@@ -79,15 +79,15 @@ func mustListDataPlaneServices(t *testing.T, dataplane *operatorv1alpha1.DataPla
 	return services
 }
 
-func mustListDataPlanesForGateway(t *testing.T, gateway *v1alpha2.Gateway) []operatorv1alpha1.DataPlane {
+func mustListDataPlanesForGateway(t *testing.T, ctx context.Context, gateway *v1alpha2.Gateway) []operatorv1alpha1.DataPlane {
 	dataplanes, err := gatewayutils.ListDataPlanesForGateway(ctx, mgrClient, gateway)
 	require.NoError(t, err)
 	return dataplanes
 }
 
-// mustGetGateway is a helper function for tests that
-// conveniently gets a gateway by name.
-func mustGetGateway(t *testing.T, gatewayNSN types.NamespacedName) *v1alpha2.Gateway {
+// mustGetGateway is a helper function for tests that conveniently gets a gateway by name.
+// It will fail the test if getting the gateway fails.
+func mustGetGateway(t *testing.T, ctx context.Context, gatewayNSN types.NamespacedName) *v1alpha2.Gateway {
 	gateways := gatewayClient.GatewayV1alpha2().Gateways(gatewayNSN.Namespace)
 	gateway, err := gateways.Get(ctx, gatewayNSN.Name, metav1.GetOptions{})
 	require.NoError(t, err)

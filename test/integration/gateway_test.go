@@ -61,12 +61,12 @@ func TestGatewayEssentials(t *testing.T) {
 
 	t.Log("verifying Gateway gets an IP address")
 	require.Eventually(t, gatewayIpAddressExist(t, ctx, gatewayNSN), subresourceReadinessWait, time.Second)
-	gateway = mustGetGateway(t, gatewayNSN)
+	gateway = mustGetGateway(t, ctx, gatewayNSN)
 	gatewayIPAddress := gateway.Status.Addresses[0].Value
 
 	t.Log("verifying that the DataPlane becomes provisioned")
 	require.Eventually(t, gatewayDataPlaneIsProvisioned(t, gateway), subresourceReadinessWait, time.Second)
-	dataplane := mustListDataPlanesForGateway(t, gateway)[0]
+	dataplane := mustListDataPlanesForGateway(t, ctx, gateway)[0]
 
 	t.Log("verifying that the ControlPlane becomes provisioned")
 	require.Eventually(t, gatewayControlPlaneIsProvisioned(t, gateway), subresourceReadinessWait, time.Second)
@@ -126,7 +126,7 @@ func TestGatewayDataPlaneNetworkPolicy(t *testing.T) {
 
 	t.Log("verifying that the DataPlane becomes provisioned")
 	require.Eventually(t, gatewayDataPlaneIsProvisioned(t, gateway), subresourceReadinessWait, time.Second)
-	dataplane := mustListDataPlanesForGateway(t, gateway)[0]
+	dataplane := mustListDataPlanesForGateway(t, ctx, gateway)[0]
 
 	t.Log("verifying that the ControlPlane becomes provisioned")
 	require.Eventually(t, gatewayControlPlaneIsProvisioned(t, gateway), subresourceReadinessWait, time.Second)
