@@ -152,7 +152,7 @@ func TestGatewayDataPlaneNetworkPolicy(t *testing.T) {
 	expectAllowProxyIngress.withProtocolPort(corev1.ProtocolTCP, consts.DataPlaneProxyPort)
 	expectAllowProxyIngress.withProtocolPort(corev1.ProtocolTCP, consts.DataPlaneProxySSLPort)
 
-	// DataPlane's metrics ingress traffic should be allowed
+	t.Log("verifying that the DataPlane's metrics ingress traffic is allowed")
 	var expectAllowMetricsIngress networkPolicyIngressRuleDecorator
 	expectAllowMetricsIngress.withProtocolPort(corev1.ProtocolTCP, consts.DataPlaneMetricsPort)
 
