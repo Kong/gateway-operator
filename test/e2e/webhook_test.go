@@ -4,8 +4,6 @@
 package e2e
 
 import (
-	"errors"
-	"syscall"
 	"testing"
 	"time"
 
@@ -13,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	netutil "k8s.io/apimachinery/pkg/util/net"
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/apis/v1alpha1"
 )
@@ -69,7 +68,7 @@ func TestDataplaneValidatingWebhook(t *testing.T) {
 				if tc.errMsg == "" {
 					return err == nil
 				}
-				return !errors.Is(err, syscall.ECONNREFUSED)
+				return !netutil.IsConnectionRefused(err)
 			}, time.Minute*3, time.Second)
 			if tc.errMsg == "" {
 				require.NoErrorf(t, err, "test case %s: should not return error when creating dataplane", tc.name)
