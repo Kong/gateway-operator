@@ -139,7 +139,7 @@ func TestGatewayDataPlaneNetworkPolicy(t *testing.T) {
 	networkPolicy := networkpolicies[0]
 	require.Equal(t, map[string]string{"app": dataplane.Name}, networkPolicy.Spec.PodSelector.MatchLabels)
 
-	// DataPlane's pod Admin API should be limited to controlplane pods
+	t.Log("verifying that the DataPlane's Pod Admin API is network restricted to ControlPlane Pods")
 	var expectLimitedAdminAPI networkPolicyIngressRuleDecorator
 	expectLimitedAdminAPI.withProtocolPort(corev1.ProtocolTCP, consts.DataPlaneAdminAPIPort)
 	expectLimitedAdminAPI.withPeerMatchLabels(

@@ -216,8 +216,6 @@ func (r *GatewayReconciler) ensureDataPlaneHasNetworkPolicy(
 		return r.Client.Create(ctx, policy)
 	}
 
-	
-
 	return nil
 }
 
