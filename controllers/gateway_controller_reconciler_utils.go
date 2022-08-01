@@ -204,7 +204,7 @@ func (r *GatewayReconciler) ensureDataPlaneHasNetworkPolicy(
 	}
 
 	numNetworkPolicies := len(networkPolicies)
-	if len(networkPolicies) > 1 {
+	if numNetworkPolicies > 1 {
 		return fmt.Errorf("%w, got: %d, expected 1", operatorerrors.ErrTooManyDataPlaneNetworkPolicies, numNetworkPolicies)
 	}
 
