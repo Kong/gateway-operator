@@ -24,6 +24,7 @@ jobs:
       fullversion: ${{ steps.semver_parser.outputs.fullversion }}
       major: ${{ steps.semver_parser.outputs.major }}
       minor: ${{ steps.semver_parser.outputs.minor }}
+      patch: ${{ steps.semver_parser.outputs.patch }}
       prerelease: ${{ steps.semver_parser.outputs.prerelease }}
     runs-on: ubuntu-latest
     steps:
