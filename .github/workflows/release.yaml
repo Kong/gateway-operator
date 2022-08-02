@@ -228,7 +228,7 @@ jobs:
     - uses: ncipollo/release-action@v1
       with:
         body: |
-          #### Download Kong Ingress Controller ${{ needs.semver.outputs.fullversion }}:
+          #### Download Kong Gateway Operator ${{ needs.semver.outputs.fullversion }}:
 
           - [Docker Image](https://github.com/Kong/gateway-operator/pkgs/container/gateway-operator)
           - [Get started](https://github.com/Kong/gateway-operator/blob/main/README.md)
