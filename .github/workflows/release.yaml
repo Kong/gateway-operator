@@ -21,7 +21,7 @@ env:
 jobs:
   semver:
     outputs:
-      tag: ${{ steps.redhat_scan_tag.outputs.tag }}
+      fullversion: ${{ steps.semver_parser.outputs.fullversion }}
       major: ${{ steps.semver_parser.outputs.major }}
       minor: ${{ steps.semver_parser.outputs.minor }}
       prerelease: ${{ steps.semver_parser.outputs.prerelease }}
@@ -51,13 +51,6 @@ jobs:
           input_string: ${{ github.event.inputs.tag }}
           version_extractor_regex: 'v(.*)$'
 
-      # TODO: This action verifies if version in the manifest matches the tag.
-      #       Seem operator is not using manifest for image like KIC?
-      # - name: Verify manifests have requested KIC tag
-      #   env:
-      #     TAG: ${{ steps.semver_parser.outputs.tag }}
-      #   run: make verify.versions
-
   build-push-images:
     environment: 'Docker Push'
     needs: semver
@@ -67,7 +60,7 @@ jobs:
       - name: Add standard tags
         run: |
           echo 'TAGS_STANDARD<<EOF' >> $GITHUB_ENV
-          echo 'type=raw,value=${{ needs.semver.outputs.tag }}' >> $GITHUB_ENV
+          echo 'type=raw,value=${{ needs.semver.outputs.fullversion }}' >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
       - name: Add major.minor tag
@@ -81,7 +74,7 @@ jobs:
       - name: Add Red Hat standard tags
         run: |
           echo 'REDHAT_STANDARD<<EOF' >> $GITHUB_ENV
-          echo 'type=raw,value=${{ needs.semver.outputs.tag }},suffix=-redhat' >> $GITHUB_ENV
+          echo 'type=raw,value=${{ needs.semver.outputs.fullversion }},suffix=-redhat' >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
       - name: Add Red Hat major.minor tag
@@ -202,10 +195,6 @@ jobs:
       matrix:
         kubernetes-version:
           - 'v1.24.2'
-        dbmode:
-          # TODO: Do we need it for operator tests?
-          # - 'dbless'
-          # - 'postgres'
     steps:
       - name: setup golang
         uses: actions/setup-go@v3
@@ -225,10 +214,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      # - name: Kubernetes ${{ matrix.kubernetes_version }} ${{ matrix.dbmode }} Integration Tests
-        # run: KONG_CLUSTER_VERSION=${{ matrix.kubernetes_version }} make test.integration.${{ matrix.dbmode }}
       - name: Kubernetes ${{ matrix.kubernetes_version }} Integration Tests
         run: make test.integration
+
+      - name: Kubernetes ${{ matrix.kubernetes_version }} E2E Tests
+        run: make test.e2e
+
 
   publish-release:
     runs-on: ubuntu-latest
@@ -237,7 +228,7 @@ jobs:
     - uses: ncipollo/release-action@v1
       with:
         body: |
-          #### Download Kong Ingress Controller ${{ needs.semver.outputs.tag }}:
+          #### Download Kong Ingress Controller ${{ needs.semver.outputs.fullversion }}:
 
           - [Docker Image](https://github.com/Kong/gateway-operator/pkgs/container/gateway-operator)
           - [Get started](https://github.com/Kong/gateway-operator/blob/main/README.md)
