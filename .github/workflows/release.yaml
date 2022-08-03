@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'The version to release (e.g. v1.2.3)'
+        description: The version to release (e.g. v1.2.3)
         required: true
       latest:
-        description: 'Whether to tag this release latest'
+        description: Whether to tag this release latest
         required: true
         default: 'false'
 
@@ -249,20 +249,24 @@ jobs:
 
   publish-release:
     runs-on: ubuntu-latest
-    needs: [semver, build-push-images, test-integration-current-kubernetes, test-e2e-current-kubernetes]
+    needs:
+      - semver
+      - build-push-images
+      - test-integration-current-kubernetes
+      - test-e2e-current-kubernetes
     steps:
-    - uses: ncipollo/release-action@v1
-      with:
-        body: |
-          #### Download Kong Gateway Operator ${{ needs.semver.outputs.fullversion }}:
+      - uses: ncipollo/release-action@v1
+        with:
+          body: |
+            #### Download Kong Gateway Operator ${{ needs.semver.outputs.fullversion }}:
 
-          - [Docker Image](https://github.com/Kong/gateway-operator/pkgs/container/gateway-operator)
-          - [Get started](https://github.com/Kong/gateway-operator/blob/main/README.md)
+            - [Docker Image](https://github.com/Kong/gateway-operator/pkgs/container/gateway-operator)
+            - [Get started](https://github.com/Kong/gateway-operator/blob/main/README.md)
 
-          #### Links:
+            #### Links:
 
-          - [Changelog](https://github.com/Kong/gateway-operator/blob/main/CHANGELOG.md#${{ needs.semver.outputs.major }}${{ needs.semver.outputs.minor }}${{ needs.semver.outputs.patch }})
+            - [Changelog](https://github.com/Kong/gateway-operator/blob/main/CHANGELOG.md#${{ needs.semver.outputs.major }}${{ needs.semver.outputs.minor }}${{ needs.semver.outputs.patch }})
 
-        token: ${{ secrets.GITHUB_TOKEN }}
-        tag: ${{ github.event.inputs.tag }}
-        commit: ${{ github.sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.event.inputs.tag }}
+          commit: ${{ github.sha }}
