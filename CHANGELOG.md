@@ -22,9 +22,15 @@ gateways for ingress traffic.
   operator supports.
   [#22](https://github.com/Kong/gateway-operator/issues/22)
 - `Gateway` support was added: used to create edge proxies for ingress traffic.
-  [#6](https://github.com/Kong/gateway-operator/issues/22)
+  [#6](https://github.com/Kong/gateway-operator/issues/6)
 - The `ControlPlane` API was added to deploy Kong Ingress Controllers which
   can be attached to `DataPlane` resources.
-  [#5](https://github.com/Kong/gateway-operator/issues/22)
+  [#5](https://github.com/Kong/gateway-operator/issues/5)
 - The `DataPlane` API was added to deploy Kong Gateways.
-  [#4](https://github.com/Kong/gateway-operator/issues/22)
+  [#4](https://github.com/Kong/gateway-operator/issues/4)
+- The operator manages certificates for control and data plane communication
+  and configures mutual TLS between them. It cannot yet replace expired
+  certificates.
+  [#103](https://github.com/Kong/gateway-operator/issues/103)
+
+[v0.1.0]: https://github.com/Kong/gateway-operator/tree/v0.1.0
