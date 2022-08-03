@@ -5,12 +5,14 @@ package e2e
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	netutil "k8s.io/apimachinery/pkg/util/net"
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/apis/v1alpha1"
 )
@@ -68,7 +70,14 @@ func TestDataplaneValidatingWebhook(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			dataplaneClient := operatorClient.ApisV1alpha1().DataPlanes(testNamespace.Name)
-			_, err := dataplaneClient.Create(ctx, tc.dataplane, metav1.CreateOptions{})
+			var err error
+			require.Eventually(t, func() bool {
+				_, err = dataplaneClient.Create(ctx, tc.dataplane, metav1.CreateOptions{})
+				if tc.errMsg == "" {
+					return err == nil
+				}
+				return !netutil.IsConnectionRefused(err)
+			}, time.Minute*3, time.Second)
 			if tc.errMsg == "" {
 				require.NoErrorf(t, err, "test case %s: should not return error when creating dataplane", tc.name)
 			} else {
