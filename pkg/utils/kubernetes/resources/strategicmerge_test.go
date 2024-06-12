@@ -14,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	pkgapiscorev1 "k8s.io/kubernetes/pkg/apis/core/v1"
 
 	operatorv1beta1 "github.com/kong/gateway-operator/api/v1beta1"
 	"github.com/kong/gateway-operator/pkg/consts"
@@ -54,7 +55,51 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 			}...,
 		)
 
+		SetDefaultsPodTemplateSpec(&d.Spec.Template)
 		return d, nil
+	}
+
+	clusterCertificateVolume := func() corev1.Volume {
+		v := corev1.Volume{
+			Name: consts.ClusterCertificateVolume,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "kong-cert-secret",
+					Items: []corev1.KeyToPath{
+						{
+							Key:  "tls.crt",
+							Path: "tls.crt",
+						},
+						{
+							Key:  "tls.key",
+							Path: "tls.key",
+						},
+						{
+							Key:  "ca.crt",
+							Path: "ca.crt",
+						},
+					},
+				},
+			},
+		}
+
+		pkgapiscorev1.SetDefaults_Volume(&v)
+		return v
+	}
+
+	clusterCertificateVolumeMount := func() corev1.VolumeMount {
+		return corev1.VolumeMount{
+			Name:      consts.ClusterCertificateVolume,
+			MountPath: consts.ClusterCertificateVolumeMountPath,
+			ReadOnly:  true,
+		}
+	}
+	admissionWebhookVolumeMount := func() corev1.VolumeMount {
+		return corev1.VolumeMount{
+			Name:      consts.ControlPlaneAdmissionWebhookVolumeName,
+			ReadOnly:  true,
+			MountPath: consts.ControlPlaneAdmissionWebhookVolumeMountPath,
+		}
 	}
 
 	testcases := []struct {
@@ -198,7 +243,7 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 			},
 		},
 		{
-			Name: "overwrite and add env vars",
+			Name: "overwrite 1 base env value and add 1 new env var",
 			Patch: &corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -243,7 +288,7 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 			},
 		},
 		{
-			Name: "add and overwrite env vars",
+			Name: "add 1 new env var and overwrite 1 base env value",
 			Patch: &corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -288,20 +333,10 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 			},
 		},
 		{
-			Name: "append a volume and volume mount",
+			Name: "patch volume and volume mount prepends them",
 			Patch: &corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Volumes: []corev1.Volume{
-						{
-							// NOTE: we need to provide the existing entry in the slice
-							// to prevent merging the provided new entry with existing entries.
-							Name: consts.ClusterCertificateVolume,
-						},
-						{
-							// NOTE: we need to provide the existing entry in the slice
-							// to prevent merging the provided new entry with existing entries.
-							Name: consts.ControlPlaneAdmissionWebhookVolumeName,
-						},
 						{
 							Name: "volume1",
 							VolumeSource: corev1.VolumeSource{
@@ -316,17 +351,61 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 							Name: "controller",
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									// NOTE: we need to provide the existing entry in the slice
-									// to prevent merging the provided new entry with existing entries.
-									Name:      consts.ClusterCertificateVolume,
-									MountPath: consts.ClusterCertificateVolumeMountPath,
+									Name:      "volume1",
+									MountPath: "/volume1",
 								},
-								{
-									// NOTE: we need to provide the existing entry in the slice
-									// to prevent merging the provided new entry with existing entries.
-									Name:      consts.ControlPlaneAdmissionWebhookVolumeName,
-									MountPath: consts.ControlPlaneAdmissionWebhookVolumeMountPath,
+							},
+						},
+					},
+				},
+			},
+			Expected: func() corev1.PodTemplateSpec {
+				d, err := makeControlPlaneDeployment()
+				require.NoError(t, err)
+				d.Spec.Template.Spec.Volumes = []corev1.Volume{
+					{
+						Name: "volume1",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{
+								SizeLimit: resource.NewQuantity(1000, resource.DecimalSI),
+							},
+						},
+					},
+					clusterCertificateVolume(),
+					controlPlaneAdmissionWebhookCertificateVolume("kong-admission-cert-secret"),
+				}
+
+				d.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+					{
+						Name:      "volume1",
+						MountPath: "/volume1",
+					},
+					clusterCertificateVolumeMount(),
+					admissionWebhookVolumeMount(),
+				}
+
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
+				return d.Spec.Template
+			},
+		},
+		{
+			Name: "patch volume and volume mount restating the base works",
+			Patch: &corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Volumes: []corev1.Volume{
+						{
+							Name: "volume1",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{
+									SizeLimit: resource.NewQuantity(1000, resource.DecimalSI),
 								},
+							},
+						},
+					},
+					Containers: []corev1.Container{
+						{
+							Name: "controller",
+							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "volume1",
 									MountPath: "/volume1",
@@ -339,22 +418,29 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 			Expected: func() corev1.PodTemplateSpec {
 				d, err := makeControlPlaneDeployment()
 				require.NoError(t, err)
-				d.Spec.Template.Spec.Volumes = append(d.Spec.Template.Spec.Volumes,
-					corev1.Volume{
+				d.Spec.Template.Spec.Volumes = []corev1.Volume{
+					{
 						Name: "volume1",
 						VolumeSource: corev1.VolumeSource{
 							EmptyDir: &corev1.EmptyDirVolumeSource{
 								SizeLimit: resource.NewQuantity(1000, resource.DecimalSI),
 							},
 						},
-					})
-				d.Spec.Template.Spec.Containers[0].VolumeMounts = append(d.Spec.Template.Spec.Containers[0].VolumeMounts,
-					corev1.VolumeMount{
+					},
+					clusterCertificateVolume(),
+					controlPlaneAdmissionWebhookCertificateVolume("kong-admission-cert-secret"),
+				}
+
+				d.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+					{
 						Name:      "volume1",
 						MountPath: "/volume1",
 					},
-				)
+					clusterCertificateVolumeMount(),
+					admissionWebhookVolumeMount(),
+				}
 
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
 				return d.Spec.Template
 			},
 		},
@@ -363,11 +449,6 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 			Patch: &corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
-						{
-							// NOTE: we need to provide the existing entry in the slice
-							// to prevent merging the provided new entry with existing entries.
-							Name: "controller",
-						},
 						{
 							Name:  "sidecar",
 							Image: "alpine",
@@ -400,21 +481,19 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 						},
 					},
 				}
-				SetDefaultsContainer(&sidecarContainer)
-				d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, sidecarContainer)
+				d.Spec.Template.Spec.Containers = []corev1.Container{
+					sidecarContainer,
+					d.Spec.Template.Spec.Containers[0],
+				}
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
 				return d.Spec.Template
 			},
 		},
 		{
-			Name: "append a sidecar and a volume mount",
+			Name: "append a sidecar and a volume",
 			Patch: &corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
-						{
-							// NOTE: we need to provide the existing entry in the slice
-							// to prevent merging the provided new entry with existing entries.
-							Name: "controller",
-						},
 						{
 							Name:  "sidecar",
 							Image: "alpine",
@@ -436,16 +515,6 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 						},
 					},
 					Volumes: []corev1.Volume{
-						{
-							// NOTE: we need to provide the existing entry in the slice
-							// to prevent merging the provided new entry with existing entries.
-							Name: consts.ClusterCertificateVolume,
-						},
-						{
-							// NOTE: we need to provide the existing entry in the slice
-							// to prevent merging the provided new entry with existing entries.
-							Name: consts.ControlPlaneAdmissionWebhookVolumeName,
-						},
 						{
 							Name: "new_volume",
 							VolumeSource: corev1.VolumeSource{
@@ -479,17 +548,127 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 						},
 					},
 				}
-				SetDefaultsContainer(&sidecarContainer)
-				d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, sidecarContainer)
-				d.Spec.Template.Spec.Volumes = append(d.Spec.Template.Spec.Volumes, corev1.Volume{
-					Name: "new_volume",
-					VolumeSource: corev1.VolumeSource{
-						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/host/path",
-							Type: lo.ToPtr(corev1.HostPathUnset),
+				d.Spec.Template.Spec.Containers = append([]corev1.Container{sidecarContainer}, d.Spec.Template.Spec.Containers...)
+				d.Spec.Template.Spec.Volumes = []corev1.Volume{
+					{
+						Name: "new_volume",
+						VolumeSource: corev1.VolumeSource{
+							HostPath: &corev1.HostPathVolumeSource{
+								Path: "/host/path",
+								Type: lo.ToPtr(corev1.HostPathUnset),
+							},
 						},
 					},
-				})
+					clusterCertificateVolume(),
+					controlPlaneAdmissionWebhookCertificateVolume("kong-admission-cert-secret"),
+				}
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
+				return d.Spec.Template
+			},
+		},
+		{
+			Name: "append a sidecar and change controller's image",
+			Patch: &corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "sidecar",
+							Image: "alpine",
+							Command: []string{
+								"sleep", "1000",
+							},
+							Env: []corev1.EnvVar{
+								{
+									Name:  "SIDECAR_ENV1",
+									Value: "SIDECAR_VALUE1",
+								},
+							},
+						},
+						{
+							Name:  "controller",
+							Image: "custom:1.0",
+						},
+					},
+				},
+			},
+			Expected: func() corev1.PodTemplateSpec {
+				d, err := makeControlPlaneDeployment()
+				require.NoError(t, err)
+
+				require.Len(t, d.Spec.Template.Spec.Containers, 1)
+				d.Spec.Template.Spec.Containers[0].Image = "custom:1.0"
+
+				sidecarContainer := corev1.Container{
+					Name:  "sidecar",
+					Image: "alpine",
+					Command: []string{
+						"sleep", "1000",
+					},
+					Env: []corev1.EnvVar{
+						{
+							Name:  "SIDECAR_ENV1",
+							Value: "SIDECAR_VALUE1",
+						},
+					},
+				}
+				d.Spec.Template.Spec.Containers = []corev1.Container{
+					sidecarContainer,
+					d.Spec.Template.Spec.Containers[0],
+				}
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
+				return d.Spec.Template
+			},
+		},
+		{
+			Name: "append a sidecar and change controller's image, define sidecar second",
+			Patch: &corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "controller",
+							Image: "custom:1.0",
+						},
+						{
+							Name:  "sidecar",
+							Image: "alpine",
+							Command: []string{
+								"sleep", "1000",
+							},
+							Env: []corev1.EnvVar{
+								{
+									Name:  "SIDECAR_ENV1",
+									Value: "SIDECAR_VALUE1",
+								},
+							},
+						},
+					},
+				},
+			},
+			Expected: func() corev1.PodTemplateSpec {
+				d, err := makeControlPlaneDeployment()
+				require.NoError(t, err)
+
+				require.Len(t, d.Spec.Template.Spec.Containers, 1)
+				d.Spec.Template.Spec.Containers[0].Image = "custom:1.0"
+
+				sidecarContainer := corev1.Container{
+					Name:  "sidecar",
+					Image: "alpine",
+					Command: []string{
+						"sleep", "1000",
+					},
+					Env: []corev1.EnvVar{
+						{
+							Name:  "SIDECAR_ENV1",
+							Value: "SIDECAR_VALUE1",
+						},
+					},
+				}
+				d.Spec.Template.Spec.Containers = []corev1.Container{
+					d.Spec.Template.Spec.Containers[0],
+					sidecarContainer,
+				}
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
 				return d.Spec.Template
 			},
 		},
@@ -557,6 +736,103 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 					},
 				}
 
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
+				return d.Spec.Template
+			},
+		},
+		{
+			Name: "restating the base volumes and volume mounts does not work",
+			Patch: &corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Volumes: []corev1.Volume{
+						{
+							// NOTE: This was required in 1.2.x and older versions of the operator.
+							// Now this only checks that this approach still works.
+							Name: consts.ClusterCertificateVolume,
+							// 1.3.x introduced a change in how strategic merge patch is applied for PodTemplateSpec
+							// and the only discovered "breaking change" is that volume entries missing the
+							// volume source will result in removing the volume source from the base.
+							// Including the volume source in the patch (even empty like below) will keep the volume source.
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{},
+							},
+						},
+						{
+							// NOTE: This was required in 1.2.x and older versions of the operator.
+							// Now this only checks that this approach still works.
+							Name: consts.ControlPlaneAdmissionWebhookVolumeName,
+							// 1.3.x introduced a change in how strategic merge patch is applied for PodTemplateSpec
+							// and the only discovered "breaking change" is that volume entries missing the
+							// volume source will result in removing the volume source from the base.
+							// Including the volume source in the patch (even empty like below) will keep the volume source.
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{},
+							},
+						},
+						{
+							Name: "volume1",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "configmap-1",
+									},
+								},
+							},
+						},
+					},
+					Containers: []corev1.Container{
+						{
+							Name: "controller",
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									// NOTE: This was required in 1.2.x and older versions of the operator.
+									// Now this only checks that this approach still works.
+									Name:      consts.ClusterCertificateVolume,
+									MountPath: consts.ClusterCertificateVolumeMountPath,
+								},
+								{
+									// NOTE: This was required in 1.2.x and older versions of the operator.
+									// Now this only checks that this approach still works.
+									Name:      consts.ControlPlaneAdmissionWebhookVolumeName,
+									MountPath: consts.ControlPlaneAdmissionWebhookVolumeMountPath,
+								},
+								{
+									Name:      "volume1",
+									MountPath: "/volume1",
+								},
+							},
+						},
+					},
+				},
+			},
+			Expected: func() corev1.PodTemplateSpec {
+				d, err := makeControlPlaneDeployment()
+				require.NoError(t, err)
+				volume := corev1.Volume{
+					Name: "volume1",
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "configmap-1",
+							},
+						},
+					},
+				}
+
+				d.Spec.Template.Spec.Volumes = []corev1.Volume{
+					clusterCertificateVolume(),
+					controlPlaneAdmissionWebhookCertificateVolume("kong-admission-cert-secret"),
+					volume,
+				}
+				d.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+					clusterCertificateVolumeMount(),
+					admissionWebhookVolumeMount(),
+					{
+						Name:      "volume1",
+						MountPath: "/volume1",
+					},
+				}
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
 				return d.Spec.Template
 			},
 		},
@@ -566,22 +842,8 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							// NOTE: we need to provide the existing entry in the slice
-							// to prevent merging the provided new entry with existing entries.
 							Name: "controller",
 							VolumeMounts: []corev1.VolumeMount{
-								{
-									// NOTE: we need to provide the existing entry in the slice
-									// to prevent merging the provided new entry with existing entries.
-									Name:      consts.ClusterCertificateVolume,
-									MountPath: consts.ClusterCertificateVolumeMountPath,
-								},
-								{
-									// NOTE: we need to provide the existing entry in the slice
-									// to prevent merging the provided new entry with existing entries.
-									Name:      consts.ControlPlaneAdmissionWebhookVolumeName,
-									MountPath: consts.ControlPlaneAdmissionWebhookVolumeMountPath,
-								},
 								{
 									Name:      "new_volume",
 									MountPath: "/new_volume",
@@ -590,16 +852,6 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 						},
 					},
 					Volumes: []corev1.Volume{
-						{
-							// NOTE: we need to provide the existing entry in the slice
-							// to prevent merging the provided new entry with existing entries.
-							Name: consts.ClusterCertificateVolume,
-						},
-						{
-							// NOTE: we need to provide the existing entry in the slice
-							// to prevent merging the provided new entry with existing entries.
-							Name: consts.ControlPlaneAdmissionWebhookVolumeName,
-						},
 						{
 							Name: "new_volume",
 							VolumeSource: corev1.VolumeSource{
@@ -622,14 +874,21 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 						},
 					},
 				}
-				SetDefaultsVolume(&volume)
-				d.Spec.Template.Spec.Volumes = append(d.Spec.Template.Spec.Volumes, volume)
-				require.Len(t, d.Spec.Template.Spec.Containers, 1)
-				d.Spec.Template.Spec.Containers[0].VolumeMounts = append(d.Spec.Template.Spec.Containers[0].VolumeMounts,
-					corev1.VolumeMount{
+
+				d.Spec.Template.Spec.Volumes = []corev1.Volume{
+					volume,
+					clusterCertificateVolume(),
+					controlPlaneAdmissionWebhookCertificateVolume("kong-admission-cert-secret"),
+				}
+				d.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+					{
 						Name:      "new_volume",
 						MountPath: "/new_volume",
-					})
+					},
+					clusterCertificateVolumeMount(),
+					admissionWebhookVolumeMount(),
+				}
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
 				return d.Spec.Template
 			},
 		},
@@ -642,18 +901,6 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 							Name: consts.ControlPlaneControllerContainerName,
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									// NOTE: we need to provide the existing entry in the slice
-									// to prevent merging the provided new entry with existing entries.
-									Name:      consts.ClusterCertificateVolume,
-									MountPath: consts.ClusterCertificateVolumeMountPath,
-								},
-								{
-									// NOTE: we need to provide the existing entry in the slice
-									// to prevent merging the provided new entry with existing entries.
-									Name:      consts.ControlPlaneAdmissionWebhookVolumeName,
-									MountPath: consts.ControlPlaneAdmissionWebhookVolumeMountPath,
-								},
-								{
 									Name:      "hostpath-volumemount",
 									MountPath: "/var/log/hostpath",
 								},
@@ -661,16 +908,6 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 						},
 					},
 					Volumes: []corev1.Volume{
-						{
-							// NOTE: we need to provide the existing entry in the slice
-							// to prevent merging the provided new entry with existing entries.
-							Name: consts.ClusterCertificateVolume,
-						},
-						{
-							// NOTE: we need to provide the existing entry in the slice
-							// to prevent merging the provided new entry with existing entries.
-							Name: consts.ControlPlaneAdmissionWebhookVolumeName,
-						},
 						{
 							Name: "hostpath-volume",
 							VolumeSource: corev1.VolumeSource{
@@ -687,48 +924,6 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 				require.NoError(t, err)
 				d.Spec.Template.Spec.Volumes = []corev1.Volume{
 					{
-						Name: "cluster-certificate",
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								SecretName: "kong-cert-secret",
-								Items: []corev1.KeyToPath{
-									{
-										Key:  "tls.crt",
-										Path: "tls.crt",
-									},
-									{
-										Key:  "tls.key",
-										Path: "tls.key",
-									},
-									{
-										Key:  "ca.crt",
-										Path: "ca.crt",
-									},
-								},
-								DefaultMode: lo.ToPtr(corev1.SecretVolumeSourceDefaultMode),
-							},
-						},
-					},
-					{
-						Name: consts.ControlPlaneAdmissionWebhookVolumeName,
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								SecretName: "kong-admission-cert-secret",
-								Items: []corev1.KeyToPath{
-									{
-										Key:  "tls.crt",
-										Path: "tls.crt",
-									},
-									{
-										Key:  "tls.key",
-										Path: "tls.key",
-									},
-								},
-								DefaultMode: lo.ToPtr(corev1.SecretVolumeSourceDefaultMode),
-							},
-						},
-					},
-					{
 						Name: "hostpath-volume",
 						VolumeSource: corev1.VolumeSource{
 							HostPath: &corev1.HostPathVolumeSource{
@@ -737,20 +932,24 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 							},
 						},
 					},
+					clusterCertificateVolume(),
+					controlPlaneAdmissionWebhookCertificateVolume("kong-admission-cert-secret"),
 				}
-				d.Spec.Template.Spec.Containers[0].VolumeMounts = append(
-					d.Spec.Template.Spec.Containers[0].VolumeMounts,
-					corev1.VolumeMount{
+				d.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+					{
 						Name:      "hostpath-volumemount",
 						MountPath: "/var/log/hostpath",
 					},
-				)
+					clusterCertificateVolumeMount(),
+					admissionWebhookVolumeMount(),
+				}
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
 
 				return d.Spec.Template
 			},
 		},
 		{
-			Name: "add envs with fieldRef",
+			Name: "add envs with fieldRef prepends it",
 			Patch: &corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -776,11 +975,6 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 				d.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
 					{
 						Name: "LIMIT",
-						// NOTE: this is an artifact of the strategic merge patch at work.
-						// This values comes from the first entry in the base patch.
-						// In order to overcome this we need to re-state the base values
-						// in the slice.
-						Value: "VALUE1",
 						ValueFrom: &corev1.EnvVarSource{
 							ResourceFieldRef: &corev1.ResourceFieldSelector{
 								Resource: "limits.cpu",
@@ -801,12 +995,13 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 						Value: "VALUE3",
 					},
 				}
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
 
 				return d.Spec.Template
 			},
 		},
 		{
-			Name: "add envs with fieldRef re-stating the base",
+			Name: "add envs with fieldRef re-stating the base values",
 			Patch: &corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -825,7 +1020,6 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 									Name:  "ENV3",
 									Value: "VALUE3",
 								},
-								// We're moving the `LIMIT` entry from the 1st to the 4th place in the slice to make sure it will not end up with both `Value` and `ValueFrom` fields.
 								{
 									Name: "LIMIT",
 									ValueFrom: &corev1.EnvVarSource{
@@ -865,6 +1059,187 @@ func TestStrategicMergePatchPodTemplateSpec(t *testing.T) {
 						},
 					},
 				}
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
+
+				return d.Spec.Template
+			},
+		},
+		{
+			Name: "add env without restating the base prepends the new env",
+			Patch: &corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: consts.ControlPlaneControllerContainerName,
+							Env: []corev1.EnvVar{
+								{
+									Name: "LIMIT",
+									ValueFrom: &corev1.EnvVarSource{
+										ResourceFieldRef: &corev1.ResourceFieldSelector{
+											Resource: "limits.cpu",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Expected: func() corev1.PodTemplateSpec {
+				d, err := makeControlPlaneDeployment()
+				require.NoError(t, err)
+				d.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+					{
+						Name: "LIMIT",
+						ValueFrom: &corev1.EnvVarSource{
+							ResourceFieldRef: &corev1.ResourceFieldSelector{
+								Resource: "limits.cpu",
+								Divisor:  *resource.NewQuantity(1, resource.DecimalSI),
+							},
+						},
+					},
+					{
+						Name:  "ENV1",
+						Value: "VALUE1",
+					},
+					{
+						Name:  "ENV2",
+						Value: "VALUE2",
+					},
+					{
+						Name:  "ENV3",
+						Value: "VALUE3",
+					},
+				}
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
+
+				return d.Spec.Template
+			},
+		},
+		{
+			Name: "add env with restating the base first, appends the new env",
+			Patch: &corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: consts.ControlPlaneControllerContainerName,
+							Env: []corev1.EnvVar{
+								{
+									Name:  "ENV1",
+									Value: "VALUE1",
+								},
+								{
+									Name:  "ENV2",
+									Value: "VALUE2",
+								},
+								{
+									Name:  "ENV3",
+									Value: "VALUE3",
+								},
+								{
+									Name: "LIMIT",
+									ValueFrom: &corev1.EnvVarSource{
+										ResourceFieldRef: &corev1.ResourceFieldSelector{
+											Resource: "limits.cpu",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Expected: func() corev1.PodTemplateSpec {
+				d, err := makeControlPlaneDeployment()
+				require.NoError(t, err)
+				d.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+					{
+						Name:  "ENV1",
+						Value: "VALUE1",
+					},
+					{
+						Name:  "ENV2",
+						Value: "VALUE2",
+					},
+					{
+						Name:  "ENV3",
+						Value: "VALUE3",
+					},
+					{
+						Name: "LIMIT",
+						ValueFrom: &corev1.EnvVarSource{
+							ResourceFieldRef: &corev1.ResourceFieldSelector{
+								Resource: "limits.cpu",
+								Divisor:  *resource.NewQuantity(1, resource.DecimalSI),
+							},
+						},
+					},
+				}
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
+
+				return d.Spec.Template
+			},
+		},
+		{
+			Name: "add env and change the order of the env vars",
+			Patch: &corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: consts.ControlPlaneControllerContainerName,
+							Env: []corev1.EnvVar{
+								{
+									Name:  "ENV1",
+									Value: "VALUE1",
+								},
+								{
+									Name:  "ENV3",
+									Value: "VALUE3",
+								},
+								{
+									Name: "LIMIT",
+									ValueFrom: &corev1.EnvVarSource{
+										ResourceFieldRef: &corev1.ResourceFieldSelector{
+											Resource: "limits.cpu",
+										},
+									},
+								},
+								{
+									Name:  "ENV2",
+									Value: "XXX",
+								},
+							},
+						},
+					},
+				},
+			},
+			Expected: func() corev1.PodTemplateSpec {
+				d, err := makeControlPlaneDeployment()
+				require.NoError(t, err)
+				d.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+					{
+						Name:  "ENV1",
+						Value: "VALUE1",
+					},
+					{
+						Name:  "ENV3",
+						Value: "VALUE3",
+					},
+					{
+						Name: "LIMIT",
+						ValueFrom: &corev1.EnvVarSource{
+							ResourceFieldRef: &corev1.ResourceFieldSelector{
+								Resource: "limits.cpu",
+								Divisor:  *resource.NewQuantity(1, resource.DecimalSI),
+							},
+						},
+					},
+					{
+						Name:  "ENV2",
+						Value: "XXX",
+					},
+				}
+				SetDefaultsPodTemplateSpec(&d.Spec.Template)
 
 				return d.Spec.Template
 			},
