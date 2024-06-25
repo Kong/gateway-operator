@@ -1,0 +1,104 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: konnectcontrolplanes.gateway-operator.konghq.com
+spec:
+  group: gateway-operator.konghq.com
+  names:
+    kind: KonnectControlPlane
+    listKind: KonnectControlPlaneList
+    plural: konnectcontrolplanes
+    singular: konnectcontrolplane
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: KonnectControlPlane is the Schema for the konnectcontrolplanes
+          API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              Spec sdkkonnectgo.ControlPlanes `json:"spec,omitempty"`
+              Spec sdkkonnectgoops.GetControlPlaneRequest `json:"spec,omitempty"`
+            properties:
+              auth_type:
+                description: The auth type value of the cluster associated with the
+                  Runtime Group.
+                type: string
+              cloud_gateway:
+                description: Whether this control-plane can be used for cloud-gateways.
+                type: boolean
+              cluster_type:
+                description: The ClusterType value of the cluster associated with
+                  the Control Plane.
+                type: string
+              description:
+                description: The description of the control plane in Konnect.
+                type: string
+              labels:
+                additionalProperties:
+                  type: string
+                description: Labels to facilitate tagged search on control planes.
+                  Keys must be of length 1-63 characters, and cannot start with 'kong',
+                  'konnect', 'mesh', 'kic', or '_'.
+                type: object
+              name:
+                description: The name of the control plane.
+                type: string
+              proxy_urls:
+                description: Array of proxy URLs associated with reaching the data-planes
+                  connected to a control-plane.
+                items:
+                  description: ProxyURL - Proxy URL associated with reaching the data-planes
+                    connected to a control-plane.
+                  properties:
+                    host:
+                      description: Hostname of the proxy URL.
+                      type: string
+                    port:
+                      description: Port of the proxy URL.
+                      format: int64
+                      type: integer
+                    protocol:
+                      description: Protocol of the proxy URL.
+                      type: string
+                  required:
+                  - host
+                  - port
+                  - protocol
+                  type: object
+                type: array
+            required:
+            - name
+            type: object
+          status:
+            properties:
+              id:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

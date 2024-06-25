@@ -20,6 +20,7 @@ import (
 	"github.com/kong/gateway-operator/controller/dataplane"
 	"github.com/kong/gateway-operator/controller/gateway"
 	"github.com/kong/gateway-operator/controller/gatewayclass"
+	"github.com/kong/gateway-operator/controller/konnect"
 	"github.com/kong/gateway-operator/controller/specialized"
 	"github.com/kong/gateway-operator/internal/utils/index"
 	dataplanevalidator "github.com/kong/gateway-operator/internal/validation/dataplane"
@@ -268,6 +269,16 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 				Scheme:          mgr.GetScheme(),
 				DevelopmentMode: c.DevelopmentMode,
 			},
+		},
+
+		// TODO
+		"KonnectControlPlane": {
+			Enabled: true,
+			Controller: konnect.NewKonnectEntityReconciler(
+				operatorv1alpha1.KonnectControlPlane{},
+				c.DevelopmentMode,
+				mgr.GetClient(),
+			),
 		},
 	}
 
