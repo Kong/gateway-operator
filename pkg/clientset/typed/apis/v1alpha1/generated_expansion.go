@@ -22,4 +22,6 @@ type AIGatewayExpansion interface{}
 
 type DataPlaneMetricsExtensionExpansion interface{}
 
+type KonnectAPIAuthConfigurationExpansion interface{}
+
 type KonnectControlPlaneExpansion interface{}

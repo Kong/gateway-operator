@@ -30,6 +30,7 @@ type ApisV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	AIGatewaysGetter
 	DataPlaneMetricsExtensionsGetter
+	KonnectAPIAuthConfigurationsGetter
 	KonnectControlPlanesGetter
 }
 
@@ -44,6 +45,10 @@ func (c *ApisV1alpha1Client) AIGateways(namespace string) AIGatewayInterface {
 
 func (c *ApisV1alpha1Client) DataPlaneMetricsExtensions(namespace string) DataPlaneMetricsExtensionInterface {
 	return newDataPlaneMetricsExtensions(c, namespace)
+}
+
+func (c *ApisV1alpha1Client) KonnectAPIAuthConfigurations() KonnectAPIAuthConfigurationInterface {
+	return newKonnectAPIAuthConfigurations(c)
 }
 
 func (c *ApisV1alpha1Client) KonnectControlPlanes(namespace string) KonnectControlPlaneInterface {

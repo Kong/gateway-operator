@@ -10,6 +10,8 @@ toolchain go1.22.4
 // This retraction is to prevent it from being used and from breaking builds of dependent projects.
 retract v1.2.2
 
+replace github.com/Kong/sdk-konnect-go => ../sdk-konnect-go
+
 require (
 	github.com/Masterminds/semver v1.5.0
 	github.com/cert-manager/cert-manager v1.15.1

@@ -36,6 +36,10 @@ func (c *FakeApisV1alpha1) DataPlaneMetricsExtensions(namespace string) v1alpha1
 	return &FakeDataPlaneMetricsExtensions{c, namespace}
 }
 
+func (c *FakeApisV1alpha1) KonnectAPIAuthConfigurations() v1alpha1.KonnectAPIAuthConfigurationInterface {
+	return &FakeKonnectAPIAuthConfigurations{c}
+}
+
 func (c *FakeApisV1alpha1) KonnectControlPlanes(namespace string) v1alpha1.KonnectControlPlaneInterface {
 	return &FakeKonnectControlPlanes{c, namespace}
 }
