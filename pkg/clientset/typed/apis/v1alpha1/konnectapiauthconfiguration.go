@@ -33,7 +33,7 @@ import (
 // KonnectAPIAuthConfigurationsGetter has a method to return a KonnectAPIAuthConfigurationInterface.
 // A group's client should implement this interface.
 type KonnectAPIAuthConfigurationsGetter interface {
-	KonnectAPIAuthConfigurations() KonnectAPIAuthConfigurationInterface
+	KonnectAPIAuthConfigurations(namespace string) KonnectAPIAuthConfigurationInterface
 }
 
 // KonnectAPIAuthConfigurationInterface has methods to work with KonnectAPIAuthConfiguration resources.
@@ -53,12 +53,14 @@ type KonnectAPIAuthConfigurationInterface interface {
 // konnectAPIAuthConfigurations implements KonnectAPIAuthConfigurationInterface
 type konnectAPIAuthConfigurations struct {
 	client rest.Interface
+	ns     string
 }
 
 // newKonnectAPIAuthConfigurations returns a KonnectAPIAuthConfigurations
-func newKonnectAPIAuthConfigurations(c *ApisV1alpha1Client) *konnectAPIAuthConfigurations {
+func newKonnectAPIAuthConfigurations(c *ApisV1alpha1Client, namespace string) *konnectAPIAuthConfigurations {
 	return &konnectAPIAuthConfigurations{
 		client: c.RESTClient(),
+		ns:     namespace,
 	}
 }
 
@@ -66,6 +68,7 @@ func newKonnectAPIAuthConfigurations(c *ApisV1alpha1Client) *konnectAPIAuthConfi
 func (c *konnectAPIAuthConfigurations) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.KonnectAPIAuthConfiguration, err error) {
 	result = &v1alpha1.KonnectAPIAuthConfiguration{}
 	err = c.client.Get().
+		Namespace(c.ns).
 		Resource("konnectapiauthconfigurations").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
@@ -82,6 +85,7 @@ func (c *konnectAPIAuthConfigurations) List(ctx context.Context, opts v1.ListOpt
 	}
 	result = &v1alpha1.KonnectAPIAuthConfigurationList{}
 	err = c.client.Get().
+		Namespace(c.ns).
 		Resource("konnectapiauthconfigurations").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -98,6 +102,7 @@ func (c *konnectAPIAuthConfigurations) Watch(ctx context.Context, opts v1.ListOp
 	}
 	opts.Watch = true
 	return c.client.Get().
+		Namespace(c.ns).
 		Resource("konnectapiauthconfigurations").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -108,6 +113,7 @@ func (c *konnectAPIAuthConfigurations) Watch(ctx context.Context, opts v1.ListOp
 func (c *konnectAPIAuthConfigurations) Create(ctx context.Context, konnectAPIAuthConfiguration *v1alpha1.KonnectAPIAuthConfiguration, opts v1.CreateOptions) (result *v1alpha1.KonnectAPIAuthConfiguration, err error) {
 	result = &v1alpha1.KonnectAPIAuthConfiguration{}
 	err = c.client.Post().
+		Namespace(c.ns).
 		Resource("konnectapiauthconfigurations").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(konnectAPIAuthConfiguration).
@@ -120,6 +126,7 @@ func (c *konnectAPIAuthConfigurations) Create(ctx context.Context, konnectAPIAut
 func (c *konnectAPIAuthConfigurations) Update(ctx context.Context, konnectAPIAuthConfiguration *v1alpha1.KonnectAPIAuthConfiguration, opts v1.UpdateOptions) (result *v1alpha1.KonnectAPIAuthConfiguration, err error) {
 	result = &v1alpha1.KonnectAPIAuthConfiguration{}
 	err = c.client.Put().
+		Namespace(c.ns).
 		Resource("konnectapiauthconfigurations").
 		Name(konnectAPIAuthConfiguration.Name).
 		VersionedParams(&opts, scheme.ParameterCodec).
@@ -134,6 +141,7 @@ func (c *konnectAPIAuthConfigurations) Update(ctx context.Context, konnectAPIAut
 func (c *konnectAPIAuthConfigurations) UpdateStatus(ctx context.Context, konnectAPIAuthConfiguration *v1alpha1.KonnectAPIAuthConfiguration, opts v1.UpdateOptions) (result *v1alpha1.KonnectAPIAuthConfiguration, err error) {
 	result = &v1alpha1.KonnectAPIAuthConfiguration{}
 	err = c.client.Put().
+		Namespace(c.ns).
 		Resource("konnectapiauthconfigurations").
 		Name(konnectAPIAuthConfiguration.Name).
 		SubResource("status").
@@ -147,6 +155,7 @@ func (c *konnectAPIAuthConfigurations) UpdateStatus(ctx context.Context, konnect
 // Delete takes name of the konnectAPIAuthConfiguration and deletes it. Returns an error if one occurs.
 func (c *konnectAPIAuthConfigurations) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	return c.client.Delete().
+		Namespace(c.ns).
 		Resource("konnectapiauthconfigurations").
 		Name(name).
 		Body(&opts).
@@ -161,6 +170,7 @@ func (c *konnectAPIAuthConfigurations) DeleteCollection(ctx context.Context, opt
 		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
+		Namespace(c.ns).
 		Resource("konnectapiauthconfigurations").
 		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -173,6 +183,7 @@ func (c *konnectAPIAuthConfigurations) DeleteCollection(ctx context.Context, opt
 func (c *konnectAPIAuthConfigurations) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.KonnectAPIAuthConfiguration, err error) {
 	result = &v1alpha1.KonnectAPIAuthConfiguration{}
 	err = c.client.Patch(pt).
+		Namespace(c.ns).
 		Resource("konnectapiauthconfigurations").
 		Name(name).
 		SubResource(subresources...).

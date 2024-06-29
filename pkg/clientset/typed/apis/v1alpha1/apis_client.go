@@ -47,8 +47,8 @@ func (c *ApisV1alpha1Client) DataPlaneMetricsExtensions(namespace string) DataPl
 	return newDataPlaneMetricsExtensions(c, namespace)
 }
 
-func (c *ApisV1alpha1Client) KonnectAPIAuthConfigurations() KonnectAPIAuthConfigurationInterface {
-	return newKonnectAPIAuthConfigurations(c)
+func (c *ApisV1alpha1Client) KonnectAPIAuthConfigurations(namespace string) KonnectAPIAuthConfigurationInterface {
+	return newKonnectAPIAuthConfigurations(c, namespace)
 }
 
 func (c *ApisV1alpha1Client) KonnectControlPlanes(namespace string) KonnectControlPlaneInterface {
