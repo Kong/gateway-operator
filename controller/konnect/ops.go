@@ -9,7 +9,6 @@ import (
 
 	sdkkonnectgo "github.com/Kong/sdk-konnect-go"
 	"github.com/go-logr/logr"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 )
@@ -57,7 +56,10 @@ const (
 
 func Create[
 	T SupportedKonnectEntityType,
+	TEnt EntityType[T],
 ](ctx context.Context, sdk *sdkkonnectgo.SDK, logger logr.Logger, e *T) (*T, error) {
+	defer logOpComplete[T, TEnt](logger, time.Now(), CreateOp, e)
+
 	switch ent := any(e).(type) {
 	case *operatorv1alpha1.KonnectControlPlane:
 		return e, createControlPlane(ctx, sdk, logger, ent)
@@ -72,10 +74,31 @@ func Create[
 
 func Delete[
 	T SupportedKonnectEntityType,
+	TEnt EntityType[T],
 ](ctx context.Context, sdk *sdkkonnectgo.SDK, logger logr.Logger, e *T) error {
+	defer logOpComplete[T, TEnt](logger, time.Now(), CreateOp, e)
+
 	switch ent := any(e).(type) {
 	case *operatorv1alpha1.KonnectControlPlane:
 		return deleteControlPlane(ctx, sdk, logger, ent)
+
+		// ---------------------------------------------------------------------
+		// TODO: add other Konnect types
+
+	default:
+		return fmt.Errorf("unsupported entity type %T", ent)
+	}
+}
+
+func Update[
+	T SupportedKonnectEntityType,
+	TEnt EntityType[T],
+](ctx context.Context, sdk *sdkkonnectgo.SDK, logger logr.Logger, e *T) error {
+	defer logOpComplete[T, TEnt](logger, time.Now(), UpdateOp, e)
+
+	switch ent := any(e).(type) {
+	case *operatorv1alpha1.KonnectControlPlane:
+		return updateControlPlane(ctx, sdk, logger, ent)
 
 		// ---------------------------------------------------------------------
 		// TODO: add other Konnect types
@@ -90,7 +113,10 @@ func logOpComplete[
 	TEnt EntityType[T],
 ](logger logr.Logger, start time.Time, op Op, e TEnt) {
 	logger.Info("operation in Konnect API complete",
-		"op", op, "duration", time.Since(start), "type", entityTypeName[T](), "konnect_id", e.GetStatusID(),
+		"op", op,
+		"duration", time.Since(start),
+		"type", entityTypeName[T](),
+		"konnect_id", e.GetStatusID(),
 	)
 }
 
@@ -110,11 +136,6 @@ func handleStatusCode[T SupportedKonnectEntityType](resp Response, op Op) error 
 	return nil
 }
 
-type labeler interface {
-	SetKonnectLabels(labels map[string]string)
-	GetObjectMeta() metav1.Object
-}
-
 type getLabeler interface {
 	GetLabels() map[string]string
 }
@@ -122,7 +143,26 @@ type getLabeler interface {
 // setKonnectLabels sets the Konnect labels on the object which will be created/updated
 // in Konnect.
 // TODO: Do we want to copy the k8s labels (or annotations?) to Konnect?
-func setKonnectLabels(e labeler, spec getLabeler) {
+func setKonnectLabels[
+	T SupportedKonnectEntityType,
+	TEnt EntityType[T],
+](e TEnt, konnectEntitySpec getLabeler) {
+	k8sLabels := k8sLabelsForEntity[T, TEnt](e)
+
+	// Add labels from the Konnect entity spec
+	for k, v := range konnectEntitySpec.GetLabels() {
+		k8sLabels[k] = v
+	}
+
+	e.SetKonnectLabels(k8sLabels)
+}
+
+// k8sLabelsForEntity returns the k8s labels for a Konnect entity.
+// Those labels are based on the entity's metadata.
+func k8sLabelsForEntity[
+	T SupportedKonnectEntityType,
+	TEnt EntityType[T],
+](e TEnt) map[string]string {
 	meta := e.GetObjectMeta()
 	k8sLabels := meta.GetLabels()
 	if k8sLabels == nil {
@@ -134,10 +174,5 @@ func setKonnectLabels(e labeler, spec getLabeler) {
 	k8sLabels["k8s-managed"] = "true"
 	k8sLabels["k8s-generation"] = fmt.Sprintf("%d", meta.GetGeneration())
 
-	// Add labels from the Konnect entity spec
-	for k, v := range spec.GetLabels() {
-		k8sLabels[k] = v
-	}
-
-	e.SetKonnectLabels(k8sLabels)
+	return k8sLabels
 }

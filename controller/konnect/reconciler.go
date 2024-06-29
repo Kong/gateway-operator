@@ -20,7 +20,7 @@ import (
 
 const (
 	// TODO(pmalek) make configurable
-	configurableSyncPeriod = 3000 * time.Second
+	configurableSyncPeriod = 3 * time.Second
 )
 
 const (
@@ -29,7 +29,7 @@ const (
 	KonnectCleanupFinalizer = "gateway.konghq.com/konnect-cleanup"
 )
 
-type KonnectEntityReconciler[TT EntityType[T], T SupportedKonnectEntityType] struct {
+type KonnectEntityReconciler[T SupportedKonnectEntityType, TEnt EntityType[T]] struct {
 	DevelopmentMode bool
 	Client          client.Client
 }
@@ -41,14 +41,14 @@ func NewKonnectEntityReconciler[
 	t T,
 	developmentMode bool,
 	client client.Client,
-) *KonnectEntityReconciler[TEnt, T] {
-	return &KonnectEntityReconciler[TEnt, T]{
+) *KonnectEntityReconciler[T, TEnt] {
+	return &KonnectEntityReconciler[T, TEnt]{
 		DevelopmentMode: developmentMode,
 		Client:          client,
 	}
 }
 
-func (r *KonnectEntityReconciler[TEnt, T]) SetupWithManager(mgr ctrl.Manager) error {
+func (r *KonnectEntityReconciler[T, TEnt]) SetupWithManager(mgr ctrl.Manager) error {
 	var (
 		e   T
 		ent = TEnt(&e)
@@ -67,7 +67,7 @@ func (r *KonnectEntityReconciler[TEnt, T]) SetupWithManager(mgr ctrl.Manager) er
 	return b.Complete(r)
 }
 
-func (r *KonnectEntityReconciler[TEnt, T]) Reconcile(
+func (r *KonnectEntityReconciler[T, TEnt]) Reconcile(
 	ctx context.Context, req ctrl.Request,
 ) (ctrl.Result, error) {
 	var (
@@ -126,7 +126,7 @@ func (r *KonnectEntityReconciler[TEnt, T]) Reconcile(
 			}, nil
 		}
 		if controllerutil.RemoveFinalizer(e, KonnectCleanupFinalizer) {
-			if err := Delete(ctx, sdk, logger, e); err != nil {
+			if err := Delete[T, TEnt](ctx, sdk, logger, &et); err != nil {
 				return ctrl.Result{}, err
 			}
 			if err := r.Client.Update(ctx, e); err != nil {
@@ -147,7 +147,7 @@ func (r *KonnectEntityReconciler[TEnt, T]) Reconcile(
 	// We should look at the "expectations" for this:
 	// https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/controller_utils.go
 	if id := e.GetStatusID(); id == "" {
-		_, err := Create(ctx, sdk, logger, e)
+		_, err := Create[T, TEnt](ctx, sdk, logger, e)
 		if err != nil {
 			if err := r.Client.Status().Update(ctx, e); err != nil {
 				if k8serrors.IsConflict(err) {
@@ -181,7 +181,9 @@ func (r *KonnectEntityReconciler[TEnt, T]) Reconcile(
 		return ctrl.Result{}, nil
 	}
 
-	// TODO update
+	if err := Update[T, TEnt](ctx, sdk, logger, e); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{
 		RequeueAfter: configurableSyncPeriod,

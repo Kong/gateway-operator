@@ -8,125 +8,126 @@ spec:
   labels:
     app: test1
     key1: test1
+    x: x
   konnectAPIAuthConfigurationRef:
     name: konnect-api-auth-1
 ---
-kind: KonnectControlPlane
-apiVersion: gateway-operator.konghq.com/v1alpha1
-metadata:
-  name: test2
-  namespace: default
-spec:
-  name: test2
-  labels:
-    app: test2
-    key1: test2
-  konnectAPIAuthConfigurationRef:
-    name: konnect-api-auth-1
----
-kind: KonnectControlPlane
-apiVersion: gateway-operator.konghq.com/v1alpha1
-metadata:
-  name: test3
-  namespace: default
-spec:
-  name: test3
-  labels:
-    app: test3
-    key1: test3
-  konnectAPIAuthConfigurationRef:
-    name: konnect-api-auth-1
----
-kind: KonnectControlPlane
-apiVersion: gateway-operator.konghq.com/v1alpha1
-metadata:
-  name: test4
-  namespace: default
-spec:
-  name: test4
-  labels:
-    app: test4
-    key1: test4
-  konnectAPIAuthConfigurationRef:
-    name: konnect-api-auth-1
----
-kind: KonnectControlPlane
-apiVersion: gateway-operator.konghq.com/v1alpha1
-metadata:
-  name: test5
-  namespace: default
-spec:
-  name: test5
-  labels:
-    app: test5
-    key1: test5
-  konnectAPIAuthConfigurationRef:
-    name: konnect-api-auth-1
----
-kind: KonnectControlPlane
-apiVersion: gateway-operator.konghq.com/v1alpha1
-metadata:
-  name: test6
-  namespace: default
-spec:
-  name: test6
-  labels:
-    app: test6
-    key1: test6
-  konnectAPIAuthConfigurationRef:
-    name: konnect-api-auth-1
----
-kind: KonnectControlPlane
-apiVersion: gateway-operator.konghq.com/v1alpha1
-metadata:
-  name: test7
-  namespace: default
-spec:
-  name: test7
-  labels:
-    app: test7
-    key1: test7
-  konnectAPIAuthConfigurationRef:
-    name: konnect-api-auth-1
----
-kind: KonnectControlPlane
-apiVersion: gateway-operator.konghq.com/v1alpha1
-metadata:
-  name: test8
-  namespace: default
-spec:
-  name: test8
-  labels:
-    app: test8
-    key1: test8
-  konnectAPIAuthConfigurationRef:
-    name: konnect-api-auth-1
----
-kind: KonnectControlPlane
-apiVersion: gateway-operator.konghq.com/v1alpha1
-metadata:
-  name: test9
-  namespace: default
-spec:
-  name: test9
-  labels:
-    app: test9
-    key1: test9
-  konnectAPIAuthConfigurationRef:
-    name: konnect-api-auth-1
----
-kind: KonnectControlPlane
-apiVersion: gateway-operator.konghq.com/v1alpha1
-metadata:
-  name: test10
-  namespace: default
-spec:
-  name: test10
-  labels:
-    app: test10
-    key1: test10
-  konnectAPIAuthConfigurationRef:
-    name: konnect-api-auth-1
+# kind: KonnectControlPlane
+# apiVersion: gateway-operator.konghq.com/v1alpha1
+# metadata:
+#   name: test2
+#   namespace: default
+# spec:
+#   name: test2
+#   labels:
+#     app: test2
+#     key1: test2
+#   konnectAPIAuthConfigurationRef:
+#     name: konnect-api-auth-1
+# ---
+# kind: KonnectControlPlane
+# apiVersion: gateway-operator.konghq.com/v1alpha1
+# metadata:
+#   name: test3
+#   namespace: default
+# spec:
+#   name: test3
+#   labels:
+#     app: test3
+#     key1: test3
+#   konnectAPIAuthConfigurationRef:
+#     name: konnect-api-auth-1
+# ---
+# kind: KonnectControlPlane
+# apiVersion: gateway-operator.konghq.com/v1alpha1
+# metadata:
+#   name: test4
+#   namespace: default
+# spec:
+#   name: test4
+#   labels:
+#     app: test4
+#     key1: test4
+#   konnectAPIAuthConfigurationRef:
+#     name: konnect-api-auth-1
+# ---
+# kind: KonnectControlPlane
+# apiVersion: gateway-operator.konghq.com/v1alpha1
+# metadata:
+#   name: test5
+#   namespace: default
+# spec:
+#   name: test5
+#   labels:
+#     app: test5
+#     key1: test5
+#   konnectAPIAuthConfigurationRef:
+#     name: konnect-api-auth-1
+# ---
+# kind: KonnectControlPlane
+# apiVersion: gateway-operator.konghq.com/v1alpha1
+# metadata:
+#   name: test6
+#   namespace: default
+# spec:
+#   name: test6
+#   labels:
+#     app: test6
+#     key1: test6
+#   konnectAPIAuthConfigurationRef:
+#     name: konnect-api-auth-1
+# ---
+# kind: KonnectControlPlane
+# apiVersion: gateway-operator.konghq.com/v1alpha1
+# metadata:
+#   name: test7
+#   namespace: default
+# spec:
+#   name: test7
+#   labels:
+#     app: test7
+#     key1: test7
+#   konnectAPIAuthConfigurationRef:
+#     name: konnect-api-auth-1
+# ---
+# kind: KonnectControlPlane
+# apiVersion: gateway-operator.konghq.com/v1alpha1
+# metadata:
+#   name: test8
+#   namespace: default
+# spec:
+#   name: test8
+#   labels:
+#     app: test8
+#     key1: test8
+#   konnectAPIAuthConfigurationRef:
+#     name: konnect-api-auth-1
+# ---
+# kind: KonnectControlPlane
+# apiVersion: gateway-operator.konghq.com/v1alpha1
+# metadata:
+#   name: test9
+#   namespace: default
+# spec:
+#   name: test9
+#   labels:
+#     app: test9
+#     key1: test9
+#   konnectAPIAuthConfigurationRef:
+#     name: konnect-api-auth-1
+# ---
+# kind: KonnectControlPlane
+# apiVersion: gateway-operator.konghq.com/v1alpha1
+# metadata:
+#   name: test10
+#   namespace: default
+# spec:
+#   name: test10
+#   labels:
+#     app: test10
+#     key1: test10
+#   konnectAPIAuthConfigurationRef:
+#     name: konnect-api-auth-1
 ---
 kind: KonnectControlPlane
 apiVersion: gateway-operator.konghq.com/v1alpha1
