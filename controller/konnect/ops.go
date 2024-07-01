@@ -120,7 +120,10 @@ func logOpComplete[
 	)
 }
 
-func handleStatusCode[T SupportedKonnectEntityType](resp Response, op Op) error {
+func handleResp[T SupportedKonnectEntityType](err error, resp Response, op Op) error {
+	if err != nil {
+		return err
+	}
 	if resp.GetStatusCode() < 200 || resp.GetStatusCode() >= 400 {
 		b, err := io.ReadAll(resp.GetRawResponse().Body)
 		if err != nil {

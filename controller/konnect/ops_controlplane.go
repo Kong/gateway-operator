@@ -27,31 +27,18 @@ func createControlPlane(
 	// TODO: handle already exists
 	// Can't adopt it as it will cause conflicts between the controller
 	// that created that entity and already manages it, hm
-	if err != nil {
+	if errHandled := handleResp(err, resp, CreateOp); errHandled != nil {
 		k8sutils.SetCondition(
 			k8sutils.NewConditionWithGeneration(
 				KonnectEntityProgrammedConditionType,
 				metav1.ConditionFalse,
 				"FailedToCreate",
-				err.Error(),
+				errHandled.Error(),
 				cp.GetGeneration(),
 			),
 			&cp.Status,
 		)
-		return err
-	}
-	if err := handleStatusCode[operatorv1alpha1.KonnectControlPlane](resp, CreateOp); err != nil {
-		k8sutils.SetCondition(
-			k8sutils.NewConditionWithGeneration(
-				KonnectEntityProgrammedConditionType,
-				metav1.ConditionFalse,
-				"FailedToCreate",
-				err.Error(),
-				cp.GetGeneration(),
-			),
-			&cp.Status,
-		)
-		return err
+		return errHandled
 	}
 
 	cp.Status.KonnectID = *resp.ControlPlane.ID
@@ -80,9 +67,9 @@ func deleteControlPlane(
 	}
 	id := cp.GetStatusID()
 	resp, err := sdk.ControlPlanes.DeleteControlPlane(ctx, id)
-	if err != nil {
+	if errHandled := handleResp(err, resp, DeleteOp); errHandled != nil {
 		var errNotFound *sdkerrors.NotFoundError
-		if errors.As(err, &errNotFound) {
+		if errors.As(errHandled, &errNotFound) {
 			logger.Info("entity not found in Konnect, skipping delete",
 				"op", DeleteOp, "type", cp.GetTypeName(), "id", id,
 			)
@@ -90,12 +77,8 @@ func deleteControlPlane(
 		}
 		return FailedKonnectOpError[operatorv1alpha1.KonnectControlPlane]{
 			Op:  DeleteOp,
-			Err: err,
+			Err: errHandled,
 		}
-	}
-
-	if err := handleStatusCode[operatorv1alpha1.KonnectControlPlane](resp, DeleteOp); err != nil {
-		return err
 	}
 
 	return nil
@@ -122,37 +105,20 @@ func updateControlPlane(
 	}
 
 	resp, err := sdk.ControlPlanes.UpdateControlPlane(ctx, id, req)
-	if err != nil {
+	if errHandled := handleResp(err, resp, UpdateOp); errHandled != nil {
 		k8sutils.SetCondition(
 			k8sutils.NewConditionWithGeneration(
 				KonnectEntityProgrammedConditionType,
 				metav1.ConditionFalse,
 				"FailedToUpdate",
-				err.Error(),
+				errHandled.Error(),
 				cp.GetGeneration(),
 			),
 			&cp.Status,
 		)
 		return FailedKonnectOpError[operatorv1alpha1.KonnectControlPlane]{
 			Op:  UpdateOp,
-			Err: err,
-		}
-	}
-
-	if err := handleStatusCode[operatorv1alpha1.KonnectControlPlane](resp, UpdateOp); err != nil {
-		k8sutils.SetCondition(
-			k8sutils.NewConditionWithGeneration(
-				KonnectEntityProgrammedConditionType,
-				metav1.ConditionFalse,
-				"FailedToUpdate",
-				err.Error(),
-				cp.GetGeneration(),
-			),
-			&cp.Status,
-		)
-		return FailedKonnectOpError[operatorv1alpha1.KonnectControlPlane]{
-			Op:  UpdateOp,
-			Err: err,
+			Err: errHandled,
 		}
 	}
 
