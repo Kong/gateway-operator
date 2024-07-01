@@ -64,6 +64,8 @@ func (c *KonnectControlPlane) GetReconciliationWatchOptions(
 ) []func(*ctrl.Builder) *ctrl.Builder {
 	return []func(*ctrl.Builder) *ctrl.Builder{
 		func(b *ctrl.Builder) *ctrl.Builder {
+			// TODO(pmalek): this can be extracted and used in reconciler.go
+			// as every Konnect entity will have a reference to the KonnectAPIAuthConfiguration.
 			return b.Watches(
 				&KonnectAPIAuthConfiguration{},
 				handler.EnqueueRequestsFromMapFunc(

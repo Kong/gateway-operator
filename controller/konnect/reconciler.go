@@ -25,7 +25,8 @@ const (
 
 const (
 	// KonnectCleanupFinalizer is the finalizer that is added to the Konnect
-	// entities to ensure that they are cleaned up when the CR is deleted.
+	// entities when they are created in Konnect, and which is removed when
+	// the CR and Konnect entity are deleted.
 	KonnectCleanupFinalizer = "gateway.konghq.com/konnect-cleanup"
 )
 
@@ -102,7 +103,9 @@ func (r *KonnectEntityReconciler[T, TEnt]) Reconcile(
 
 	// TODO(pmalek): check if api auth config has a valid status condition
 	// If not then return an error.
-
+	// NOTE: /organizations/me is not public in OpenAPI spec so we can use it
+	// but not using the SDK
+	// https://kongstrong.slack.com/archives/C04RXLGNB6K/p1719830395775599?thread_ts=1719406468.883729&cid=C04RXLGNB6K
 	sdk := sdkkonnectgo.New(
 		sdkkonnectgo.WithSecurity(
 			sdkkonnectgocomp.Security{
