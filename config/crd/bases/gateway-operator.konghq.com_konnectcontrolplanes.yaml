@@ -197,7 +197,13 @@ spec:
                 - type
                 x-kubernetes-list-type: map
               id:
-                description: KonnectID is the unique identifier of the Konnect entity.
+                description: |-
+                  KonnectID is the unique identifier of the Konnect entity as assigned by Konnect API.
+                  If it's unset (empty string), it means the Konnect entity hasn't been created yet.
+                type: string
+              serverURL:
+                description: ServerURL is the URL of the Konnect server in which the
+                  entity exists.
                 type: string
             type: object
         type: object

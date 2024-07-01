@@ -42,11 +42,9 @@ type KonnectControlPlaneSpec struct {
 	KonnectAPIAuthConfigurationRef KonnectAPIAuthConfigurationRef `json:"konnectAPIAuthConfigurationRef,omitempty"`
 }
 
-// GetStatusID returns the Konnect ID of the KonnectControlPlane.
-// This is used to identify the Konnect entity in Konnect.
-// If it's unset (empty string), it means the Konnect entity hasn't been created yet.
-func (c *KonnectControlPlane) GetStatusID() string {
-	return c.Status.KonnectID
+// GetKonnectStatus returns the Konnect Status of the KonnectControlPlane.
+func (c *KonnectControlPlane) GetStatus() *KonnectEntityStatus {
+	return &c.Status
 }
 
 func (c KonnectControlPlane) GetTypeName() string {

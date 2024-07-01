@@ -27,7 +27,11 @@ type EntityType[
 
 	// Added methods
 
-	GetStatusID() string
+	GetStatus() *operatorv1alpha1.KonnectEntityStatus
+	// GetStatusID() string
+	// SetStatusID(string)
+	// GetServerURL() string
+	// SetServerURL(string)
 	SetKonnectLabels(labels map[string]string)
 	GetReconciliationWatchOptions(client.Client) []func(*ctrl.Builder) *ctrl.Builder
 	GetKonnectAPIAuthConfigurationRef() operatorv1alpha1.KonnectAPIAuthConfigurationRef

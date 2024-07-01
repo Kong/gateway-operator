@@ -41,7 +41,7 @@ func createControlPlane(
 		return errHandled
 	}
 
-	cp.Status.KonnectID = *resp.ControlPlane.ID
+	cp.Status.SetKonnectID(*resp.ControlPlane.ID)
 	k8sutils.SetCondition(
 		k8sutils.NewConditionWithGeneration(
 			KonnectEntityProgrammedConditionType,
@@ -62,10 +62,11 @@ func deleteControlPlane(
 	logger logr.Logger,
 	cp *operatorv1alpha1.KonnectControlPlane,
 ) error {
-	if cp.GetStatusID() == "" {
+	id := cp.GetStatus().GetKonnectID()
+	if id == "" {
 		return fmt.Errorf("can't remove %T without a Konnect ID", cp)
 	}
-	id := cp.GetStatusID()
+
 	resp, err := sdk.ControlPlanes.DeleteControlPlane(ctx, id)
 	if errHandled := handleResp(err, resp, DeleteOp); errHandled != nil {
 		var errNotFound *sdkerrors.NotFoundError
@@ -90,10 +91,10 @@ func updateControlPlane(
 	logger logr.Logger,
 	cp *operatorv1alpha1.KonnectControlPlane,
 ) error {
-	if cp.GetStatusID() == "" {
+	id := cp.GetStatus().GetKonnectID()
+	if id == "" {
 		return fmt.Errorf("can't update %T without a Konnect ID", cp)
 	}
-	id := cp.GetStatusID()
 
 	setKonnectLabels(cp, &cp.Spec)
 	req := components.UpdateControlPlaneRequest{
@@ -122,7 +123,7 @@ func updateControlPlane(
 		}
 	}
 
-	cp.Status.KonnectID = *resp.ControlPlane.ID
+	cp.Status.SetKonnectID(*resp.ControlPlane.ID)
 	k8sutils.SetCondition(
 		k8sutils.NewConditionWithGeneration(
 			KonnectEntityProgrammedConditionType,

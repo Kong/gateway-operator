@@ -116,7 +116,7 @@ func logOpComplete[
 		"op", op,
 		"duration", time.Since(start),
 		"type", entityTypeName[T](),
-		"konnect_id", e.GetStatusID(),
+		"konnect_id", e.GetStatus().GetKonnectID(),
 	)
 }
 

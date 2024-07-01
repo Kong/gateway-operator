@@ -146,7 +146,7 @@ func (r *KonnectEntityReconciler[T, TEnt]) Reconcile(
 	//
 	// We should look at the "expectations" for this:
 	// https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/controller_utils.go
-	if id := e.GetStatusID(); id == "" {
+	if id := e.GetStatus().GetKonnectID(); id == "" {
 		_, err := Create[T, TEnt](ctx, sdk, logger, e)
 		if err != nil {
 			if err := r.Client.Status().Update(ctx, e); err != nil {
