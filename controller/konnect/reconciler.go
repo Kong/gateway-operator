@@ -178,7 +178,9 @@ func (r *KonnectEntityReconciler[T, TEnt]) Reconcile(
 			}
 		}
 
-		return ctrl.Result{}, nil
+		return ctrl.Result{
+			RequeueAfter: configurableSyncPeriod,
+		}, nil
 	}
 
 	if err := Update[T, TEnt](ctx, sdk, logger, e); err != nil {
