@@ -12,7 +12,7 @@ spec:
     listKind: KonnectAPIAuthConfigurationList
     plural: konnectapiauthconfigurations
     singular: konnectapiauthconfiguration
-  scope: Cluster
+  scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - description: The API authentication information is valid

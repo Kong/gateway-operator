@@ -9,7 +9,7 @@ func init() {
 }
 
 // +genclient
-// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:resource:scope=Namespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
 // +kubebuilder:printcolumn:name="Valid",description="The API authentication information is valid",type=string,JSONPath=`.status.conditions[?(@.type=='Valid')].status`
@@ -60,6 +60,9 @@ type KonnectAPIAuthConfigurationRef struct {
 	// Name is the name of the KonnectAPIAuthConfiguration resource.
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
+
+	// Namespace is the namespace of the KonnectAPIAuthConfiguration resource.
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // +kubebuilder:object:root=true

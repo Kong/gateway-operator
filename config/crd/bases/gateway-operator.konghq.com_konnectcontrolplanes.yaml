@@ -68,15 +68,21 @@ spec:
                     description: Name is the name of the KonnectAPIAuthConfiguration
                       resource.
                     type: string
+                  namespace:
+                    description: Namespace is the namespace of the KonnectAPIAuthConfiguration
+                      resource.
+                    type: string
                 required:
                 - name
                 type: object
               labels:
                 additionalProperties:
                   type: string
-                description: Labels to facilitate tagged search on control planes.
-                  Keys must be of length 1-63 characters, and cannot start with 'kong',
-                  'konnect', 'mesh', 'kic', or '_'.
+                description: |-
+                  Labels store metadata of an entity that can be used for filtering an entity list or for searching across entity types.
+
+
+                  Keys must be of length 1-63 characters, and cannot start with "kong", "konnect", "mesh", "kic", or "_".
                 type: object
               name:
                 description: The name of the control plane.
