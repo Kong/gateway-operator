@@ -20,7 +20,7 @@ type KonnectEntityStatus struct {
 }
 
 // GetKonnectID returns the ID field of the KonnectEntityStatus struct.
-func (in KonnectEntityStatus) GetKonnectID() string {
+func (in *KonnectEntityStatus) GetKonnectID() string {
 	return in.KonnectID
 }
 
@@ -30,7 +30,7 @@ func (in *KonnectEntityStatus) SetKonnectID(id string) {
 }
 
 // GetServerURL returns the server URL of the KonnectEntityStatus struct.
-func (in KonnectEntityStatus) GetServerURL() string {
+func (in *KonnectEntityStatus) GetServerURL() string {
 	return in.ServerURL
 }
 
@@ -40,7 +40,7 @@ func (in *KonnectEntityStatus) SetServerURL(s string) {
 }
 
 // GetConditions returns the Status Conditions
-func (in KonnectEntityStatus) GetConditions() []metav1.Condition {
+func (in *KonnectEntityStatus) GetConditions() []metav1.Condition {
 	return in.Conditions
 }
 

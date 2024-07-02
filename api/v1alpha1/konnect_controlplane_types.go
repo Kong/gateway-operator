@@ -17,16 +17,16 @@ func init() {
 	SchemeBuilder.Register(&KonnectControlPlane{}, &KonnectControlPlaneList{})
 }
 
+// KonnectControlPlane is the Schema for the konnectcontrolplanes API.
+//
 // +genclient
 // +kubebuilder:resource:scope=Namespaced
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
+// +kubebuilder:object:generate=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Programmed",description="The Resource is Programmed on Konnect",type=string,JSONPath=`.status.conditions[?(@.type=='Programmed')].status`
 // +kubebuilder:printcolumn:name="ID",description="Konnect ID",type=string,JSONPath=`.status.id`
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.konnectAPIAuthConfigurationRef) || has(oldSelf.spec.konnectAPIAuthConfigurationRef)", message="Konnect Configuration reference is immutable"
-
-// KonnectControlPlane is the Schema for the konnectcontrolplanes API.
 type KonnectControlPlane struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

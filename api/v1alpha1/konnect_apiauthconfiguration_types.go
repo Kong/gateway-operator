@@ -8,17 +8,18 @@ func init() {
 	SchemeBuilder.Register(&KonnectAPIAuthConfiguration{}, &KonnectAPIAuthConfigurationList{})
 }
 
+// KonnectAPIAuthConfiguration is the Schema for the Konnect configuration type.
+//
 // +genclient
 // +kubebuilder:resource:scope=Namespaced
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
+// +kubebuilder:object:generate=true
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Valid",description="The API authentication information is valid",type=string,JSONPath=`.status.conditions[?(@.type=='Valid')].status`
 // +kubebuilder:printcolumn:name="OrgID",description="Konnect Organization ID this API authentication configuration belongs to.",type=string,JSONPath=`.status.conditions.organizationID`
 // +kubebuilder:validation:XValidation:rule="self.spec.token.startsWith('spat_') || self.spec.token.startsWith('kpat_')", message="Konnect tokens have to start with spat_ or kpat_"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.token) || has(self.spec.token)", message="Token is required once set"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.serverURL) || has(self.spec.serverURL)", message="Server URL is required once set"
-
-// KonnectAPIAuthConfiguration is the Schema for the Konnect configuration type.
 type KonnectAPIAuthConfiguration struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
