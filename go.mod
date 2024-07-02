@@ -11,6 +11,7 @@ toolchain go1.22.4
 retract v1.2.2
 
 replace github.com/Kong/sdk-konnect-go => ../sdk-konnect-go
+
 replace github.com/kong/kubernetes-ingress-controller/v3 => ../kubernetes-ingress-controller
 
 require (

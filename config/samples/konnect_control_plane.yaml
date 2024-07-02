@@ -129,6 +129,23 @@ spec:
 #   konnectAPIAuthConfigurationRef:
 #     name: konnect-api-auth-1
 ---
+kind: Service
+apiVersion: configuration.konghq.com/v1alpha1
+metadata:
+  name: service-1
+  namespace: default
+spec:
+  host: example.com
+  connect_timeout: 60000
+  enabled: true
+  port: 80
+  protocol: http
+  read_timeout: 60000
+  retries: 5
+  write_timeout: 60000
+  konnectAPIAuthConfigurationRef:
+    name: konnect-api-auth-1
+---
 kind: KonnectControlPlane
 apiVersion: gateway-operator.konghq.com/v1alpha1
 metadata:

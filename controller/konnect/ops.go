@@ -10,6 +10,8 @@ import (
 	sdkkonnectgo "github.com/Kong/sdk-konnect-go"
 	"github.com/go-logr/logr"
 
+	configurationv1alpha1 "github.com/kong/kubernetes-ingress-controller/v3/pkg/apis/configuration/v1alpha1"
+
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 )
 
@@ -63,6 +65,8 @@ func Create[
 	switch ent := any(e).(type) {
 	case *operatorv1alpha1.KonnectControlPlane:
 		return e, createControlPlane(ctx, sdk, logger, ent)
+	case *configurationv1alpha1.Service:
+		return e, createService(ctx, sdk, logger, ent)
 
 		// ---------------------------------------------------------------------
 		// TODO: add other Konnect types
