@@ -9,6 +9,7 @@ import (
 
 	sdkkonnectgo "github.com/Kong/sdk-konnect-go"
 	"github.com/go-logr/logr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-ingress-controller/v3/pkg/apis/configuration/v1alpha1"
 
@@ -59,14 +60,14 @@ const (
 func Create[
 	T SupportedKonnectEntityType,
 	TEnt EntityType[T],
-](ctx context.Context, sdk *sdkkonnectgo.SDK, logger logr.Logger, e *T) (*T, error) {
+](ctx context.Context, sdk *sdkkonnectgo.SDK, logger logr.Logger, cl client.Client, e *T) (*T, error) {
 	defer logOpComplete[T, TEnt](logger, time.Now(), CreateOp, e)
 
 	switch ent := any(e).(type) {
 	case *operatorv1alpha1.KonnectControlPlane:
 		return e, createControlPlane(ctx, sdk, logger, ent)
 	case *configurationv1alpha1.Service:
-		return e, createService(ctx, sdk, logger, ent)
+		return e, createService(ctx, sdk, logger, cl, ent)
 
 		// ---------------------------------------------------------------------
 		// TODO: add other Konnect types
@@ -97,12 +98,14 @@ func Delete[
 func Update[
 	T SupportedKonnectEntityType,
 	TEnt EntityType[T],
-](ctx context.Context, sdk *sdkkonnectgo.SDK, logger logr.Logger, e *T) error {
+](ctx context.Context, sdk *sdkkonnectgo.SDK, logger logr.Logger, cl client.Client, e *T) error {
 	defer logOpComplete[T, TEnt](logger, time.Now(), UpdateOp, e)
 
 	switch ent := any(e).(type) {
 	case *operatorv1alpha1.KonnectControlPlane:
 		return updateControlPlane(ctx, sdk, logger, ent)
+	case *configurationv1alpha1.Service:
+		return updateService(ctx, sdk, logger, cl, ent)
 
 		// ---------------------------------------------------------------------
 		// TODO: add other Konnect types

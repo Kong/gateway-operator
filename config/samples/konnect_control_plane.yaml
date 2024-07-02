@@ -143,6 +143,11 @@ spec:
   read_timeout: 60000
   retries: 5
   write_timeout: 60000
+  controlPlaneRef:
+    type: konnectNamespacedRef
+    konnectNamespacedRef:
+      name: test1
+      namespace: default
   konnectAPIAuthConfigurationRef:
     name: konnect-api-auth-1
 ---

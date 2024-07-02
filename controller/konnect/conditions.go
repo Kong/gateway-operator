@@ -14,6 +14,13 @@ const (
 )
 
 const (
+	ControlPlaneRefValidConditionType = "ControlPlaneRefValid"
+
+	ControlPlaneRefReasonValid   = "Valid"
+	ControlPlaneRefReasonInvalid = "Invalid"
+)
+
+const (
 	KonnectEntityAPIAuthConfigurationRefValidConditionType = "APIAuthRefValid"
 
 	KonnectEntityAPIAuthConfigurationRefReasonValid   = "Valid"

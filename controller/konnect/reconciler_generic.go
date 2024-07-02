@@ -15,6 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	configurationv1alpha1 "github.com/kong/kubernetes-ingress-controller/v3/pkg/apis/configuration/v1alpha1"
+
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/controller/pkg/log"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
@@ -179,6 +181,67 @@ func (r *KonnectEntityReconciler[T, TEnt]) Reconcile(
 		return ctrl.Result{}, nil
 	}
 
+	if typeHasControlPlaneRef(e) {
+		cpRef := getControlPlaneRef(e)
+		switch cpRef.Type {
+		case operatorv1alpha1.ControlPlaneRefKonnectNamespacedRef:
+			cp := operatorv1alpha1.KonnectControlPlane{}
+			if err := r.Client.Get(ctx, types.NamespacedName{
+				Name:      cpRef.KonnectNamespacedRef.Name,
+				Namespace: cpRef.KonnectNamespacedRef.Namespace,
+			}, &cp); err != nil {
+				e.GetStatus().SetKonnectID("")
+				k8sutils.SetCondition(
+					k8sutils.NewConditionWithGeneration(
+						// TODO(pmalek) define in API
+						ControlPlaneRefValidConditionType,
+						metav1.ConditionFalse,
+						ControlPlaneRefReasonInvalid,
+						err.Error(),
+						e.GetGeneration(),
+					),
+					e.GetStatus(),
+				)
+				if err := r.Client.Status().Update(ctx, e); err != nil {
+					if k8serrors.IsConflict(err) {
+						return ctrl.Result{Requeue: true}, nil
+					}
+					return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
+				}
+
+				return ctrl.Result{}, fmt.Errorf("unimplemented control plane ref type %q", cpRef.Type)
+			}
+
+			cond, ok := k8sutils.GetCondition(KonnectEntityProgrammedConditionType, &cp.Status)
+			if !ok || cond.Status != metav1.ConditionTrue || cond.ObservedGeneration != cp.GetGeneration() {
+				e.GetStatus().SetKonnectID("")
+				k8sutils.SetCondition(
+					k8sutils.NewConditionWithGeneration(
+						// TODO(pmalek) define in API
+						ControlPlaneRefValidConditionType,
+						metav1.ConditionFalse,
+						ControlPlaneRefReasonInvalid,
+						"Referenced ControlPlane is not programmed yet",
+						e.GetGeneration(),
+					),
+					e.GetStatus(),
+				)
+				if err := r.Client.Status().Update(ctx, e); err != nil {
+					if k8serrors.IsConflict(err) {
+						return ctrl.Result{Requeue: true}, nil
+					}
+					return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
+				}
+				return ctrl.Result{Requeue: true}, nil
+			}
+
+		default:
+			return ctrl.Result{}, fmt.Errorf("unimplemented control plane ref type %q", cpRef.Type)
+		}
+
+		// TODO: handle control plane ref
+	}
+
 	// TODO: relying on status ID is OK but we need to rethink this because
 	// we're using a cached client so after creating the resource on Konnect it might
 	// happen that we've just created the resource but the status ID is not there yet.
@@ -186,7 +249,7 @@ func (r *KonnectEntityReconciler[T, TEnt]) Reconcile(
 	// We should look at the "expectations" for this:
 	// https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/controller_utils.go
 	if id := e.GetStatus().GetKonnectID(); id == "" {
-		_, err := Create[T, TEnt](ctx, sdk, logger, e)
+		_, err := Create[T, TEnt](ctx, sdk, logger, r.Client, e)
 		if err != nil {
 			if err := r.Client.Status().Update(ctx, e); err != nil {
 				if k8serrors.IsConflict(err) {
@@ -222,11 +285,39 @@ func (r *KonnectEntityReconciler[T, TEnt]) Reconcile(
 		}, nil
 	}
 
-	if err := Update[T, TEnt](ctx, sdk, logger, e); err != nil {
+	if err := Update[T, TEnt](ctx, sdk, logger, r.Client, e); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{
 		RequeueAfter: configurableSyncPeriod,
 	}, nil
+}
+
+func typeHasControlPlaneRef[T SupportedKonnectEntityType, TEnt EntityType[T]](
+	e TEnt,
+) bool {
+	switch e := any(e).(type) {
+	case *operatorv1alpha1.KonnectControlPlane:
+		return false
+	case *configurationv1alpha1.Service:
+		return true
+	default:
+		panic(fmt.Sprintf("unsupported entity type %T", e))
+	}
+}
+
+func getControlPlaneRef[T SupportedKonnectEntityType, TEnt EntityType[T]](
+	e TEnt,
+) operatorv1alpha1.ControlPlaneRef {
+	switch e := any(e).(type) {
+	case *operatorv1alpha1.KonnectControlPlane:
+		// TODO: handle better
+		// Should never happen
+		panic(fmt.Sprintf("unsupported entity type %T", e))
+	case *configurationv1alpha1.Service:
+		return e.Spec.ControlPlaneRef
+	default:
+		panic(fmt.Sprintf("unsupported entity type %T", e))
+	}
 }
