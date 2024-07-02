@@ -5,3 +5,17 @@ const (
 
 	KonnectEntityProgrammedReason = "Programmed"
 )
+
+const (
+	KonnectAPIAuthConfigurationValidConditionType = "Valid"
+
+	KonnectAPIAuthConfigurationReasonValid   = "Valid"
+	KonnectAPIAuthConfigurationReasonInvalid = "Invalid"
+)
+
+const (
+	KonnectEntityAPIAuthConfigurationRefValidConditionType = "APIAuthRefValid"
+
+	KonnectEntityAPIAuthConfigurationRefReasonValid   = "Valid"
+	KonnectEntityAPIAuthConfigurationRefReasonInvalid = "Invalid"
+)

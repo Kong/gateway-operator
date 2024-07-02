@@ -27,7 +27,7 @@ func createControlPlane(
 	// TODO: handle already exists
 	// Can't adopt it as it will cause conflicts between the controller
 	// that created that entity and already manages it, hm
-	if errHandled := handleResp(err, resp, CreateOp); errHandled != nil {
+	if errHandled := handleResp[operatorv1alpha1.KonnectControlPlane](err, resp, CreateOp); errHandled != nil {
 		k8sutils.SetCondition(
 			k8sutils.NewConditionWithGeneration(
 				KonnectEntityProgrammedConditionType,
@@ -68,7 +68,7 @@ func deleteControlPlane(
 	}
 
 	resp, err := sdk.ControlPlanes.DeleteControlPlane(ctx, id)
-	if errHandled := handleResp(err, resp, DeleteOp); errHandled != nil {
+	if errHandled := handleResp[operatorv1alpha1.KonnectControlPlane](err, resp, DeleteOp); errHandled != nil {
 		var errNotFound *sdkerrors.NotFoundError
 		if errors.As(errHandled, &errNotFound) {
 			logger.Info("entity not found in Konnect, skipping delete",
@@ -106,7 +106,7 @@ func updateControlPlane(
 	}
 
 	resp, err := sdk.ControlPlanes.UpdateControlPlane(ctx, id, req)
-	if errHandled := handleResp(err, resp, UpdateOp); errHandled != nil {
+	if errHandled := handleResp[operatorv1alpha1.KonnectControlPlane](err, resp, UpdateOp); errHandled != nil {
 		k8sutils.SetCondition(
 			k8sutils.NewConditionWithGeneration(
 				KonnectEntityProgrammedConditionType,

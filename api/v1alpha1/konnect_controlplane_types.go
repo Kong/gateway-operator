@@ -90,7 +90,9 @@ func enqueueKonnectControlPlaneForKonnectAPIAuthConfiguration(
 		}
 		var ret []reconcile.Request
 		for _, cp := range l.Items {
-			if cp.Spec.KonnectAPIAuthConfigurationRef.Name != auth.Name {
+			authRef := cp.GetKonnectAPIAuthConfigurationRef()
+			if authRef.Name != auth.Name ||
+				authRef.Namespace != auth.Namespace {
 				continue
 			}
 			ret = append(ret, reconcile.Request{

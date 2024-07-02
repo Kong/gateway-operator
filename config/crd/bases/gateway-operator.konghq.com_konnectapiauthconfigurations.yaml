@@ -21,8 +21,12 @@ spec:
       type: string
     - description: Konnect Organization ID this API authentication configuration belongs
         to.
-      jsonPath: .status.conditions.organizationID
+      jsonPath: .status.organizationID
       name: OrgID
+      type: string
+    - description: Configured server URL.
+      jsonPath: .status.serverURL
+      name: ServerURL
       type: string
     name: v1alpha1
     schema:
@@ -157,6 +161,9 @@ spec:
                 description: OrganizationID is the unique identifier of the organization
                   in Konnect.
                 type: string
+              serverURL:
+                description: ServerURL is configured server URL.
+                type: string
             type: object
         type: object
         x-kubernetes-validations:
@@ -168,4 +175,5 @@ spec:
           rule: '!has(oldSelf.spec.serverURL) || has(self.spec.serverURL)'
     served: true
     storage: true
-    subresources: {}
+    subresources:
+      status: {}

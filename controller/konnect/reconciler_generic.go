@@ -8,6 +8,7 @@ import (
 	sdkkonnectgo "github.com/Kong/sdk-konnect-go"
 	sdkkonnectgocomp "github.com/Kong/sdk-konnect-go/models/components"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,6 +17,7 @@ import (
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/controller/pkg/log"
+	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 )
 
 const (
@@ -85,20 +87,54 @@ func (r *KonnectEntityReconciler[T, TEnt]) Reconcile(
 		if k8serrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, FailedKonnectOpError[T]{
-			Op:  CreateOp,
-			Err: err,
-		}
+		return ctrl.Result{}, err
 	}
 
 	var (
 		apiAuth    operatorv1alpha1.KonnectAPIAuthConfiguration
 		apiAuthRef = types.NamespacedName{
-			Name: e.GetKonnectAPIAuthConfigurationRef().Name,
+			Name:      e.GetKonnectAPIAuthConfigurationRef().Name,
+			Namespace: e.GetKonnectAPIAuthConfigurationRef().Namespace,
 		}
 	)
+	if apiAuthRef.Namespace == "" {
+		apiAuthRef.Namespace = e.GetNamespace()
+	}
 	if err := r.Client.Get(ctx, apiAuthRef, &apiAuth); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get KonnectAPIAuthConfiguration: %w", err)
+	}
+
+	if cond, present := k8sutils.GetCondition(KonnectAPIAuthConfigurationValidConditionType, &apiAuth.Status); present && cond.Status != metav1.ConditionTrue {
+		k8sutils.SetCondition(
+			k8sutils.NewConditionWithGeneration(
+				KonnectEntityAPIAuthConfigurationRefValidConditionType,
+				metav1.ConditionFalse,
+				KonnectEntityAPIAuthConfigurationRefReasonInvalid,
+				"",
+				e.GetGeneration(),
+			),
+			e.GetStatus(),
+		)
+
+		return ctrl.Result{}, nil
+	}
+
+	e.GetStatus().ServerURL = apiAuth.Spec.ServerURL
+	k8sutils.SetCondition(
+		k8sutils.NewConditionWithGeneration(
+			KonnectEntityAPIAuthConfigurationRefValidConditionType,
+			metav1.ConditionFalse,
+			KonnectEntityAPIAuthConfigurationRefReasonInvalid,
+			"",
+			e.GetGeneration(),
+		),
+		e.GetStatus(),
+	)
+	if err := r.Client.Status().Update(ctx, e); err != nil {
+		if k8serrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("failed to update status with APIAuthRefValid condition: %w", err)
 	}
 
 	// TODO(pmalek): check if api auth config has a valid status condition

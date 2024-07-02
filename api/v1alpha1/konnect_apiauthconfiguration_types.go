@@ -16,7 +16,8 @@ func init() {
 // +kubebuilder:object:generate=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Valid",description="The API authentication information is valid",type=string,JSONPath=`.status.conditions[?(@.type=='Valid')].status`
-// +kubebuilder:printcolumn:name="OrgID",description="Konnect Organization ID this API authentication configuration belongs to.",type=string,JSONPath=`.status.conditions.organizationID`
+// +kubebuilder:printcolumn:name="OrgID",description="Konnect Organization ID this API authentication configuration belongs to.",type=string,JSONPath=`.status.organizationID`
+// +kubebuilder:printcolumn:name="ServerURL",description="Configured server URL.",type=string,JSONPath=`.status.serverURL`
 // +kubebuilder:validation:XValidation:rule="self.spec.token.startsWith('spat_') || self.spec.token.startsWith('kpat_')", message="Konnect tokens have to start with spat_ or kpat_"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.token) || has(self.spec.token)", message="Token is required once set"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.spec.serverURL) || has(self.spec.serverURL)", message="Server URL is required once set"
@@ -48,6 +49,9 @@ type KonnectAPIAuthConfigurationStatus struct {
 	// OrganizationID is the unique identifier of the organization in Konnect.
 	OrganizationID string `json:"organizationID,omitempty"`
 
+	// ServerURL is configured server URL.
+	ServerURL string `json:"serverURL,omitempty"`
+
 	// Conditions describe the status of the Konnect configuration.
 	// +listType=map
 	// +listMapKey=type
@@ -55,6 +59,16 @@ type KonnectAPIAuthConfigurationStatus struct {
 	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:default={{type: "Valid", status: "Unknown", reason:"Pending", message:"Waiting for controller", lastTransitionTime: "1970-01-01T00:00:00Z"}}
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// GetConditions returns the Status Conditions
+func (in *KonnectAPIAuthConfigurationStatus) GetConditions() []metav1.Condition {
+	return in.Conditions
+}
+
+// SetConditions sets the Status Conditions
+func (in *KonnectAPIAuthConfigurationStatus) SetConditions(conditions []metav1.Condition) {
+	in.Conditions = conditions
 }
 
 type KonnectAPIAuthConfigurationRef struct {
