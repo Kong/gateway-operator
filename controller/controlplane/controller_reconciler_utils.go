@@ -293,7 +293,8 @@ func (r *Reconciler) ensureClusterRole(
 	ctx context.Context,
 	cp *operatorv1beta1.ControlPlane,
 ) (createdOrUpdated bool, cr *rbacv1.ClusterRole, err error) {
-	managedByLabelSet := k8sutils.GetManagedByLabelSet(cp)
+	// TODO:
+	managedByLabelSet := k8sutils.GetLegacyManagedByLabelSet(cp)
 	clusterRoles, err := k8sutils.ListClusterRoles(
 		ctx,
 		r.Client,
@@ -350,7 +351,8 @@ func (r *Reconciler) ensureClusterRoleBinding(
 ) (createdOrUpdate bool, crb *rbacv1.ClusterRoleBinding, err error) {
 	logger := log.GetLogger(ctx, "controlplane.ensureClusterRoleBinding", r.DevelopmentMode)
 
-	managedByLabelSet := k8sutils.GetManagedByLabelSet(cp)
+	// TODO:
+	managedByLabelSet := k8sutils.GetLegacyManagedByLabelSet(cp)
 
 	clusterRoleBindings, err := k8sutils.ListClusterRoleBindings(
 		ctx,
@@ -503,7 +505,8 @@ func (r *Reconciler) ensureOwnedClusterRolesDeleted(
 	ctx context.Context,
 	cp *operatorv1beta1.ControlPlane,
 ) (deletions bool, err error) {
-	managedByLabelSet := k8sutils.GetManagedByLabelSet(cp)
+	// TODO
+	managedByLabelSet := k8sutils.GetLegacyManagedByLabelSet(cp)
 
 	clusterRoles, err := k8sutils.ListClusterRoles(
 		ctx, r.Client,
@@ -535,7 +538,8 @@ func (r *Reconciler) ensureOwnedClusterRoleBindingsDeleted(
 	ctx context.Context,
 	cp *operatorv1beta1.ControlPlane,
 ) (deletions bool, err error) {
-	managedByLabelSet := k8sutils.GetManagedByLabelSet(cp)
+	// TODO
+	managedByLabelSet := k8sutils.GetLegacyManagedByLabelSet(cp)
 
 	clusterRoleBindings, err := k8sutils.ListClusterRoleBindings(
 		ctx, r.Client,
@@ -561,8 +565,10 @@ func (r *Reconciler) ensureOwnedClusterRoleBindingsDeleted(
 }
 
 func (r *Reconciler) ensureOwnedValidatingWebhookConfigurationDeleted(ctx context.Context,
-	cp *operatorv1beta1.ControlPlane) (deletions bool, err error) {
-	managedByLabelSet := k8sutils.GetManagedByLabelSet(cp)
+	cp *operatorv1beta1.ControlPlane,
+) (deletions bool, err error) {
+	// TODO
+	managedByLabelSet := k8sutils.GetLegacyManagedByLabelSet(cp)
 
 	validatingWebhookConfigurations, err := k8sutils.ListValidatingWebhookConfigurations(
 		ctx,
@@ -671,7 +677,8 @@ func (r *Reconciler) ensureValidatingWebhookConfiguration(
 ) (op.Result, error) {
 	logger := log.GetLogger(ctx, "controlplane.ensureValidatingWebhookConfiguration", r.DevelopmentMode)
 
-	managedByLabelSet := k8sutils.GetManagedByLabelSet(cp)
+	// TODo
+	managedByLabelSet := k8sutils.GetLegacyManagedByLabelSet(cp)
 
 	validatingWebhookConfigurations, err := k8sutils.ListValidatingWebhookConfigurations(
 		ctx,
