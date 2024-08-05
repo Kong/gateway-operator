@@ -2,7 +2,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-role
+  name: gateway-operator-manager-role
 rules:
 - apiGroups:
   - ""
@@ -114,6 +114,8 @@ rules:
   verbs:
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - configuration.konghq.com
@@ -174,6 +176,24 @@ rules:
 - apiGroups:
   - configuration.konghq.com
   resources:
+  - kongpluginbindings
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongpluginbindings/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - configuration.konghq.com
+  resources:
   - kongplugins
   verbs:
   - create
@@ -187,6 +207,42 @@ rules:
   - configuration.konghq.com
   resources:
   - kongplugins/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongroutes
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongroutes/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongservices
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongservices/status
   verbs:
   - get
   - patch
@@ -599,6 +655,42 @@ rules:
   - incubator.ingress-controller.konghq.com
   resources:
   - kongservicefacades/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - konnect.konghq.com
+  resources:
+  - konnectapiauthconfigurations
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - konnect.konghq.com
+  resources:
+  - konnectapiauthconfigurations/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - konnect.konghq.com
+  resources:
+  - konnectcontrolplanes
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - konnect.konghq.com
+  resources:
+  - konnectcontrolplanes/status
   verbs:
   - get
   - patch

@@ -23,5 +23,3 @@ type AIGatewayExpansion interface{}
 type DataPlaneMetricsExtensionExpansion interface{}
 
 type KongPluginInstallationExpansion interface{}
-
-type KonnectControlPlaneExpansion interface{}

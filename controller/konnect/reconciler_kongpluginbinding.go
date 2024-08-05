@@ -8,8 +8,6 @@ import (
 
 	sdkkonnectgo "github.com/Kong/sdk-konnect-go"
 	sdkkonnectgocomp "github.com/Kong/sdk-konnect-go/models/components"
-	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
-	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -20,6 +18,10 @@ import (
 	"github.com/kong/gateway-operator/controller/pkg/log"
 	"github.com/kong/gateway-operator/controller/pkg/op"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
+
+	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
+	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
+	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
 type KongPluginBindingReconciler struct {
@@ -64,7 +66,7 @@ func (r *KongPluginBindingReconciler) Reconcile(
 	log.Debug(logger, "reconciling", kongPluginBinding)
 
 	var (
-		apiAuth        configurationv1alpha1.KonnectAPIAuthConfiguration
+		apiAuth        konnectv1alpha1.KonnectAPIAuthConfiguration
 		apiAuthRef     *types.NamespacedName
 		kongService    configurationv1alpha1.KongService
 		controlPlaneID string
@@ -98,12 +100,12 @@ func (r *KongPluginBindingReconciler) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("failed to get KonnectAPIAuthConfiguration: %w", err)
 	}
 
-	if cond, present := k8sutils.GetCondition(KonnectAPIAuthConfigurationValidConditionType, &apiAuth.Status); present && cond.Status != metav1.ConditionTrue {
+	if cond, present := k8sutils.GetCondition(KonnectEntityAPIAuthConfigurationValidConditionType, &apiAuth); present && cond.Status != metav1.ConditionTrue {
 		k8sutils.SetCondition(
 			k8sutils.NewConditionWithGeneration(
-				KonnectEntityAPIAuthConfigurationRefValidConditionType,
+				KonnectEntityAPIAuthConfigurationResolvedRefConditionType,
 				metav1.ConditionFalse,
-				KonnectEntityAPIAuthConfigurationRefReasonInvalid,
+				KonnectEntityAPIAuthConfigurationReasonInvalid,
 				"",
 				kongPluginBinding.GetGeneration(),
 			),
@@ -113,9 +115,9 @@ func (r *KongPluginBindingReconciler) Reconcile(
 
 	k8sutils.SetCondition(
 		k8sutils.NewConditionWithGeneration(
-			KonnectEntityAPIAuthConfigurationRefValidConditionType,
+			KonnectEntityAPIAuthConfigurationResolvedRefConditionType,
 			metav1.ConditionTrue,
-			KonnectEntityAPIAuthConfigurationRefReasonValid,
+			KonnectEntityAPIAuthConfigurationReasonValid,
 			fmt.Sprintf("referenced KonnectAPIAuthConfiguration %s is valid", apiAuthRef),
 			kongPluginBinding.GetGeneration(),
 		),

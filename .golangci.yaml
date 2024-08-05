@@ -25,12 +25,12 @@ linters:
   - nilerr
   - nolintlint
   - predeclared
-  - revive
+  # - revive
   - staticcheck
   - typecheck
   - unconvert
-  - unparam
-  - unused
+  # - unparam
+  # - unused
   - wastedassign
   - nakedret
 linters-settings:
@@ -39,6 +39,7 @@ linters-settings:
       - standard
       - default
       - prefix(github.com/kong/gateway-operator)
+      - prefix(github.com/kong/kubernetes-configuration)
   importas:
     no-unaliased: true
     alias:

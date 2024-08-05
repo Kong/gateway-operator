@@ -5,8 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
-	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 	"github.com/samber/lo"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +16,9 @@ import (
 
 	"github.com/kong/gateway-operator/controller/pkg/log"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
+
+	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
+	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 )
 
 type KongPluginReconciler struct {

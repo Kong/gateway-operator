@@ -10,19 +10,21 @@ import (
 	"github.com/Kong/sdk-konnect-go/models/operations"
 	"github.com/Kong/sdk-konnect-go/models/sdkerrors"
 	"github.com/go-logr/logr"
-	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
-	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kong/gateway-operator/controller/pkg/op"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
+
+	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
+	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 )
 
 func kongPluginToCreatePlugin(
 	plugin *configurationv1.KongPlugin,
-	kongService *configurationv1alpha1.KongService) (*sdkkonnectgocomp.PluginInput, error) {
+	kongService *configurationv1alpha1.KongService,
+) (*sdkkonnectgocomp.PluginInput, error) {
 	pluginConfig := map[string]any{}
 	if err := json.Unmarshal(plugin.Config.Raw, &pluginConfig); err != nil {
 		return nil, err
@@ -47,7 +49,6 @@ func upsertPlugin(ctx context.Context,
 	controlplaneID string,
 	pluginBinding *configurationv1alpha1.KongPluginBinding,
 ) (op.Result, error) {
-
 	var (
 		pluginID string
 		resp     Response

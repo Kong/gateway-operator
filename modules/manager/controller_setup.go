@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"reflect"
 
-	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
-	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -28,6 +26,10 @@ import (
 	dataplanevalidator "github.com/kong/gateway-operator/internal/validation/dataplane"
 	"github.com/kong/gateway-operator/pkg/consts"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
+
+	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
+	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
+	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
 const (
@@ -272,60 +274,65 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 				DevelopmentMode: c.DevelopmentMode,
 			},
 		},
-		// Konnect controllers
-		"KonnectAPIAuthConfiguration": {
-			Enabled: true,
-			Controller: konnect.NewKonnectAPIAuthConfigurationReconciler(
-				c.DevelopmentMode,
-				mgr.GetClient(),
-			),
-		},
-		"KonnectControlPlane": {
-			Enabled: true,
-			Controller: konnect.NewKonnectEntityReconciler(
-				operatorv1alpha1.KonnectControlPlane{},
-				c.DevelopmentMode,
-				mgr.GetClient(),
-			),
-		},
-		"KongService": {
-			Enabled: true,
-			Controller: konnect.NewKonnectEntityReconciler(
-				configurationv1alpha1.KongService{},
-				c.DevelopmentMode,
-				mgr.GetClient(),
-			),
-		},
-		"KongRoute": {
-			Enabled: true,
-			Controller: konnect.NewKonnectEntityReconciler(
-				configurationv1alpha1.KongRoute{},
-				c.DevelopmentMode,
-				mgr.GetClient(),
-			),
-		},
-		"KongConsumer": {
-			Enabled: true,
-			Controller: konnect.NewKonnectEntityReconciler(
-				configurationv1.KongConsumer{},
-				c.DevelopmentMode,
-				mgr.GetClient(),
-			),
-		},
-		"KongPlugin": {
-			Enabled: true,
-			Controller: konnect.NewKongPluginReconciler(
-				c.DevelopmentMode,
-				mgr.GetClient(),
-			),
-		},
-		"KongPluginBinding": {
-			Enabled: true,
-			Controller: konnect.NewKongPluginBindingReconciler(
-				c.DevelopmentMode,
-				mgr.GetClient(),
-			),
-		},
+	}
+
+	// Konnect
+	konnectSdkFactory := konnect.NewSDKFactory()
+
+	// Konnect controllers
+	controllers["KonnectAPIAuthConfiguration"] = ControllerDef{
+		Enabled: true,
+		Controller: konnect.NewKonnectAPIAuthConfigurationReconciler(
+			konnectSdkFactory,
+			c.DevelopmentMode,
+			mgr.GetClient(),
+		),
+	}
+	controllers["KonnectControlPlane"] = ControllerDef{
+		Enabled: true,
+		Controller: konnect.NewKonnectEntityReconciler(
+			konnectv1alpha1.KonnectControlPlane{},
+			c.DevelopmentMode,
+			mgr.GetClient(),
+		),
+	}
+	controllers["KongService"] = ControllerDef{
+		Enabled: true,
+		Controller: konnect.NewKonnectEntityReconciler(
+			configurationv1alpha1.KongService{},
+			c.DevelopmentMode,
+			mgr.GetClient(),
+		),
+	}
+	controllers["KongRoute"] = ControllerDef{
+		Enabled: true,
+		Controller: konnect.NewKonnectEntityReconciler(
+			configurationv1alpha1.KongRoute{},
+			c.DevelopmentMode,
+			mgr.GetClient(),
+		),
+	}
+	controllers["KongConsumer"] = ControllerDef{
+		Enabled: true,
+		Controller: konnect.NewKonnectEntityReconciler(
+			configurationv1.KongConsumer{},
+			c.DevelopmentMode,
+			mgr.GetClient(),
+		),
+	}
+	controllers["KongPlugin"] = ControllerDef{
+		Enabled: true,
+		Controller: konnect.NewKongPluginReconciler(
+			c.DevelopmentMode,
+			mgr.GetClient(),
+		),
+	}
+	controllers["KongPluginBinding"] = ControllerDef{
+		Enabled: true,
+		Controller: konnect.NewKongPluginBindingReconciler(
+			c.DevelopmentMode,
+			mgr.GetClient(),
+		),
 	}
 
 	return controllers, nil

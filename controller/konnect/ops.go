@@ -9,15 +9,16 @@ import (
 
 	sdkkonnectgo "github.com/Kong/sdk-konnect-go"
 	"github.com/go-logr/logr"
-	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
-	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/controller/pkg/log"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
+
+	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
+	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
+	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
 type Response interface {
@@ -29,7 +30,6 @@ type Response interface {
 type Op string
 
 const (
-	GetOp    Op = "get"
 	CreateOp Op = "create"
 	UpdateOp Op = "update"
 	DeleteOp Op = "delete"
@@ -42,7 +42,7 @@ func Create[
 	defer logOpComplete[T, TEnt](logger, time.Now(), CreateOp, e)
 
 	switch ent := any(e).(type) {
-	case *operatorv1alpha1.KonnectControlPlane:
+	case *konnectv1alpha1.KonnectControlPlane:
 		return e, createControlPlane(ctx, sdk, logger, ent)
 	case *configurationv1alpha1.KongService:
 		return e, createService(ctx, sdk, logger, cl, ent)
@@ -66,7 +66,7 @@ func Delete[
 	defer logOpComplete[T, TEnt](logger, time.Now(), DeleteOp, e)
 
 	switch ent := any(e).(type) {
-	case *operatorv1alpha1.KonnectControlPlane:
+	case *konnectv1alpha1.KonnectControlPlane:
 		return deleteControlPlane(ctx, sdk, logger, ent)
 	case *configurationv1alpha1.KongService:
 		return deleteService(ctx, sdk, logger, cl, ent)
@@ -115,7 +115,7 @@ func Update[
 	defer logOpComplete[T, TEnt](logger, now, UpdateOp, e)
 
 	switch ent := any(e).(type) {
-	case *operatorv1alpha1.KonnectControlPlane:
+	case *konnectv1alpha1.KonnectControlPlane:
 		return ctrl.Result{}, updateControlPlane(ctx, sdk, logger, ent)
 	case *configurationv1alpha1.KongService:
 		return ctrl.Result{}, updateService(ctx, sdk, logger, cl, ent)
@@ -151,9 +151,10 @@ func handleResp[T SupportedKonnectEntityType](err error, resp Response, op Op) e
 	if err != nil {
 		return err
 	}
-	defer resp.GetRawResponse().Body.Close()
+	body := resp.GetRawResponse().Body
+	defer body.Close()
 	if resp.GetStatusCode() < 200 || resp.GetStatusCode() >= 400 {
-		b, err := io.ReadAll(resp.GetRawResponse().Body)
+		b, err := io.ReadAll(body)
 		if err != nil {
 			var e T
 			return fmt.Errorf(
@@ -167,6 +168,7 @@ func handleResp[T SupportedKonnectEntityType](err error, resp Response, op Op) e
 	return nil
 }
 
+//nolint:unused
 type getLabeler interface {
 	GetLabels() map[string]string
 }
@@ -178,6 +180,8 @@ type SetLabels interface {
 // setKonnectLabels sets the Konnect labels on the object which will be created/updated
 // in Konnect.
 // TODO: Do we want to copy the k8s labels (or annotations?) to Konnect?
+//
+//nolint:unused
 func setKonnectLabels[
 	T SupportedKonnectEntityType,
 	TEnt EntityType[T],
@@ -196,6 +200,8 @@ func setKonnectLabels[
 
 // k8sLabelsForEntity returns the k8s labels for a Konnect entity.
 // Those labels are based on the entity's metadata.
+//
+//nolint:unused
 func k8sLabelsForEntity[
 	T SupportedKonnectEntityType,
 	TEnt EntityType[T],

@@ -7,8 +7,6 @@ import (
 
 	sdkkonnectgo "github.com/Kong/sdk-konnect-go"
 	sdkkonnectgocomp "github.com/Kong/sdk-konnect-go/models/components"
-	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
-	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,9 +15,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	"github.com/kong/gateway-operator/controller/pkg/log"
+	"github.com/kong/gateway-operator/pkg/consts"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
+
+	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
+	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
+	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
 const (
@@ -94,7 +96,7 @@ func (r *KonnectEntityReconciler[T, TEnt]) Reconcile(
 
 	log.Debug(logger, "reconciling", ent)
 	var (
-		apiAuth    configurationv1alpha1.KonnectAPIAuthConfiguration
+		apiAuth    konnectv1alpha1.KonnectAPIAuthConfiguration
 		apiAuthRef = types.NamespacedName{
 			Name:      ent.GetKonnectAPIAuthConfigurationRef().Name,
 			Namespace: ent.GetNamespace(),
@@ -109,12 +111,12 @@ func (r *KonnectEntityReconciler[T, TEnt]) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("failed to get KonnectAPIAuthConfiguration: %w", err)
 	}
 
-	if cond, present := k8sutils.GetCondition(KonnectAPIAuthConfigurationValidConditionType, &apiAuth.Status); present && cond.Status != metav1.ConditionTrue {
+	if cond, present := k8sutils.GetCondition(KonnectEntityAPIAuthConfigurationValidConditionType, &apiAuth); present && cond.Status != metav1.ConditionTrue {
 		k8sutils.SetCondition(
 			k8sutils.NewConditionWithGeneration(
-				KonnectEntityAPIAuthConfigurationRefValidConditionType,
+				KonnectEntityAPIAuthConfigurationResolvedRefConditionType,
 				metav1.ConditionFalse,
-				KonnectEntityAPIAuthConfigurationRefReasonInvalid,
+				KonnectEntityAPIAuthConfigurationReasonInvalid,
 				"",
 				ent.GetGeneration(),
 			),
@@ -126,9 +128,9 @@ func (r *KonnectEntityReconciler[T, TEnt]) Reconcile(
 
 	k8sutils.SetCondition(
 		k8sutils.NewConditionWithGeneration(
-			KonnectEntityAPIAuthConfigurationRefValidConditionType,
+			KonnectEntityAPIAuthConfigurationResolvedRefConditionType,
 			metav1.ConditionTrue,
-			KonnectEntityAPIAuthConfigurationRefReasonValid,
+			KonnectEntityAPIAuthConfigurationReasonValid,
 			fmt.Sprintf("referenced KonnectAPIAuthConfiguration %s is valid", apiAuthRef),
 			ent.GetGeneration(),
 		),
@@ -186,7 +188,7 @@ func (r *KonnectEntityReconciler[T, TEnt]) Reconcile(
 		cpRef := getControlPlaneRef(ent)
 		switch cpRef.Type {
 		case configurationv1alpha1.ControlPlaneRefKonnectNamespacedRef:
-			cp := operatorv1alpha1.KonnectControlPlane{}
+			cp := konnectv1alpha1.KonnectControlPlane{}
 			nn := types.NamespacedName{
 				Name:      cpRef.KonnectNamespacedRef.Name,
 				Namespace: cpRef.KonnectNamespacedRef.Namespace,
@@ -454,7 +456,7 @@ func typeHasControlPlaneRef[T SupportedKonnectEntityType, TEnt EntityType[T]](
 	e TEnt,
 ) bool {
 	switch e := any(e).(type) {
-	case *operatorv1alpha1.KonnectControlPlane:
+	case *konnectv1alpha1.KonnectControlPlane:
 		return false
 	case *configurationv1alpha1.KongService:
 		return true
@@ -471,7 +473,7 @@ func getControlPlaneRef[T SupportedKonnectEntityType, TEnt EntityType[T]](
 	e TEnt,
 ) configurationv1alpha1.ControlPlaneRef {
 	switch e := any(e).(type) {
-	case *operatorv1alpha1.KonnectControlPlane:
+	case *konnectv1alpha1.KonnectControlPlane:
 		// TODO: handle better
 		// Should never happen
 		panic(fmt.Sprintf("unsupported entity type %T", e))
@@ -490,7 +492,7 @@ func typeHasServiceRef[T SupportedKonnectEntityType, TEnt EntityType[T]](
 	e TEnt,
 ) bool {
 	switch any(e).(type) {
-	case *operatorv1alpha1.KonnectControlPlane:
+	case *konnectv1alpha1.KonnectControlPlane:
 		return false
 	case *configurationv1alpha1.KongService:
 		return false
@@ -507,7 +509,7 @@ func getServiceRef[T SupportedKonnectEntityType, TEnt EntityType[T]](
 	e TEnt,
 ) configurationv1alpha1.ServiceRef {
 	switch e := any(e).(type) {
-	case *operatorv1alpha1.KonnectControlPlane, *configurationv1alpha1.KongService:
+	case *konnectv1alpha1.KonnectControlPlane, *configurationv1alpha1.KongService:
 		// TODO: handle better
 		// Should never happen
 		panic(fmt.Sprintf("unsupported entity type %T", e))
@@ -516,4 +518,50 @@ func getServiceRef[T SupportedKonnectEntityType, TEnt EntityType[T]](
 	default:
 		panic(fmt.Sprintf("unsupported entity type %T", e))
 	}
+}
+
+func updateStatusWithCondition[T interface {
+	client.Object
+	k8sutils.ConditionsAware
+}](
+	ctx context.Context,
+	client client.Client,
+	ent T,
+	conditionType consts.ConditionType,
+	conditionStatus metav1.ConditionStatus,
+	conditionReason consts.ConditionReason,
+	conditionMessage string,
+) (ctrl.Result, error) {
+	k8sutils.SetCondition(
+		k8sutils.NewConditionWithGeneration(
+			conditionType,
+			conditionStatus,
+			conditionReason,
+			conditionMessage,
+			ent.GetGeneration(),
+		),
+		ent,
+	)
+
+	if err := client.Status().Update(ctx, ent); err != nil {
+		if k8serrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf(
+			"failed to update status with %s condition: %w",
+			KonnectEntityAPIAuthConfigurationResolvedRefConditionType, err,
+		)
+	}
+
+	return ctrl.Result{}, nil
+}
+
+//nolint:unused
+func conditionMessageReferenceKonnectAPIAuthConfigurationInvalid(apiAuthRef types.NamespacedName) string {
+	return fmt.Sprintf("referenced KonnectAPIAuthConfiguration %s is invalid", apiAuthRef)
+}
+
+//nolint:unused
+func conditionMessageReferenceKonnectAPIAuthConfigurationValid(apiAuthRef types.NamespacedName) string {
+	return fmt.Sprintf("referenced KonnectAPIAuthConfiguration %s is valid", apiAuthRef)
 }
