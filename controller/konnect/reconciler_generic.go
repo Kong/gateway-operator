@@ -419,8 +419,8 @@ func getAPIAuthRefNN[T SupportedKonnectEntityType, TEnt EntityType[T]](
 	)
 }
 
-func getControlPlaneRef[T SupportedKonnectEntityType, TEnt EntityType[T]](
-	e TEnt,
+func getControlPlaneRef[T SupportedKonnectEntityType](
+	e *T,
 ) mo.Option[configurationv1alpha1.ControlPlaneRef] {
 	switch e := any(e).(type) {
 	case *konnectv1alpha1.KonnectControlPlane:

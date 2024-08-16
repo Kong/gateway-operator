@@ -17,6 +17,7 @@ import (
 	operatorerrors "github.com/kong/gateway-operator/internal/errors"
 	"github.com/kong/gateway-operator/modules/manager/logging"
 
+	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
@@ -46,7 +47,7 @@ func KongServiceReconciliationWatchOptions(
 			return b.Watches(
 				&konnectv1alpha1.KonnectAPIAuthConfiguration{},
 				handler.EnqueueRequestsFromMapFunc(
-					enqueueKongServiceForKonnectAPIAuthConfiguration(cl),
+					enqueueForKonnectAPIAuthConfiguration[configurationv1alpha1.KongService](cl),
 				),
 			)
 		},
@@ -78,7 +79,41 @@ func kongServiceRefersToKonnectControlPlane(obj client.Object) bool {
 	return cpRef != nil && cpRef.Type == configurationv1alpha1.ControlPlaneRefKonnectNamespacedRef
 }
 
-func enqueueKongServiceForKonnectAPIAuthConfiguration(
+type SupportedKonnectListType[T SupportedKonnectEntityType] interface {
+	configurationv1alpha1.KongServiceList |
+		configurationv1.KongConsumerList
+
+	client.ObjectList
+}
+
+type X[T SupportedKonnectEntityType] struct {
+	Items []T
+}
+
+func itemsForListType[
+	T SupportedKonnectEntityType,
+	TList SupportedKonnectListType[T],
+](list TList) []*T {
+	switch list := any(list).(type) {
+	case *configurationv1alpha1.KongServiceList:
+		items := make([]*T, 0, len(list.Items))
+		for i := range list.Items {
+			t := T(list.Items[i])
+
+			items = append(items, &t)
+		}
+
+		return items
+	default:
+		return nil
+	}
+}
+
+func enqueueForKonnectAPIAuthConfiguration[
+	T SupportedKonnectEntityType,
+	TEnt EntityType[T],
+	TList SupportedKonnectListType[T],
+](
 	cl client.Client,
 ) func(ctx context.Context, obj client.Object) []reconcile.Request {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -86,8 +121,8 @@ func enqueueKongServiceForKonnectAPIAuthConfiguration(
 		if !ok {
 			return nil
 		}
-		var l configurationv1alpha1.KongServiceList
-		if err := cl.List(ctx, &l, &client.ListOptions{
+		var l TList
+		if err := cl.List(ctx, l, &client.ListOptions{
 			// TODO: change this when cross namespace refs are allowed.
 			Namespace: auth.GetNamespace(),
 		}); err != nil {
@@ -95,8 +130,8 @@ func enqueueKongServiceForKonnectAPIAuthConfiguration(
 		}
 
 		var ret []reconcile.Request
-		for _, svc := range l.Items {
-			cpRef, ok := getControlPlaneRef(&svc).Get()
+		for _, obj := range itemsForListType[T](l) {
+			cpRef, ok := getControlPlaneRef[T](obj).Get()
 			if !ok {
 				continue
 			}
@@ -105,7 +140,7 @@ func enqueueKongServiceForKonnectAPIAuthConfiguration(
 			case configurationv1alpha1.ControlPlaneRefKonnectNamespacedRef:
 				nn := types.NamespacedName{
 					Name:      cpRef.KonnectNamespacedRef.Name,
-					Namespace: svc.Namespace,
+					Namespace: obj.GetNamespace(),
 				}
 				// TODO: change this when cross namespace refs are allowed.
 				if nn.Namespace != auth.Namespace {
@@ -128,8 +163,8 @@ func enqueueKongServiceForKonnectAPIAuthConfiguration(
 
 				ret = append(ret, reconcile.Request{
 					NamespacedName: types.NamespacedName{
-						Namespace: svc.Namespace,
-						Name:      svc.Name,
+						Namespace: obj.GetNamespace(),
+						Name:      obj.GetName(),
 					},
 				})
 
@@ -137,14 +172,14 @@ func enqueueKongServiceForKonnectAPIAuthConfiguration(
 				ctrllog.FromContext(ctx).Error(
 					fmt.Errorf("unimplemented ControlPlaneRef type %q", cpRef.Type),
 					"unimplemented ControlPlaneRef for KongService",
-					"KongService", svc, "refType", cpRef.Type,
+					"KongService", obj, "refType", cpRef.Type,
 				)
 				continue
 
 			default:
 				ctrllog.FromContext(ctx).V(logging.DebugLevel.Value()).Info(
 					"unsupported ControlPlaneRef for KongService",
-					"KongService", svc, "refType", cpRef.Type,
+					"KongService", obj, "refType", cpRef.Type,
 				)
 				continue
 			}
