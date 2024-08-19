@@ -236,6 +236,12 @@ generate.testcases-registration:
 generate.kic-webhook-config: kustomize kic-webhook-config-generator
 	KUSTOMIZE=$(KUSTOMIZE) $(KIC_WEBHOOKCONFIG_GENERATOR)
 
+.PHONY: generate.cli-arguments
+generate.cli-arguments-docs:
+	go run \
+		-ldflags "$(LDFLAGS_COMMON) $(LDFLAGS) $(LDFLAGS_METADATA)" \
+		./scripts/cli-arguments-docs-gen/main.go > ./docs/cli-arguments.md
+
 # ------------------------------------------------------------------------------
 # Files generation checks
 # ------------------------------------------------------------------------------

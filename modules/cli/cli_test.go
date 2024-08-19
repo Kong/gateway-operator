@@ -140,8 +140,6 @@ func expectedDefaultCfg() manager.Config {
 		ControllerName:                          "",
 		ControllerNamespace:                     "kong-system",
 		AnonymousReports:                        true,
-		APIServerPath:                           "",
-		KubeconfigPath:                          "",
 		ClusterCASecretName:                     "kong-operator-ca",
 		ClusterCASecretNamespace:                "kong-system",
 		GatewayControllerEnabled:                true,

@@ -69,8 +69,6 @@ type Config struct {
 	ControllerName           string
 	ControllerNamespace      string
 	AnonymousReports         bool
-	APIServerPath            string
-	KubeconfigPath           string
 	ClusterCASecretName      string
 	ClusterCASecretNamespace string
 	LoggerOpts               *zap.Options

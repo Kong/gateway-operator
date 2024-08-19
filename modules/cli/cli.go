@@ -8,32 +8,32 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+	"github.com/spf13/pflag"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/kong/gateway-operator/modules/manager"
 	"github.com/kong/gateway-operator/modules/manager/logging"
 	"github.com/kong/gateway-operator/modules/manager/metadata"
+	"github.com/kong/gateway-operator/pkg/vars"
 )
 
 // New returns a new CLI.
 func New(m metadata.Info) *CLI {
-	flagSet := flag.NewFlagSet("", flag.ExitOnError)
+	flagSet := pflag.NewFlagSet("", pflag.ExitOnError)
 
 	var cfg manager.Config
 	var deferCfg flagsForFurtherEvaluation
 
 	flagSet.BoolVar(&cfg.AnonymousReports, "anonymous-reports", true, "Send anonymized usage data to help improve Kong.")
-	flagSet.StringVar(&cfg.APIServerPath, "apiserver-host", "", "The Kubernetes API server URL. If not set, the operator will use cluster config discovery.")
-	flagSet.StringVar(&cfg.KubeconfigPath, "kubeconfig", "", "Path to the kubeconfig file.")
 
 	flagSet.StringVar(&cfg.MetricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flagSet.StringVar(&cfg.ProbeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flagSet.BoolVar(&deferCfg.DisableLeaderElection, "no-leader-election", false,
 		"Disable leader election for controller manager. Disabling this will not ensure there is only one active controller manager.")
 
-	flagSet.StringVar(&cfg.ControllerName, "controller-name", "", "Controller name to use if other than the default, only needed for multi-tenancy.")
+	flagSet.StringVar(&cfg.ControllerName, "controller-name", vars.DefaultControllerName, "Controller name to use if other than the default, only needed for multi-tenancy.")
 	flagSet.StringVar(&cfg.ClusterCASecretName, "cluster-ca-secret", "kong-operator-ca", "Name of the Secret containing the cluster CA certificate.")
-	flagSet.StringVar(&deferCfg.ClusterCASecretNamespace, "cluster-ca-secret-namespace", "", "Name of the namespace for Secret containing the cluster CA certificate.")
+	flagSet.StringVar(&deferCfg.ClusterCASecretNamespace, "cluster-ca-secret-namespace", "$POD_NAMESPACE", "Name of the namespace for Secret containing the cluster CA certificate.")
 
 	// controllers for standard APIs and features
 	flagSet.BoolVar(&cfg.GatewayControllerEnabled, "enable-controller-gateway", true, "Enable the Gateway controller.")
@@ -59,9 +59,11 @@ func New(m metadata.Info) *CLI {
 		os.Getenv("CONTROLLER_DEVELOPMENT_MODE") == "true" {
 		developmentModeEnabled = true
 	}
+	logFlagSet := flag.NewFlagSet("logger", flag.ExitOnError)
 	loggerOpts := lo.ToPtr(*manager.DefaultConfig().LoggerOpts)
 	loggerOpts.Development = developmentModeEnabled
-	loggerOpts.BindFlags(flagSet)
+	loggerOpts.BindFlags(logFlagSet)
+	flagSet.AddGoFlagSet(logFlagSet)
 
 	return &CLI{
 		flagSet:         flagSet,
@@ -74,7 +76,7 @@ func New(m metadata.Info) *CLI {
 
 // CLI represents command line interface for the operator.
 type CLI struct {
-	flagSet    *flag.FlagSet
+	flagSet    *pflag.FlagSet
 	loggerOpts *zap.Options
 
 	// deferFlagValues contains values of flags that require additional
@@ -107,7 +109,7 @@ func (c *CLI) bindEnvVarsToFlags() (err error) {
 		}
 	}()
 
-	c.flagSet.VisitAll(func(f *flag.Flag) {
+	c.flagSet.VisitAll(func(f *pflag.Flag) {
 		envKey = fmt.Sprintf("%s%s", envVarFlagPrefix, strings.ToUpper(strings.ReplaceAll(f.Name, "-", "_")))
 
 		if envValue, envSet := os.LookupEnv(envKey); envSet {
@@ -223,6 +225,6 @@ func (c *CLI) Parse(arguments []string) manager.Config {
 // FlagSet returns bare underlying flagset of the cli. It can be used to register
 // additional flags. They will be parsed by Parse() method. Caller needs to take
 // care of values set by flags added to this flagset.
-func (c *CLI) FlagSet() *flag.FlagSet {
+func (c *CLI) FlagSet() *pflag.FlagSet {
 	return c.flagSet
 }
