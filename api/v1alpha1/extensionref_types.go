@@ -18,7 +18,6 @@ package v1alpha1
 
 // ExtensionRef corresponds to another resource in the Kubernetes cluster which
 // defines extended behavior for a resource (e.g. ControlPlane).
-// +apireference:kgo:include
 type ExtensionRef struct {
 	// Group is the group of the extension resource.
 	// +kubebuilder:validation:Optional
@@ -33,7 +32,6 @@ type ExtensionRef struct {
 }
 
 // NamespacedRef is a reference to a namespaced resource.
-// +apireference:kgo:include
 type NamespacedRef struct {
 	// Name is the name of the referred resource.
 	//

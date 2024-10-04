@@ -16,7 +16,7 @@ function cleanup {
   rm -rf "${WORK_DIR}"
   echo "Cleaned up temporary working directory: ${WORK_DIR}"
 }
-trap cleanup EXIT
+#trap cleanup EXIT
 
 # Resolve the path to the kubernetes-configuration module in Go modules' cache.
 KUBERNETES_CONFIGURATION_CRDS_PACKAGE="github.com/kong/kubernetes-configuration"

@@ -51,7 +51,6 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Endpoint",type="string",JSONPath=".status.endpoint",description="The URL endpoint for the AIGateway"
-// +apireference:kgo:include
 type AIGateway struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -68,7 +67,6 @@ type AIGateway struct {
 // AIGatewayList contains a list of AIGateways.
 //
 // +kubebuilder:object:root=true
-// +apireference:kgo:include
 type AIGatewayList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -82,7 +80,6 @@ type AIGatewayList struct {
 // -----------------------------------------------------------------------------
 
 // AIGatewaySpec defines the desired state of an AIGateway.
-// +apireference:kgo:include
 type AIGatewaySpec struct {
 	// GatewayClassName is the name of the GatewayClass which is responsible for
 	// the AIGateway.
@@ -142,7 +139,6 @@ type AIGatewaySpec struct {
 // LargeLanguageModels is a list of Large Language Models (LLM) hosted in
 // various ways (cloud hosted, self hosted, e.t.c.) which the AIGateway should
 // serve and manage traffic for.
-// +apireference:kgo:include
 type LargeLanguageModels struct {
 	// CloudHosted configures LLMs hosted and served by cloud providers.
 	//
@@ -159,7 +155,6 @@ type LargeLanguageModels struct {
 // CloudHostedLargeLanguageModel is the configuration for Large Language Models
 // (LLM) hosted by a known and supported AI cloud provider (e.g. OpenAI, Cohere,
 // Azure, e.t.c.).
-// +apireference:kgo:include
 type CloudHostedLargeLanguageModel struct {
 	// Identifier is the unique name which identifies the LLM. This will be used
 	// as part of the requests made to an AIGateway endpoint. For instance: if
@@ -228,7 +223,6 @@ type CloudHostedLargeLanguageModel struct {
 // -----------------------------------------------------------------------------
 
 // AIGatewayStatus defines the observed state of AIGateway.
-// +apireference:kgo:include
 type AIGatewayStatus struct {
 	// Endpoints are collections of the URL, credentials and metadata needed in
 	// order to access models served by the AIGateway for inference.
