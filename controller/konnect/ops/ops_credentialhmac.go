@@ -3,11 +3,12 @@ package ops
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
 	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"github.com/samber/lo"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 )
@@ -34,12 +35,14 @@ func createKongCredentialHMAC(
 	// Can't adopt it as it will cause conflicts between the controller
 	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, CreateOp, cred); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(cred, "FailedToCreate", errWrap.Error())
 		return errWrap
 	}
 
-	cred.Status.Konnect.SetKonnectID(*resp.HMACAuth.ID)
-	SetKonnectEntityProgrammedCondition(cred)
+	if resp == nil || resp.HMACAuth == nil || resp.HMACAuth.ID == nil {
+		return fmt.Errorf("failed creating %s: %w", cred.GetTypeName(), ErrNilResponse)
+	}
+
+	cred.SetKonnectID(*resp.HMACAuth.ID)
 
 	return nil
 }
@@ -91,11 +94,8 @@ func updateKongCredentialHMAC(
 			}
 		}
 
-		SetKonnectEntityProgrammedConditionFalse(cred, "FailedToUpdate", errWrap.Error())
 		return errWrap
 	}
-
-	SetKonnectEntityProgrammedCondition(cred)
 
 	return nil
 }
@@ -117,25 +117,7 @@ func deleteKongCredentialHMAC(
 			HMACAuthID:                  id,
 		})
 	if errWrap := wrapErrIfKonnectOpFailed(err, DeleteOp, cred); errWrap != nil {
-		// Service delete operation returns an SDKError instead of a NotFoundError.
-		var sdkError *sdkkonnecterrs.SDKError
-		if errors.As(errWrap, &sdkError) {
-			if sdkError.StatusCode == 404 {
-				ctrllog.FromContext(ctx).
-					Info("entity not found in Konnect, skipping delete",
-						"op", DeleteOp, "type", cred.GetTypeName(), "id", id,
-					)
-				return nil
-			}
-			return FailedKonnectOpError[configurationv1alpha1.KongCredentialHMAC]{
-				Op:  DeleteOp,
-				Err: sdkError,
-			}
-		}
-		return FailedKonnectOpError[configurationv1alpha1.KongService]{
-			Op:  DeleteOp,
-			Err: errWrap,
-		}
+		return handleDeleteError(ctx, err, cred)
 	}
 
 	return nil
@@ -150,4 +132,31 @@ func kongCredentialHMACToHMACWithoutParents(
 		Tags:     GenerateTagsForObject(cred, cred.Spec.Tags...),
 	}
 	return ret
+}
+
+// getKongCredentialHMACForUID lists HMAC credentials in Konnect with given k8s uid as its tag.
+func getKongCredentialHMACForUID(
+	ctx context.Context,
+	sdk KongCredentialHMACSDK,
+	cred *configurationv1alpha1.KongCredentialHMAC,
+) (string, error) {
+	cpID := cred.GetControlPlaneID()
+
+	req := sdkkonnectops.ListHmacAuthRequest{
+		// NOTE: only filter on object's UID.
+		// Other fields like name might have changed in the meantime but that's OK.
+		// Those will be enforced via subsequent updates.
+		ControlPlaneID: cpID,
+		Tags:           lo.ToPtr(UIDLabelForObject(cred)),
+	}
+
+	resp, err := sdk.ListHmacAuth(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed listing %s: %w", cred.GetTypeName(), err)
+	}
+	if resp == nil || resp.Object == nil {
+		return "", fmt.Errorf("failed listing %s: %w", cred.GetTypeName(), ErrNilResponse)
+	}
+
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDSlice(resp.Object.Data), cred)
 }

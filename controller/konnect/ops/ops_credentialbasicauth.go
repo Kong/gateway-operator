@@ -2,13 +2,11 @@ package ops
 
 import (
 	"context"
-	"errors"
+	"fmt"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
-	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
 	"github.com/samber/lo"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 )
@@ -35,12 +33,14 @@ func createKongCredentialBasicAuth(
 	// Can't adopt it as it will cause conflicts between the controller
 	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, CreateOp, cred); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(cred, "FailedToCreate", errWrap.Error())
 		return errWrap
 	}
 
-	cred.Status.Konnect.SetKonnectID(*resp.BasicAuth.ID)
-	SetKonnectEntityProgrammedCondition(cred)
+	if resp == nil || resp.BasicAuth == nil || resp.BasicAuth.ID == nil {
+		return fmt.Errorf("failed creating %s: %w", cred.GetTypeName(), ErrNilResponse)
+	}
+
+	cred.SetKonnectID(*resp.BasicAuth.ID)
 
 	return nil
 }
@@ -70,11 +70,8 @@ func updateKongCredentialBasicAuth(
 	// Can't adopt it as it will cause conflicts between the controller
 	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, UpdateOp, cred); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(cred, "FailedToUpdate", errWrap.Error())
 		return errWrap
 	}
-
-	SetKonnectEntityProgrammedCondition(cred)
 
 	return nil
 }
@@ -96,25 +93,7 @@ func deleteKongCredentialBasicAuth(
 			BasicAuthID:                 id,
 		})
 	if errWrap := wrapErrIfKonnectOpFailed(err, DeleteOp, cred); errWrap != nil {
-		// Service delete operation returns an SDKError instead of a NotFoundError.
-		var sdkError *sdkkonnecterrs.SDKError
-		if errors.As(errWrap, &sdkError) {
-			if sdkError.StatusCode == 404 {
-				ctrllog.FromContext(ctx).
-					Info("entity not found in Konnect, skipping delete",
-						"op", DeleteOp, "type", cred.GetTypeName(), "id", id,
-					)
-				return nil
-			}
-			return FailedKonnectOpError[configurationv1alpha1.KongCredentialBasicAuth]{
-				Op:  DeleteOp,
-				Err: sdkError,
-			}
-		}
-		return FailedKonnectOpError[configurationv1alpha1.KongService]{
-			Op:  DeleteOp,
-			Err: errWrap,
-		}
+		return handleDeleteError(ctx, err, cred)
 	}
 
 	return nil
@@ -128,4 +107,31 @@ func kongCredentialBasicAuthToBasicAuthWithoutParents(
 		Username: lo.ToPtr(cred.Spec.Username),
 		Tags:     GenerateTagsForObject(cred, cred.Spec.Tags...),
 	}
+}
+
+// getKongCredentialBasicAuthForUID lists basic auth credentials in Konnect with given k8s uid as its tag.
+func getKongCredentialBasicAuthForUID(
+	ctx context.Context,
+	sdk KongCredentialBasicAuthSDK,
+	cred *configurationv1alpha1.KongCredentialBasicAuth,
+) (string, error) {
+	cpID := cred.GetControlPlaneID()
+
+	req := sdkkonnectops.ListBasicAuthRequest{
+		// NOTE: only filter on object's UID.
+		// Other fields like name might have changed in the meantime but that's OK.
+		// Those will be enforced via subsequent updates.
+		ControlPlaneID: cpID,
+		Tags:           lo.ToPtr(UIDLabelForObject(cred)),
+	}
+
+	resp, err := sdk.ListBasicAuth(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed listing %s: %w", cred.GetTypeName(), err)
+	}
+	if resp == nil || resp.Object == nil {
+		return "", fmt.Errorf("failed listing %s: %w", cred.GetTypeName(), ErrNilResponse)
+	}
+
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDSlice(resp.Object.Data), cred)
 }
