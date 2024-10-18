@@ -126,6 +126,16 @@ func Create[
 			id, err = getKongKeyForUID(ctx, sdk.GetKeysSDK(), ent)
 		case *configurationv1alpha1.KongUpstream:
 			id, err = getKongUpstreamForUID(ctx, sdk.GetUpstreamsSDK(), ent)
+		case *configurationv1alpha1.KongCredentialHMAC:
+			id, err = getKongCredentialHMACForUID(ctx, sdk.GetHMACCredentialsSDK(), ent)
+		case *configurationv1alpha1.KongCredentialJWT:
+			id, err = getKongCredentialJWTForUID(ctx, sdk.GetJWTCredentialsSDK(), ent)
+		case *configurationv1alpha1.KongCredentialBasicAuth:
+			id, err = getKongCredentialBasicAuthForUID(ctx, sdk.GetBasicAuthCredentialsSDK(), ent)
+		case *configurationv1alpha1.KongCredentialAPIKey:
+			id, err = getKongCredentialAPIKeyForUID(ctx, sdk.GetAPIKeyCredentialsSDK(), ent)
+		case *configurationv1alpha1.KongCredentialACL:
+			id, err = getKongCredentialACLForUID(ctx, sdk.GetACLCredentialsSDK(), ent)
 			// ---------------------------------------------------------------------
 			// TODO: add other Konnect types
 		default:
