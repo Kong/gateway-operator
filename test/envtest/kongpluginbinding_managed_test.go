@@ -11,9 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -67,32 +65,37 @@ func TestKongPluginBindingManaged(t *testing.T) {
 
 	StartReconcilers(ctx, t, mgr, logs, reconcilers...)
 
-	rateLimitingkongPlugin := &configurationv1.KongPlugin{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "rate-limiting-kp-",
-		},
-		PluginName: "rate-limiting",
-		Config: apiextensionsv1.JSON{
-			Raw: []byte(`{"minute": 5, "policy": "local"}`),
-		},
-	}
-	require.NoError(t, clientNamespaced.Create(ctx, rateLimitingkongPlugin))
-	t.Logf("deployed %s KongPlugin (%s) resource", client.ObjectKeyFromObject(rateLimitingkongPlugin), rateLimitingkongPlugin.PluginName)
+	pluginID := uuid.NewString()
+	sdk.PluginSDK.EXPECT().
+		CreatePlugin(mock.Anything, cp.GetKonnectStatus().GetKonnectID(), mock.Anything).
+		Return(
+			&sdkkonnectops.CreatePluginResponse{
+				Plugin: &sdkkonnectcomp.Plugin{
+					ID: lo.ToPtr(pluginID),
+				},
+			},
+			nil,
+		)
+	sdk.PluginSDK.EXPECT().
+		UpsertPlugin(mock.Anything,
+			mock.MatchedBy(func(r sdkkonnectops.UpsertPluginRequest) bool {
+				return r.ControlPlaneID == cp.GetKonnectStatus().GetKonnectID() &&
+					r.PluginID == pluginID
+			}),
+		).
+		Return(
+			&sdkkonnectops.UpsertPluginResponse{
+				Plugin: &sdkkonnectcomp.Plugin{
+					ID: lo.ToPtr(pluginID),
+				},
+			},
+			nil,
+		).
+		Maybe()
+	rateLimitingkongPlugin := deploy.RateLimitingPlugin(t, ctx, clientNamespaced)
 
 	t.Run("binding to KongService", func(t *testing.T) {
 		serviceID := uuid.NewString()
-
-		pluginID := uuid.NewString()
-		sdk.PluginSDK.EXPECT().
-			CreatePlugin(mock.Anything, cp.GetKonnectStatus().GetKonnectID(), mock.Anything).
-			Return(
-				&sdkkonnectops.CreatePluginResponse{
-					Plugin: &sdkkonnectcomp.Plugin{
-						ID: lo.ToPtr(pluginID),
-					},
-				},
-				nil,
-			)
 
 		wKongPluginBinding := setupWatch[configurationv1alpha1.KongPluginBindingList](t, ctx, clientWithWatch, client.InNamespace(ns.Name))
 		wKongPlugin := setupWatch[configurationv1.KongPluginList](t, ctx, clientWithWatch, client.InNamespace(ns.Name))
