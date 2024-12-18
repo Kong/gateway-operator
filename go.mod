@@ -8,6 +8,8 @@ go 1.23.2
 // This retraction is to prevent it from being used and from breaking builds of dependent projects.
 retract v1.2.2
 
+replace oras.land/oras-go/v2 => github.com/programmer04/oras-go/v2 v2.5.1-0.20241220123114-0ad13e6c72b9
+
 require (
 	github.com/Kong/sdk-konnect-go v0.1.14
 	github.com/Masterminds/semver v1.5.0
