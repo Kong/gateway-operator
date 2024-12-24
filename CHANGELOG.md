@@ -37,6 +37,13 @@
   and preview deployments are now customized with Konnect-related settings.
   [#910](https://github.com/Kong/gateway-operator/pull/910)
 
+### Added
+
+- Added prometheus metrics for Konnect entity operations in the metrics server:
+  - `gateway_operator_konnect_entity_operation_count` for number of operations
+  - `gateway_operator_konnect_entity_operation_duration` for duration of operations
+  [#953](https://github.com/Kong/gateway-operator/pull/953)
+
 ## [v1.4.1]
 
 > Release date: 2024-11-28
