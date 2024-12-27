@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"net/http"
 	"os"
 	"time"
 
@@ -43,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -57,9 +59,38 @@ const (
 	tlsKeyFilename  = "tls.key"
 )
 
+// MetricsAccessFilter defines the access filter function for the metrics endpoint.
+type MetricsAccessFilter string
+
+// Set implements flag.Value.
+func (mf *MetricsAccessFilter) Set(v string) error {
+	switch v {
+	case string(MetricsAccessFilterOff), string(MetricsAccessFilterRBAC):
+		*mf = MetricsAccessFilter(v)
+	default:
+		return fmt.Errorf("invalid value %q for metrics access filter", v)
+	}
+	return nil
+}
+
+const (
+	// MetricsAccessFilterOff disabled the access filter on metrics endpoint.
+	MetricsAccessFilterOff MetricsAccessFilter = "off"
+	// MetricsAccessFilterRBAC enables the access filter on metrics endpoint.
+	// For more information consult:
+	// https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/metrics/filters#WithAuthenticationAndAuthorization
+	MetricsAccessFilterRBAC MetricsAccessFilter = "rbac"
+)
+
+// String returns the string representation of the MetricsFilter.
+func (mf MetricsAccessFilter) String() string {
+	return string(mf)
+}
+
 // Config represents the configuration for the manager.
 type Config struct {
 	MetricsAddr              string
+	MetricsAccessFilter      MetricsAccessFilter
 	ProbeAddr                string
 	WebhookCertDir           string
 	WebhookPort              int
@@ -107,6 +138,7 @@ func DefaultConfig() Config {
 
 	return Config{
 		MetricsAddr:                   ":8080",
+		MetricsAccessFilter:           MetricsAccessFilterOff,
 		ProbeAddr:                     ":8081",
 		WebhookCertDir:                defaultWebhookCertDir,
 		WebhookPort:                   9443,
@@ -178,6 +210,17 @@ func Run(
 		Scheme: scheme,
 		Metrics: server.Options{
 			BindAddress: cfg.MetricsAddr,
+			FilterProvider: func() func(c *rest.Config, httpClient *http.Client) (server.Filter, error) {
+				switch cfg.MetricsAccessFilter {
+				case MetricsAccessFilterRBAC:
+					return filters.WithAuthenticationAndAuthorization
+				case MetricsAccessFilterOff:
+					return nil
+				default:
+					// This is checked in flags validation so this should never happen.
+					panic("unsupported metrics filter")
+				}
+			}(),
 		},
 		WebhookServer: webhook.NewServer(
 			webhook.Options{
