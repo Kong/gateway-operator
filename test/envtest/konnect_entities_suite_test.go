@@ -5,19 +5,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/kong/gateway-operator/controller/konnect"
 	"github.com/kong/gateway-operator/controller/konnect/constraints"
-	"github.com/kong/gateway-operator/controller/konnect/ops"
+	sdkmocks "github.com/kong/gateway-operator/controller/konnect/ops/sdk/mocks"
 	"github.com/kong/gateway-operator/modules/manager/scheme"
 
 	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
@@ -34,7 +31,7 @@ func TestKonnectEntityReconcilers(t *testing.T) {
 type konnectEntityReconcilerTestCase struct {
 	name                string
 	objectOps           func(ctx context.Context, t *testing.T, cl client.Client, ns *corev1.Namespace)
-	mockExpectations    func(t *testing.T, sdk *ops.MockSDKWrapper, ns *corev1.Namespace)
+	mockExpectations    func(t *testing.T, sdk *sdkmocks.MockSDKWrapper, cl client.Client, ns *corev1.Namespace)
 	eventuallyPredicate func(ctx context.Context, t *assert.CollectT, cl client.Client, ns *corev1.Namespace)
 }
 
@@ -58,34 +55,20 @@ func testNewKonnectEntityReconciler[
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		nsName := uuid.NewString()
-		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Scheme: scheme.Get(),
-			Metrics: metricsserver.Options{
-				// We do not need metrics server so we set BindAddress to 0 to disable it.
-				BindAddress: "0",
-			},
-		})
-		require.NoError(t, err)
+		mgr, logs := NewManager(t, ctx, cfg, scheme.Get())
 
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: nsName,
+				GenerateName: NameFromT(t),
 			},
 		}
 		require.NoError(t, mgr.GetClient().Create(ctx, ns))
 
 		cl := client.NewNamespacedClient(mgr.GetClient(), ns.Name)
-		factory := ops.NewMockSDKFactory(t)
+		factory := sdkmocks.NewMockSDKFactory(t)
 		sdk := factory.SDK
-		reconciler := konnect.NewKonnectEntityReconciler[T, TEnt](factory, false, cl)
-		require.NoError(t, reconciler.SetupWithManager(ctx, mgr))
 
-		t.Logf("Starting manager for test case %s", t.Name())
-		go func() {
-			err := mgr.Start(ctx)
-			require.NoError(t, err)
-		}()
+		StartReconcilers(ctx, t, mgr, logs, konnect.NewKonnectEntityReconciler[T, TEnt](factory, false, cl))
 
 		const (
 			wait = time.Second
@@ -94,7 +77,7 @@ func testNewKonnectEntityReconciler[
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				tc.mockExpectations(t, sdk, ns)
+				tc.mockExpectations(t, sdk, cl, ns)
 				tc.objectOps(ctx, t, cl, ns)
 				require.EventuallyWithT(t, func(collect *assert.CollectT) {
 					tc.eventuallyPredicate(ctx, collect, cl, ns)

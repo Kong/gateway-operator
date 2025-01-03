@@ -2,6 +2,8 @@
 
 ## Table of Contents
 
+- [v1.4.1](#v141)
+- [v1.4.0](#v140)
 - [v1.3.0](#v130)
 - [v1.2.3](#v123)
 - [v1.2.2](#v122)
@@ -23,7 +25,40 @@
 
 ## Unreleased
 
-> Release date: TBD
+### Changed
+
+- `KonnectExtension` does not require `spec.serverHostname` to be set by a user
+  anymore - default is set to `konghq.com`.
+  [#947](https://github.com/Kong/gateway-operator/pull/947)
+
+### Fixes
+
+- Fix `DataPlane`s with `KonnectExtension` and `BlueGreen` settings. Both the Live
+  and preview deployments are now customized with Konnect-related settings.
+  [#910](https://github.com/Kong/gateway-operator/pull/910)
+
+## [v1.4.1]
+
+> Release date: 2024-11-28
+
+### Fixes
+
+- Fix setting the `ServiceAccountName` for `DataPlane`'s `Deployment`.
+  [#897](https://github.com/Kong/gateway-operator/pull/897)
+- Fixed setting `ExternalTrafficPolicy` on `DataPlane`'s ingress `Service` when
+  the requested value is empty.
+  [#898](https://github.com/Kong/gateway-operator/pull/898)
+- Set 0 members on `KonnectGatewayControlPlane` which type is set to group.
+  [#896](https://github.com/Kong/gateway-operator/pull/896)
+- Fixed a `panic` in `KonnectAPIAuthConfigurationReconciler` occuring when nil
+  response was returned by Konnect API when fetching the organization information.
+  [#901](https://github.com/Kong/gateway-operator/pull/901)
+- Bump sdk-konnect-go version to 0.1.10 to fix handling global API endpoints.
+  [#894](https://github.com/Kong/gateway-operator/pull/894)
+
+## [v1.4.0]
+
+> Release date: 2024-10-31
 
 ### Added
 
@@ -70,9 +105,11 @@
   [#657](https://github.com/Kong/gateway-operator/pull/657)
 - Add `KongDataPlaneClientCertificate` reconciler for Konnect DataPlaneClientCertificates.
   [#694](https://github.com/Kong/gateway-operator/pull/694)
-- The `DataPlaneKonnectExtension` CRD has been introduced. Such a CRD can be attached
+- The `KonnectExtension` CRD has been introduced. Such a CRD can be attached
   to a `DataPlane` via the extensions field to have a konnect-flavored `DataPlane`.
-  [#453](https://github.com/Kong/gateway-operator/pull/453), [#578](https://github.com/Kong/gateway-operator/pull/578)
+  [#453](https://github.com/Kong/gateway-operator/pull/453),
+  [#578](https://github.com/Kong/gateway-operator/pull/578),
+  [#736](https://github.com/Kong/gateway-operator/pull/736)
 - Entities created in Konnect are now labeled (or tagged for those that does not
   support labels) with origin Kubernetes object's metadata: `k8s-name`, `k8s-namespace`,
   `k8s-uid`, `k8s-generation`, `k8s-kind`, `k8s-group`, `k8s-version`.
@@ -101,6 +138,12 @@
   [#669](https://github.com/Kong/gateway-operator/pull/669)
 - Allow setting `KonnectGatewayControlPlane`s group membership
   [#697](https://github.com/Kong/gateway-operator/pull/697)
+- Apply Konnect-related customizations to `DataPlane`s that properly reference `KonnectExtension`
+  resources.
+  [#714](https://github.com/Kong/gateway-operator/pull/714)
+- The KonnectExtension functionality is enabled only when the `--enable-controller-konnect`
+  flag or the `GATEWAY_OPERATOR_ENABLE_CONTROLLER_KONNECT` env var is set.
+  [#738](https://github.com/Kong/gateway-operator/pull/738)
 
 ### Fixed
 
@@ -111,11 +154,22 @@
   [#454](https://github.com/Kong/gateway-operator/pull/454)
 - Requeue instead of reporting an error when a GatewayClass status update yields a conflict.
   [#612](https://github.com/Kong/gateway-operator/pull/612)
+- Guard object counters with checks whether CRDs for them exist
+  [#710](https://github.com/Kong/gateway-operator/pull/710)
+- Do not reconcile Gateways nor assign any finalizers when the referred GatewayClass is not supported.
+  [#711](https://github.com/Kong/gateway-operator/pull/711)
+- Fixed setting `ExternalTrafficPolicy` on `DataPlane`'s ingress `Service` during update and patch operations.
+  [#750](https://github.com/Kong/gateway-operator/pull/750)
+- Fixed setting `ExternalTrafficPolicy` on `DataPlane`'s ingress `Service`.
+  Remove the default value (`Cluster`). Prevent setting this field for `ClusterIP` `Service`s.
+  [#812](https://github.com/Kong/gateway-operator/pull/812)
 
 ### Changes
 
 - Default version of `ControlPlane` is bumped to 3.3.1
   [#580](https://github.com/Kong/gateway-operator/pull/580)
+- Default version of `DataPlane` is bumped to 3.8.0
+  [#572](https://github.com/Kong/gateway-operator/pull/572)
 - Gateway API has been bumped to v1.2.0
   [#674](https://github.com/Kong/gateway-operator/pull/674)
 
@@ -773,6 +827,8 @@ leftovers from previous operator deployments in the cluster. The user needs to d
 (clusterrole, clusterrolebinding, validatingWebhookConfiguration) before
 re-installing the operator through the bundle.
 
+[v1.4.1]: https://github.com/Kong/gateway-operator/compare/v1.4.0..v1.4.1
+[v1.4.0]: https://github.com/Kong/gateway-operator/compare/v1.3.0..v1.4.0
 [v1.3.0]: https://github.com/Kong/gateway-operator/compare/v1.2.3..v1.3.0
 [v1.2.3]: https://github.com/Kong/gateway-operator/compare/v1.2.2..v1.2.3
 [v1.2.2]: https://github.com/Kong/gateway-operator/compare/v1.2.1..v1.2.2

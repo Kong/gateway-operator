@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"strings"
@@ -28,18 +29,21 @@ import (
 	"github.com/kong/gateway-operator/test/helpers"
 
 	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
+	"github.com/kong/kubernetes-configuration/pkg/metadata"
 )
 
 func TestKongPluginInstallationEssentials(t *testing.T) {
 	namespace, cleaner := helpers.SetupTestEnv(t, GetCtx(), GetEnv())
+	t.Log("this test accesses container registries on public internet")
 
+	// Learn more how images were build and pushed to the registry in hack/plugin-images/README.md.
 	const registryUrl = "northamerica-northeast1-docker.pkg.dev/k8s-team-playground/"
-
+	// Source: hack/plugin-images/invalid-layers.Dockerfile.
 	const pluginInvalidLayersImage = registryUrl + "plugin-example/invalid-layers"
-
+	// Source: hack/plugin-images/myheader.Dockerfile.
 	const pluginMyHeaderImage = registryUrl + "plugin-example/myheader"
 	expectedHeadersForMyHeader := http.Header{"myheader": {"roar"}}
-
+	// Source: hack/plugin-images/myheader-2.Dockerfile.
 	const pluginMyHeader2Image = registryUrl + "plugin-example-private/myheader-2"
 	expectedHeadersForMyHeader2 := http.Header{"newheader": {"amazing"}}
 
@@ -325,9 +329,8 @@ func attachKongPluginBasedOnKPIToRoute(t *testing.T, cleaner *clusters.Cleaner, 
 	t.Logf("attaching KongPlugin %s to HTTPRoute %s", kongPluginName, httpRouteNN)
 	require.Eventually(t,
 		testutils.HTTPRouteUpdateEventually(t, GetCtx(), httpRouteNN, clients, func(h *gatewayv1.HTTPRoute) {
-			const kpAnnotation = "konghq.com/plugins"
-			h.Annotations[kpAnnotation] = strings.Join(
-				append(strings.Split(h.Annotations[kpAnnotation], ","), kongPluginName), ",",
+			h.Annotations[metadata.AnnotationKeyPlugins] = strings.Join(
+				append(strings.Split(h.Annotations[metadata.AnnotationKeyPlugins], ","), kongPluginName), ",",
 			)
 		}),
 		time.Minute, 250*time.Millisecond,
@@ -367,21 +370,28 @@ func verifyCustomPlugins(t *testing.T, ip string, expectedHeaders ...http.Header
 	t.Helper()
 	httpClient, err := helpers.CreateHTTPClient(nil, "")
 	require.NoError(t, err)
+
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		readBody := func(resp *http.Response) string {
+			var b bytes.Buffer
+			_, err := b.ReadFrom(resp.Body)
+			assert.NoError(c, err, "failed to read response body")
+			return b.String()
+		}
 		resp, err := httpClient.Get(fmt.Sprintf("http://%s/test", ip))
 		if !assert.NoError(c, err) {
 			return
 		}
 		defer resp.Body.Close()
-		if !assert.Equal(c, http.StatusOK, resp.StatusCode) {
+		if !assert.Equal(c, http.StatusOK, resp.StatusCode, "unexpected status code, body: %s", readBody(resp)) {
 			return
 		}
 		for _, h := range expectedHeaders {
 			for k, v := range h {
-				assert.Equal(c, v, resp.Header.Values(k))
+				assert.Equal(c, v, resp.Header.Values(k), "unexpected header %s, body: %s", k, readBody(resp))
 			}
 		}
-	}, 15*time.Second, time.Second)
+	}, time.Minute, 250*time.Millisecond)
 }
 
 func createRandomNamespace(t *testing.T) string {

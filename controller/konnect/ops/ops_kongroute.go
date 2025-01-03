@@ -2,40 +2,38 @@ package ops
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	sdkkonnectgo "github.com/Kong/sdk-konnect-go"
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
-	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"github.com/samber/lo"
+
+	sdkops "github.com/kong/gateway-operator/controller/konnect/ops/sdk"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 )
 
 func createRoute(
 	ctx context.Context,
-	sdk RoutesSDK,
+	sdk sdkops.RoutesSDK,
 	route *configurationv1alpha1.KongRoute,
 ) error {
 	if route.GetControlPlaneID() == "" {
-		return fmt.Errorf("can't create %T %s without a Konnect ControlPlane ID", route, client.ObjectKeyFromObject(route))
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: route, Op: CreateOp}
 	}
 
 	resp, err := sdk.CreateRoute(ctx, route.Status.Konnect.ControlPlaneID, kongRouteToSDKRouteInput(route))
 
-	// TODO: handle already exists
-	// Can't adopt it as it will cause conflicts between the controller
-	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, CreateOp, route); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(route, "FailedToCreate", errWrap.Error())
 		return errWrap
 	}
 
-	route.Status.Konnect.SetKonnectID(*resp.Route.ID)
-	SetKonnectEntityProgrammedCondition(route)
+	if resp == nil || resp.Route == nil || resp.Route.ID == nil {
+		return fmt.Errorf("failed creating %s: %w", route.GetTypeName(), ErrNilResponse)
+	}
+
+	route.SetKonnectID(*resp.Route.ID)
 
 	return nil
 }
@@ -46,29 +44,24 @@ func createRoute(
 // if the operation fails.
 func updateRoute(
 	ctx context.Context,
-	sdk RoutesSDK,
+	sdk sdkops.RoutesSDK,
 	route *configurationv1alpha1.KongRoute,
 ) error {
 	cpID := route.GetControlPlaneID()
 	if cpID == "" {
-		return fmt.Errorf("can't update %T %s without a Konnect ControlPlane ID", route, client.ObjectKeyFromObject(route))
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: route, Op: UpdateOp}
 	}
 
+	id := route.GetKonnectStatus().GetKonnectID()
 	_, err := sdk.UpsertRoute(ctx, sdkkonnectops.UpsertRouteRequest{
 		ControlPlaneID: cpID,
-		RouteID:        route.Status.Konnect.ID,
+		RouteID:        id,
 		Route:          kongRouteToSDKRouteInput(route),
 	})
 
-	// TODO: handle already exists
-	// Can't adopt it as it will cause conflicts between the controller
-	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, UpdateOp, route); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(route, "FailedToUpdate", errWrap.Error())
 		return errWrap
 	}
-
-	SetKonnectEntityProgrammedCondition(route)
 
 	return nil
 }
@@ -78,31 +71,13 @@ func updateRoute(
 // It returns an error if the operation fails.
 func deleteRoute(
 	ctx context.Context,
-	sdk RoutesSDK,
+	sdk sdkops.RoutesSDK,
 	route *configurationv1alpha1.KongRoute,
 ) error {
 	id := route.GetKonnectStatus().GetKonnectID()
 	_, err := sdk.DeleteRoute(ctx, route.Status.Konnect.ControlPlaneID, id)
 	if errWrap := wrapErrIfKonnectOpFailed(err, DeleteOp, route); errWrap != nil {
-		// Service delete operation returns an SDKError instead of a NotFoundError.
-		var sdkError *sdkkonnecterrs.SDKError
-		if errors.As(errWrap, &sdkError) {
-			if sdkError.StatusCode == 404 {
-				ctrllog.FromContext(ctx).
-					Info("entity not found in Konnect, skipping delete",
-						"op", DeleteOp, "type", route.GetTypeName(), "id", id,
-					)
-				return nil
-			}
-			return FailedKonnectOpError[configurationv1alpha1.KongRoute]{
-				Op:  DeleteOp,
-				Err: sdkError,
-			}
-		}
-		return FailedKonnectOpError[configurationv1alpha1.KongService]{
-			Op:  DeleteOp,
-			Err: errWrap,
-		}
+		return handleDeleteError(ctx, err, route)
 	}
 
 	return nil
@@ -136,4 +111,31 @@ func kongRouteToSDKRouteInput(
 		}
 	}
 	return r
+}
+
+// getKongRouteForUID returns the Konnect ID of the KongRoute
+// that matches the UID of the provided KongRoute.
+func getKongRouteForUID(
+	ctx context.Context,
+	sdk sdkops.RoutesSDK,
+	r *configurationv1alpha1.KongRoute,
+) (string, error) {
+	reqList := sdkkonnectops.ListRouteRequest{
+		// NOTE: only filter on object's UID.
+		// Other fields like name might have changed in the meantime but that's OK.
+		// Those will be enforced via subsequent updates.
+		Tags:           lo.ToPtr(UIDLabelForObject(r)),
+		ControlPlaneID: r.GetControlPlaneID(),
+	}
+
+	resp, err := sdk.ListRoute(ctx, reqList)
+	if err != nil {
+		return "", fmt.Errorf("failed listing %s: %w", r.GetTypeName(), err)
+	}
+
+	if resp == nil || resp.Object == nil {
+		return "", fmt.Errorf("failed listing %s: %w", r.GetTypeName(), ErrNilResponse)
+	}
+
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDPtrSlice(resp.Object.Data), r)
 }

@@ -9,20 +9,23 @@ import (
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
 	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
+	"github.com/samber/lo"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+
+	sdkops "github.com/kong/gateway-operator/controller/konnect/ops/sdk"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 )
 
 func createSNI(
 	ctx context.Context,
-	sdk SNIsSDK,
+	sdk sdkops.SNIsSDK,
 	sni *configurationv1alpha1.KongSNI,
 ) error {
 	cpID := sni.GetControlPlaneID()
 	if cpID == "" {
-		return fmt.Errorf("can't create %T %s without a Konnect ControlPlane ID", sni, client.ObjectKeyFromObject(sni))
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: sni, Op: CreateOp}
 	}
 	if sni.Status.Konnect == nil || sni.Status.Konnect.CertificateID == "" {
 		return fmt.Errorf("can't create %T %s without a Konnect Certificate ID", sni, client.ObjectKeyFromObject(sni))
@@ -33,26 +36,28 @@ func createSNI(
 		CertificateID:     sni.Status.Konnect.CertificateID,
 		SNIWithoutParents: kongSNIToSNIWithoutParents(sni),
 	})
-
 	if errWrapped := wrapErrIfKonnectOpFailed(err, CreateOp, sni); errWrapped != nil {
-		SetKonnectEntityProgrammedConditionFalse(sni, "FailedToCreate", errWrapped.Error())
 		return errWrapped
 	}
 
+	if resp == nil || resp.Sni == nil || resp.Sni.ID == nil || *resp.Sni.ID == "" {
+		return fmt.Errorf("failed creating %s: %w", sni.GetTypeName(), ErrNilResponse)
+	}
+
+	// At this point, the SNI has been created successfully.
 	sni.Status.Konnect.SetKonnectID(*resp.Sni.ID)
-	SetKonnectEntityProgrammedCondition(sni)
 
 	return nil
 }
 
 func updateSNI(
 	ctx context.Context,
-	sdk SNIsSDK,
+	sdk sdkops.SNIsSDK,
 	sni *configurationv1alpha1.KongSNI,
 ) error {
 	cpID := sni.GetControlPlaneID()
 	if cpID == "" {
-		return fmt.Errorf("can't update %T %s without a Konnect ControlPlane ID", sni, client.ObjectKeyFromObject(sni))
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: sni, Op: UpdateOp}
 	}
 	if sni.Status.Konnect == nil || sni.Status.Konnect.CertificateID == "" {
 		return fmt.Errorf("can't update %T %s without a Konnect Certificate ID", sni, client.ObjectKeyFromObject(sni))
@@ -70,39 +75,15 @@ func updateSNI(
 	// Can't adopt it as it will cause conflicts between the controller
 	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, UpdateOp, sni); errWrap != nil {
-		// SNI update operation returns an SDKError instead of a NotFoundError.
-		var sdkError *sdkkonnecterrs.SDKError
-		if errors.As(errWrap, &sdkError) {
-			switch sdkError.StatusCode {
-			case 404:
-				if err := createSNI(ctx, sdk, sni); err != nil {
-					return FailedKonnectOpError[configurationv1alpha1.KongSNI]{
-						Op:  UpdateOp,
-						Err: err,
-					}
-				}
-				// Create succeeded, createSNI sets the status so no need to do this here.
-
-				return nil
-			default:
-				return FailedKonnectOpError[configurationv1alpha1.KongSNI]{
-					Op:  UpdateOp,
-					Err: sdkError,
-				}
-			}
-		}
-
-		SetKonnectEntityProgrammedConditionFalse(sni, "FailedToUpdate", errWrap.Error())
 		return errWrap
 	}
 
-	SetKonnectEntityProgrammedCondition(sni)
 	return nil
 }
 
 func deleteSNI(
 	ctx context.Context,
-	sdk SNIsSDK,
+	sdk sdkops.SNIsSDK,
 	sni *configurationv1alpha1.KongSNI,
 ) error {
 	cpID := sni.GetControlPlaneID()
@@ -150,4 +131,20 @@ func kongSNIToSNIWithoutParents(sni *configurationv1alpha1.KongSNI) sdkkonnectco
 		Name: sni.Spec.Name,
 		Tags: GenerateTagsForObject(sni, sni.Spec.Tags...),
 	}
+}
+
+// getKongSNIForUID returns the Konnect ID of the Konnect SNI that matches the UID of the provided SNI.
+func getKongSNIForUID(ctx context.Context, sdk sdkops.SNIsSDK, sni *configurationv1alpha1.KongSNI) (string, error) {
+	resp, err := sdk.ListSni(ctx, sdkkonnectops.ListSniRequest{
+		ControlPlaneID: sni.GetControlPlaneID(),
+		Tags:           lo.ToPtr(UIDLabelForObject(sni)),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed listing %s: %w", sni.GetTypeName(), err)
+	}
+	if resp == nil || resp.Object == nil {
+		return "", fmt.Errorf("failed listing %s: %w", sni.GetTypeName(), ErrNilResponse)
+	}
+
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDPtrSlice(resp.Object.Data), sni)
 }

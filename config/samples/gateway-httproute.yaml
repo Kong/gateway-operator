@@ -115,8 +115,9 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
           resources:
-            requests:
-              cpu: 10m
+            limits:
+              cpu: 100m
+              memory: 100Mi
 ---
 kind: GatewayConfiguration
 apiVersion: gateway-operator.konghq.com/v1beta1
@@ -132,7 +133,7 @@ spec:
           containers:
           - name: proxy
             # renovate: datasource=docker versioning=docker
-            image: kong/kong-gateway:3.8
+            image: kong/kong-gateway:3.9
             readinessProbe:
               initialDelaySeconds: 1
               periodSeconds: 1
@@ -143,7 +144,7 @@ spec:
           containers:
           - name: controller
             # renovate: datasource=docker versioning=docker
-            image: kong/kubernetes-ingress-controller:3.3.1
+            image: kong/kubernetes-ingress-controller:3.4.0
             readinessProbe:
               initialDelaySeconds: 1
               periodSeconds: 1

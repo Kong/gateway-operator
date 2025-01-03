@@ -3,17 +3,15 @@ package ops
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
-	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
 	"github.com/samber/lo"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/kong/gateway-operator/controller/konnect/constraints"
+	sdkops "github.com/kong/gateway-operator/controller/konnect/ops/sdk"
 
 	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
@@ -29,14 +27,14 @@ import (
 func createPlugin(
 	ctx context.Context,
 	cl client.Client,
-	sdk PluginSDK,
-	pb *configurationv1alpha1.KongPluginBinding,
+	sdk sdkops.PluginSDK,
+	pluginBinding *configurationv1alpha1.KongPluginBinding,
 ) error {
-	controlPlaneID := pb.GetControlPlaneID()
+	controlPlaneID := pluginBinding.GetControlPlaneID()
 	if controlPlaneID == "" {
-		return fmt.Errorf("can't create %T %s without a Konnect ControlPlane ID", pb, client.ObjectKeyFromObject(pb))
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: pluginBinding, Op: CreateOp}
 	}
-	pluginInput, err := kongPluginBindingToSDKPluginInput(ctx, cl, pb)
+	pluginInput, err := kongPluginBindingToSDKPluginInput(ctx, cl, pluginBinding)
 	if err != nil {
 		return err
 	}
@@ -46,16 +44,15 @@ func createPlugin(
 		*pluginInput,
 	)
 
-	// TODO: handle already exists
-	// Can't adopt it as it will cause conflicts between the controller
-	// that created that entity and already manages it, hm
-	if errWrap := wrapErrIfKonnectOpFailed[configurationv1alpha1.KongPluginBinding](err, CreateOp, pb); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(pb, "FailedToCreate", errWrap.Error())
-		return errWrap
+	if errWrapped := wrapErrIfKonnectOpFailed(err, CreateOp, pluginBinding); errWrapped != nil {
+		return errWrapped
 	}
 
-	pb.SetKonnectID(*resp.Plugin.ID)
-	SetKonnectEntityProgrammedCondition(pb)
+	if resp == nil || resp.Plugin == nil || resp.Plugin.ID == nil {
+		return fmt.Errorf("failed creating %s: %w", pluginBinding.GetTypeName(), ErrNilResponse)
+	}
+
+	pluginBinding.SetKonnectID(*resp.Plugin.ID)
 
 	return nil
 }
@@ -66,36 +63,32 @@ func createPlugin(
 // if the operation fails.
 func updatePlugin(
 	ctx context.Context,
-	sdk PluginSDK,
+	sdk sdkops.PluginSDK,
 	cl client.Client,
-	pb *configurationv1alpha1.KongPluginBinding,
+	pluginBinding *configurationv1alpha1.KongPluginBinding,
 ) error {
-	controlPlaneID := pb.GetControlPlaneID()
+	controlPlaneID := pluginBinding.GetControlPlaneID()
 	if controlPlaneID == "" {
-		return fmt.Errorf("can't create %T %s without a Konnect ControlPlane ID", pb, client.ObjectKeyFromObject(pb))
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: pluginBinding, Op: UpdateOp}
 	}
 
-	pluginInput, err := kongPluginBindingToSDKPluginInput(ctx, cl, pb)
+	pluginInput, err := kongPluginBindingToSDKPluginInput(ctx, cl, pluginBinding)
 	if err != nil {
 		return err
 	}
 
+	id := pluginBinding.GetKonnectID()
 	_, err = sdk.UpsertPlugin(ctx,
 		sdkkonnectops.UpsertPluginRequest{
 			ControlPlaneID: controlPlaneID,
-			PluginID:       pb.GetKonnectID(),
+			PluginID:       id,
 			Plugin:         *pluginInput,
 		},
 	)
 
-	// TODO: handle already exists
-	// Can't adopt it as it will cause conflicts between the controller
-	// that created that entity and already manages it, hm
-	if errWrap := wrapErrIfKonnectOpFailed[configurationv1alpha1.KongPluginBinding](err, UpdateOp, pb); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(pb, "FailedToUpdate", errWrap.Error())
+	if errWrap := wrapErrIfKonnectOpFailed(err, UpdateOp, pluginBinding); errWrap != nil {
 		return errWrap
 	}
-	SetKonnectEntityProgrammedCondition(pb)
 
 	return nil
 }
@@ -105,28 +98,41 @@ func updatePlugin(
 // It returns an error if the operation fails.
 func deletePlugin(
 	ctx context.Context,
-	sdk PluginSDK,
+	sdk sdkops.PluginSDK,
 	pb *configurationv1alpha1.KongPluginBinding,
 ) error {
 	id := pb.GetKonnectID()
 	_, err := sdk.DeletePlugin(ctx, pb.GetControlPlaneID(), id)
-	if errWrap := wrapErrIfKonnectOpFailed[configurationv1alpha1.KongPluginBinding](err, DeleteOp, pb); errWrap != nil {
-		// plugin delete operation returns an SDKError instead of a NotFoundError.
-		var sdkError *sdkkonnecterrs.SDKError
-		if errors.As(errWrap, &sdkError) && sdkError.StatusCode == 404 {
-			ctrllog.FromContext(ctx).
-				Info("entity not found in Konnect, skipping delete",
-					"op", DeleteOp, "type", pb.GetTypeName(), "id", id,
-				)
-			return nil
-		}
-		return FailedKonnectOpError[configurationv1alpha1.KongPluginBinding]{
-			Op:  DeleteOp,
-			Err: errWrap,
-		}
+	if errWrap := wrapErrIfKonnectOpFailed(err, DeleteOp, pb); errWrap != nil {
+		return handleDeleteError(ctx, err, pb)
 	}
 
 	return nil
+}
+
+// getPluginForUID lists plugins in Konnect with given k8s uid as its tag.
+func getPluginForUID(
+	ctx context.Context,
+	sdk sdkops.PluginSDK,
+	pluginBinding *configurationv1alpha1.KongPluginBinding,
+) (string, error) {
+	cpID := pluginBinding.GetControlPlaneID()
+	reqList := sdkkonnectops.ListPluginRequest{
+		// NOTE: only filter on object's UID.
+		// Other fields like name might have changed in the meantime but that's OK.
+		// Those will be enforced via subsequent updates.
+		ControlPlaneID: cpID,
+		Tags:           lo.ToPtr(UIDLabelForObject(pluginBinding)),
+	}
+	resp, err := sdk.ListPlugin(ctx, reqList)
+	if err != nil {
+		return "", fmt.Errorf("failed listing %s: %w", pluginBinding.GetTypeName(), err)
+	}
+	if resp == nil || resp.Object == nil {
+		return "", fmt.Errorf("failed listing %s: %w", pluginBinding.GetTypeName(), ErrNilResponse)
+	}
+
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDPtrSlice(resp.Object.Data), pluginBinding)
 }
 
 // -----------------------------------------------------------------------------

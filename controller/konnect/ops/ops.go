@@ -2,17 +2,21 @@ package ops
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
+	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/kong/gateway-operator/controller/konnect/conditions"
 	"github.com/kong/gateway-operator/controller/konnect/constraints"
+	sdkops "github.com/kong/gateway-operator/controller/konnect/ops/sdk"
 	"github.com/kong/gateway-operator/controller/pkg/log"
+	"github.com/kong/gateway-operator/pkg/consts"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 
 	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
@@ -20,12 +24,6 @@ import (
 	configurationv1beta1 "github.com/kong/kubernetes-configuration/api/configuration/v1beta1"
 	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
-
-// Response is the interface for the response from the Konnect API.
-type Response interface {
-	GetContentType() string
-	GetStatusCode() int
-}
 
 // Op is the type for the operation type of a Konnect entity.
 type Op string
@@ -45,58 +43,138 @@ func Create[
 	TEnt constraints.EntityType[T],
 ](
 	ctx context.Context,
-	sdk SDKWrapper,
+	sdk sdkops.SDKWrapper,
 	cl client.Client,
-	e *T,
+	e TEnt,
 ) (*T, error) {
-	defer logOpComplete[T, TEnt](ctx, time.Now(), CreateOp, e)
-
+	var (
+		err   error
+		start = time.Now()
+	)
 	switch ent := any(e).(type) {
 	case *konnectv1alpha1.KonnectGatewayControlPlane:
-		return e, createControlPlane(ctx, sdk.GetControlPlaneSDK(), sdk.GetControlPlaneGroupSDK(), cl, ent)
+		err = createControlPlane(ctx, sdk.GetControlPlaneSDK(), sdk.GetControlPlaneGroupSDK(), cl, ent)
 	case *configurationv1alpha1.KongService:
-		return e, createService(ctx, sdk.GetServicesSDK(), ent)
+		err = createService(ctx, sdk.GetServicesSDK(), ent)
 	case *configurationv1alpha1.KongRoute:
-		return e, createRoute(ctx, sdk.GetRoutesSDK(), ent)
+		err = createRoute(ctx, sdk.GetRoutesSDK(), ent)
 	case *configurationv1.KongConsumer:
-		return e, createConsumer(ctx, sdk.GetConsumersSDK(), sdk.GetConsumerGroupsSDK(), cl, ent)
+		err = createConsumer(ctx, sdk.GetConsumersSDK(), sdk.GetConsumerGroupsSDK(), cl, ent)
 	case *configurationv1beta1.KongConsumerGroup:
-		return e, createConsumerGroup(ctx, sdk.GetConsumerGroupsSDK(), ent)
+		err = createConsumerGroup(ctx, sdk.GetConsumerGroupsSDK(), ent)
 	case *configurationv1alpha1.KongPluginBinding:
-		return e, createPlugin(ctx, cl, sdk.GetPluginSDK(), ent)
+		err = createPlugin(ctx, cl, sdk.GetPluginSDK(), ent)
 	case *configurationv1alpha1.KongUpstream:
-		return e, createUpstream(ctx, sdk.GetUpstreamsSDK(), ent)
+		err = createUpstream(ctx, sdk.GetUpstreamsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialBasicAuth:
-		return e, createKongCredentialBasicAuth(ctx, sdk.GetBasicAuthCredentialsSDK(), ent)
+		err = createKongCredentialBasicAuth(ctx, sdk.GetBasicAuthCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialAPIKey:
-		return e, createKongCredentialAPIKey(ctx, sdk.GetAPIKeyCredentialsSDK(), ent)
+		err = createKongCredentialAPIKey(ctx, sdk.GetAPIKeyCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialACL:
-		return e, createKongCredentialACL(ctx, sdk.GetACLCredentialsSDK(), ent)
+		err = createKongCredentialACL(ctx, sdk.GetACLCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialJWT:
-		return e, createKongCredentialJWT(ctx, sdk.GetJWTCredentialsSDK(), ent)
+		err = createKongCredentialJWT(ctx, sdk.GetJWTCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialHMAC:
-		return e, createKongCredentialHMAC(ctx, sdk.GetHMACCredentialsSDK(), ent)
+		err = createKongCredentialHMAC(ctx, sdk.GetHMACCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCACertificate:
-		return e, createCACertificate(ctx, sdk.GetCACertificatesSDK(), ent)
+		err = createCACertificate(ctx, sdk.GetCACertificatesSDK(), ent)
 	case *configurationv1alpha1.KongCertificate:
-		return e, createCertificate(ctx, sdk.GetCertificatesSDK(), ent)
+		err = createCertificate(ctx, sdk.GetCertificatesSDK(), ent)
 	case *configurationv1alpha1.KongTarget:
-		return e, createTarget(ctx, sdk.GetTargetsSDK(), ent)
+		err = createTarget(ctx, sdk.GetTargetsSDK(), ent)
 	case *configurationv1alpha1.KongVault:
-		return e, createVault(ctx, sdk.GetVaultSDK(), ent)
+		err = createVault(ctx, sdk.GetVaultSDK(), ent)
 	case *configurationv1alpha1.KongKey:
-		return e, createKey(ctx, sdk.GetKeysSDK(), ent)
+		err = createKey(ctx, sdk.GetKeysSDK(), ent)
 	case *configurationv1alpha1.KongKeySet:
-		return e, createKeySet(ctx, sdk.GetKeySetsSDK(), ent)
+		err = createKeySet(ctx, sdk.GetKeySetsSDK(), ent)
 	case *configurationv1alpha1.KongSNI:
-		return e, createSNI(ctx, sdk.GetSNIsSDK(), ent)
+		err = createSNI(ctx, sdk.GetSNIsSDK(), ent)
 	case *configurationv1alpha1.KongDataPlaneClientCertificate:
-		return e, createKongDataPlaneClientCertificate(ctx, sdk.GetDataPlaneCertificatesSDK(), ent)
+		err = createKongDataPlaneClientCertificate(ctx, sdk.GetDataPlaneCertificatesSDK(), ent)
 		// ---------------------------------------------------------------------
 		// TODO: add other Konnect types
 	default:
 		return nil, fmt.Errorf("unsupported entity type %T", ent)
 	}
+
+	var (
+		errRelationsFailed KonnectEntityCreatedButRelationsFailedError
+		errSDK             *sdkkonnecterrs.SDKError
+	)
+	switch {
+	case ErrorIsCreateConflict(err):
+		// If there was a conflict on the create request, we can assume the entity already exists.
+		// We'll get its Konnect ID by listing all entities of its type filtered by the Kubernetes object UID.
+		var id string
+		switch ent := any(e).(type) {
+		case *konnectv1alpha1.KonnectGatewayControlPlane:
+			id, err = getControlPlaneForUID(ctx, sdk.GetControlPlaneSDK(), sdk.GetControlPlaneGroupSDK(), cl, ent)
+		case *configurationv1alpha1.KongService:
+			id, err = getKongServiceForUID(ctx, sdk.GetServicesSDK(), ent)
+		case *configurationv1alpha1.KongRoute:
+			id, err = getKongRouteForUID(ctx, sdk.GetRoutesSDK(), ent)
+		case *configurationv1alpha1.KongSNI:
+			id, err = getKongSNIForUID(ctx, sdk.GetSNIsSDK(), ent)
+		case *configurationv1.KongConsumer:
+			id, err = getKongConsumerForUID(ctx, sdk.GetConsumersSDK(), ent)
+		case *configurationv1beta1.KongConsumerGroup:
+			id, err = getKongConsumerGroupForUID(ctx, sdk.GetConsumerGroupsSDK(), ent)
+		case *configurationv1alpha1.KongKeySet:
+			id, err = getKongKeySetForUID(ctx, sdk.GetKeySetsSDK(), ent)
+		case *configurationv1alpha1.KongKey:
+			id, err = getKongKeyForUID(ctx, sdk.GetKeysSDK(), ent)
+		case *configurationv1alpha1.KongUpstream:
+			id, err = getKongUpstreamForUID(ctx, sdk.GetUpstreamsSDK(), ent)
+		case *configurationv1alpha1.KongTarget:
+			id, err = getKongTargetForUID(ctx, sdk.GetTargetsSDK(), ent)
+		case *configurationv1alpha1.KongPluginBinding:
+			id, err = getPluginForUID(ctx, sdk.GetPluginSDK(), ent)
+		case *configurationv1alpha1.KongVault:
+			id, err = getKongVaultForUID(ctx, sdk.GetVaultSDK(), ent)
+		case *configurationv1alpha1.KongCredentialHMAC:
+			id, err = getKongCredentialHMACForUID(ctx, sdk.GetHMACCredentialsSDK(), ent)
+		case *configurationv1alpha1.KongCredentialJWT:
+			id, err = getKongCredentialJWTForUID(ctx, sdk.GetJWTCredentialsSDK(), ent)
+		case *configurationv1alpha1.KongCredentialBasicAuth:
+			id, err = getKongCredentialBasicAuthForUID(ctx, sdk.GetBasicAuthCredentialsSDK(), ent)
+		case *configurationv1alpha1.KongCredentialAPIKey:
+			id, err = getKongCredentialAPIKeyForUID(ctx, sdk.GetAPIKeyCredentialsSDK(), ent)
+		case *configurationv1alpha1.KongCredentialACL:
+			id, err = getKongCredentialACLForUID(ctx, sdk.GetACLCredentialsSDK(), ent)
+		case *configurationv1alpha1.KongCertificate:
+			id, err = getKongCertificateForUID(ctx, sdk.GetCertificatesSDK(), ent)
+		case *configurationv1alpha1.KongCACertificate:
+			id, err = getKongCACertificateForUID(ctx, sdk.GetCACertificatesSDK(), ent)
+			// ---------------------------------------------------------------------
+			// TODO: add other Konnect types
+		default:
+			return e, fmt.Errorf("conflict on create request for %T %s, but no conflict handling implemented: %w",
+				e, client.ObjectKeyFromObject(e), err,
+			)
+		}
+
+		if err == nil && id != "" {
+			e.SetKonnectID(id)
+			SetKonnectEntityProgrammedCondition(e)
+		} else {
+			SetKonnectEntityProgrammedConditionFalse(e, consts.KonnectEntitiesFailedToCreateReason, err.Error())
+		}
+
+	case errors.As(err, &errSDK):
+		SetKonnectEntityProgrammedConditionFalse(e, consts.KonnectEntitiesFailedToCreateReason, errSDK.Error())
+	case errors.As(err, &errRelationsFailed):
+		e.SetKonnectID(errRelationsFailed.KonnectID)
+		SetKonnectEntityProgrammedConditionFalse(e, errRelationsFailed.Reason, errRelationsFailed.Err.Error())
+	case err != nil:
+		SetKonnectEntityProgrammedConditionFalse(e, consts.KonnectEntitiesFailedToCreateReason, err.Error())
+	default:
+		SetKonnectEntityProgrammedCondition(e)
+	}
+
+	logOpComplete(ctx, start, CreateOp, e, err)
+
+	return e, IgnoreUnrecoverableAPIErr(err, loggerForEntity(ctx, e, CreateOp))
 }
 
 // Delete deletes a Konnect entity.
@@ -104,63 +182,72 @@ func Create[
 func Delete[
 	T constraints.SupportedKonnectEntityType,
 	TEnt constraints.EntityType[T],
-](ctx context.Context, sdk SDKWrapper, cl client.Client, e *T) error {
-	ent := TEnt(e)
+](ctx context.Context, sdk sdkops.SDKWrapper, cl client.Client, ent TEnt) error {
 	if ent.GetKonnectStatus().GetKonnectID() == "" {
-		return fmt.Errorf(
-			"can't delete %T %s when it does not have the Konnect ID",
-			ent, client.ObjectKeyFromObject(ent),
-		)
+		cond, ok := k8sutils.GetCondition(konnectv1alpha1.KonnectEntityProgrammedConditionType, ent)
+		if ok && cond.Status == metav1.ConditionTrue {
+			return fmt.Errorf(
+				"can't delete %T %s when it does not have the Konnect ID",
+				ent, client.ObjectKeyFromObject(ent),
+			)
+		}
+		return nil
 	}
 
-	defer logOpComplete[T, TEnt](ctx, time.Now(), DeleteOp, e)
-
-	switch ent := any(e).(type) {
+	var (
+		err   error
+		start = time.Now()
+	)
+	switch ent := any(ent).(type) {
 	case *konnectv1alpha1.KonnectGatewayControlPlane:
-		return deleteControlPlane(ctx, sdk.GetControlPlaneSDK(), ent)
+		err = deleteControlPlane(ctx, sdk.GetControlPlaneSDK(), ent)
 	case *configurationv1alpha1.KongService:
-		return deleteService(ctx, sdk.GetServicesSDK(), ent)
+		err = deleteService(ctx, sdk.GetServicesSDK(), ent)
 	case *configurationv1alpha1.KongRoute:
-		return deleteRoute(ctx, sdk.GetRoutesSDK(), ent)
+		err = deleteRoute(ctx, sdk.GetRoutesSDK(), ent)
 	case *configurationv1.KongConsumer:
-		return deleteConsumer(ctx, sdk.GetConsumersSDK(), ent)
+		err = deleteConsumer(ctx, sdk.GetConsumersSDK(), ent)
 	case *configurationv1beta1.KongConsumerGroup:
-		return deleteConsumerGroup(ctx, sdk.GetConsumerGroupsSDK(), ent)
+		err = deleteConsumerGroup(ctx, sdk.GetConsumerGroupsSDK(), ent)
 	case *configurationv1alpha1.KongPluginBinding:
-		return deletePlugin(ctx, sdk.GetPluginSDK(), ent)
+		err = deletePlugin(ctx, sdk.GetPluginSDK(), ent)
 	case *configurationv1alpha1.KongUpstream:
-		return deleteUpstream(ctx, sdk.GetUpstreamsSDK(), ent)
+		err = deleteUpstream(ctx, sdk.GetUpstreamsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialBasicAuth:
-		return deleteKongCredentialBasicAuth(ctx, sdk.GetBasicAuthCredentialsSDK(), ent)
+		err = deleteKongCredentialBasicAuth(ctx, sdk.GetBasicAuthCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialAPIKey:
-		return deleteKongCredentialAPIKey(ctx, sdk.GetAPIKeyCredentialsSDK(), ent)
+		err = deleteKongCredentialAPIKey(ctx, sdk.GetAPIKeyCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialACL:
-		return deleteKongCredentialACL(ctx, sdk.GetACLCredentialsSDK(), ent)
+		err = deleteKongCredentialACL(ctx, sdk.GetACLCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialJWT:
-		return deleteKongCredentialJWT(ctx, sdk.GetJWTCredentialsSDK(), ent)
+		err = deleteKongCredentialJWT(ctx, sdk.GetJWTCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialHMAC:
-		return deleteKongCredentialHMAC(ctx, sdk.GetHMACCredentialsSDK(), ent)
+		err = deleteKongCredentialHMAC(ctx, sdk.GetHMACCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCACertificate:
-		return deleteCACertificate(ctx, sdk.GetCACertificatesSDK(), ent)
+		err = deleteCACertificate(ctx, sdk.GetCACertificatesSDK(), ent)
 	case *configurationv1alpha1.KongCertificate:
-		return deleteCertificate(ctx, sdk.GetCertificatesSDK(), ent)
+		err = deleteCertificate(ctx, sdk.GetCertificatesSDK(), ent)
 	case *configurationv1alpha1.KongTarget:
-		return deleteTarget(ctx, sdk.GetTargetsSDK(), ent)
+		err = deleteTarget(ctx, sdk.GetTargetsSDK(), ent)
 	case *configurationv1alpha1.KongVault:
-		return deleteVault(ctx, sdk.GetVaultSDK(), ent)
+		err = deleteVault(ctx, sdk.GetVaultSDK(), ent)
 	case *configurationv1alpha1.KongKey:
-		return deleteKey(ctx, sdk.GetKeysSDK(), ent)
+		err = deleteKey(ctx, sdk.GetKeysSDK(), ent)
 	case *configurationv1alpha1.KongKeySet:
-		return deleteKeySet(ctx, sdk.GetKeySetsSDK(), ent)
+		err = deleteKeySet(ctx, sdk.GetKeySetsSDK(), ent)
 	case *configurationv1alpha1.KongSNI:
-		return deleteSNI(ctx, sdk.GetSNIsSDK(), ent)
+		err = deleteSNI(ctx, sdk.GetSNIsSDK(), ent)
 	case *configurationv1alpha1.KongDataPlaneClientCertificate:
-		return deleteKongDataPlaneClientCertificate(ctx, sdk.GetDataPlaneCertificatesSDK(), ent)
+		err = deleteKongDataPlaneClientCertificate(ctx, sdk.GetDataPlaneCertificatesSDK(), ent)
 		// ---------------------------------------------------------------------
 		// TODO: add other Konnect types
 	default:
 		return fmt.Errorf("unsupported entity type %T", ent)
 	}
+
+	logOpComplete(ctx, start, DeleteOp, ent, err)
+
+	return err
 }
 
 func shouldUpdate[
@@ -173,7 +260,7 @@ func shouldUpdate[
 	now time.Time,
 ) (bool, ctrl.Result) {
 	var (
-		condProgrammed, ok = k8sutils.GetCondition(conditions.KonnectEntityProgrammedConditionType, ent)
+		condProgrammed, ok = k8sutils.GetCondition(konnectv1alpha1.KonnectEntityProgrammedConditionType, ent)
 		timeFromLastUpdate = time.Since(condProgrammed.LastTransitionTime.Time)
 	)
 
@@ -181,16 +268,16 @@ func shouldUpdate[
 	// the configured sync period, requeue after the remaining time.
 	if ok &&
 		condProgrammed.Status == metav1.ConditionTrue &&
-		condProgrammed.Reason == conditions.KonnectEntityProgrammedReasonProgrammed &&
+		condProgrammed.Reason == konnectv1alpha1.KonnectEntityProgrammedReasonProgrammed &&
 		condProgrammed.ObservedGeneration == ent.GetObjectMeta().GetGeneration() &&
 		timeFromLastUpdate <= syncPeriod {
 		requeueAfter := syncPeriod - timeFromLastUpdate
 		log.Debug(ctrllog.FromContext(ctx),
-			"no need for update, requeueing after configured sync period", ent,
-			"last_update", condProgrammed.LastTransitionTime.Time,
-			"time_from_last_update", timeFromLastUpdate,
-			"requeue_after", requeueAfter,
-			"requeue_at", now.Add(requeueAfter),
+			"no need for update, requeueing after configured sync period",
+			"last_update", condProgrammed.LastTransitionTime.Time.String(),
+			"time_from_last_update", timeFromLastUpdate.String(),
+			"requeue_after", requeueAfter.String(),
+			"requeue_at", now.Add(requeueAfter).String(),
 		)
 		return false, ctrl.Result{
 			RequeueAfter: requeueAfter,
@@ -205,90 +292,126 @@ func shouldUpdate[
 func Update[
 	T constraints.SupportedKonnectEntityType,
 	TEnt constraints.EntityType[T],
-](ctx context.Context, sdk SDKWrapper, syncPeriod time.Duration, cl client.Client, e *T) (ctrl.Result, error) {
-	var (
-		ent = TEnt(e)
-		now = time.Now()
-	)
+](
+	ctx context.Context,
+	sdk sdkops.SDKWrapper,
+	syncPeriod time.Duration,
+	cl client.Client,
+	e TEnt,
+) (ctrl.Result, error) {
+	now := time.Now()
 
-	if ok, res := shouldUpdate(ctx, ent, syncPeriod, now); !ok {
+	if ok, res := shouldUpdate(ctx, e, syncPeriod, now); !ok {
 		return res, nil
 	}
 
-	if ent.GetKonnectStatus().GetKonnectID() == "" {
+	if e.GetKonnectStatus().GetKonnectID() == "" {
 		return ctrl.Result{}, fmt.Errorf(
 			"can't update %T %s when it does not have the Konnect ID",
-			ent, client.ObjectKeyFromObject(ent),
+			e, client.ObjectKeyFromObject(e),
 		)
 	}
 
-	defer logOpComplete[T, TEnt](ctx, now, UpdateOp, e)
-
+	var err error
 	switch ent := any(e).(type) {
 	case *konnectv1alpha1.KonnectGatewayControlPlane:
-		return ctrl.Result{}, updateControlPlane(ctx, sdk.GetControlPlaneSDK(), sdk.GetControlPlaneGroupSDK(), cl, ent)
+		err = updateControlPlane(ctx, sdk.GetControlPlaneSDK(), sdk.GetControlPlaneGroupSDK(), cl, ent)
 	case *configurationv1alpha1.KongService:
-		return ctrl.Result{}, updateService(ctx, sdk.GetServicesSDK(), ent)
+		err = updateService(ctx, sdk.GetServicesSDK(), ent)
 	case *configurationv1alpha1.KongRoute:
-		return ctrl.Result{}, updateRoute(ctx, sdk.GetRoutesSDK(), ent)
+		err = updateRoute(ctx, sdk.GetRoutesSDK(), ent)
 	case *configurationv1.KongConsumer:
-		return ctrl.Result{}, updateConsumer(ctx, sdk.GetConsumersSDK(), sdk.GetConsumerGroupsSDK(), cl, ent)
+		err = updateConsumer(ctx, sdk.GetConsumersSDK(), sdk.GetConsumerGroupsSDK(), cl, ent)
 	case *configurationv1beta1.KongConsumerGroup:
-		return ctrl.Result{}, updateConsumerGroup(ctx, sdk.GetConsumerGroupsSDK(), ent)
+		err = updateConsumerGroup(ctx, sdk.GetConsumerGroupsSDK(), ent)
 	case *configurationv1alpha1.KongPluginBinding:
-		return ctrl.Result{}, updatePlugin(ctx, sdk.GetPluginSDK(), cl, ent)
+		err = updatePlugin(ctx, sdk.GetPluginSDK(), cl, ent)
 	case *configurationv1alpha1.KongUpstream:
-		return ctrl.Result{}, updateUpstream(ctx, sdk.GetUpstreamsSDK(), ent)
+		err = updateUpstream(ctx, sdk.GetUpstreamsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialBasicAuth:
-		return ctrl.Result{}, updateKongCredentialBasicAuth(ctx, sdk.GetBasicAuthCredentialsSDK(), ent)
+		err = updateKongCredentialBasicAuth(ctx, sdk.GetBasicAuthCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialAPIKey:
-		return ctrl.Result{}, updateKongCredentialAPIKey(ctx, sdk.GetAPIKeyCredentialsSDK(), ent)
+		err = updateKongCredentialAPIKey(ctx, sdk.GetAPIKeyCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialACL:
-		return ctrl.Result{}, updateKongCredentialACL(ctx, sdk.GetACLCredentialsSDK(), ent)
+		err = updateKongCredentialACL(ctx, sdk.GetACLCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialJWT:
-		return ctrl.Result{}, updateKongCredentialJWT(ctx, sdk.GetJWTCredentialsSDK(), ent)
+		err = updateKongCredentialJWT(ctx, sdk.GetJWTCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCredentialHMAC:
-		return ctrl.Result{}, updateKongCredentialHMAC(ctx, sdk.GetHMACCredentialsSDK(), ent)
+		err = updateKongCredentialHMAC(ctx, sdk.GetHMACCredentialsSDK(), ent)
 	case *configurationv1alpha1.KongCACertificate:
-		return ctrl.Result{}, updateCACertificate(ctx, sdk.GetCACertificatesSDK(), ent)
+		err = updateCACertificate(ctx, sdk.GetCACertificatesSDK(), ent)
 	case *configurationv1alpha1.KongCertificate:
-		return ctrl.Result{}, updateCertificate(ctx, sdk.GetCertificatesSDK(), ent)
+		err = updateCertificate(ctx, sdk.GetCertificatesSDK(), ent)
 	case *configurationv1alpha1.KongTarget:
-		return ctrl.Result{}, updateTarget(ctx, sdk.GetTargetsSDK(), ent)
+		err = updateTarget(ctx, sdk.GetTargetsSDK(), ent)
 	case *configurationv1alpha1.KongVault:
-		return ctrl.Result{}, updateVault(ctx, sdk.GetVaultSDK(), ent)
+		err = updateVault(ctx, sdk.GetVaultSDK(), ent)
 	case *configurationv1alpha1.KongKey:
-		return ctrl.Result{}, updateKey(ctx, sdk.GetKeysSDK(), ent)
+		err = updateKey(ctx, sdk.GetKeysSDK(), ent)
 	case *configurationv1alpha1.KongKeySet:
-		return ctrl.Result{}, updateKeySet(ctx, sdk.GetKeySetsSDK(), ent)
+		err = updateKeySet(ctx, sdk.GetKeySetsSDK(), ent)
 	case *configurationv1alpha1.KongSNI:
-		return ctrl.Result{}, updateSNI(ctx, sdk.GetSNIsSDK(), ent)
+		err = updateSNI(ctx, sdk.GetSNIsSDK(), ent)
 	case *configurationv1alpha1.KongDataPlaneClientCertificate:
-		return ctrl.Result{}, nil // DataPlaneCertificates are immutable.
+		err = nil // DataPlaneCertificates are immutable.
 		// ---------------------------------------------------------------------
 		// TODO: add other Konnect types
 
 	default:
 		return ctrl.Result{}, fmt.Errorf("unsupported entity type %T", ent)
 	}
+
+	var (
+		errRelationsFailed KonnectEntityCreatedButRelationsFailedError
+		errSDK             *sdkkonnecterrs.SDKError
+	)
+	switch {
+	case errors.As(err, &errSDK):
+		SetKonnectEntityProgrammedConditionFalse(e, consts.KonnectEntitiesFailedToUpdateReason, errSDK.Body)
+	case errors.As(err, &errRelationsFailed):
+		e.SetKonnectID(errRelationsFailed.KonnectID)
+		SetKonnectEntityProgrammedConditionFalse(e, errRelationsFailed.Reason, err.Error())
+	case err != nil:
+		SetKonnectEntityProgrammedConditionFalse(e, consts.KonnectEntitiesFailedToUpdateReason, err.Error())
+	default:
+		SetKonnectEntityProgrammedCondition(e)
+	}
+
+	logOpComplete(ctx, now, UpdateOp, e, err)
+
+	return ctrl.Result{}, IgnoreUnrecoverableAPIErr(err, loggerForEntity(ctx, e, UpdateOp))
+}
+
+func loggerForEntity[
+	T constraints.SupportedKonnectEntityType,
+	TEnt constraints.EntityType[T],
+](ctx context.Context, e TEnt, op Op) logr.Logger {
+	keysAndValues := []interface{}{
+		"op", op,
+	}
+
+	// Only add the Konnect ID if it exists and it's a create operation.
+	// Otherwise the Konnect ID is already set in the logger.
+	if id := e.GetKonnectStatus().GetKonnectID(); id != "" && op == CreateOp {
+		keysAndValues = append(keysAndValues, "konnect_id", id)
+	}
+	return ctrllog.FromContext(ctx).WithValues(keysAndValues...)
 }
 
 func logOpComplete[
 	T constraints.SupportedKonnectEntityType,
 	TEnt constraints.EntityType[T],
-](ctx context.Context, start time.Time, op Op, e TEnt) {
-	s := e.GetKonnectStatus()
-	if s == nil {
+](ctx context.Context, start time.Time, op Op, e TEnt, err error) {
+	logger := loggerForEntity(ctx, e, op).
+		WithValues("duration", time.Since(start).String())
+
+	if err != nil {
+		// NOTE: We don't want to print stack trace information here so skip 99 frames
+		// just in case.
+		logger.WithCallDepth(99).Error(err, "operation in Konnect API failed")
 		return
 	}
-
-	ctrllog.FromContext(ctx).
-		Info("operation in Konnect API complete",
-			"op", op,
-			"duration", time.Since(start),
-			"type", constraints.EntityTypeName[T](),
-			"konnect_id", s.GetKonnectID(),
-		)
+	logger.Info("operation in Konnect API complete")
 }
 
 // wrapErrIfKonnectOpFailed checks the response from the Konnect API and returns a uniform
@@ -309,4 +432,88 @@ func wrapErrIfKonnectOpFailed[
 		)
 	}
 	return nil
+}
+
+func logEntityNotFoundRecreating[
+	T constraints.SupportedKonnectEntityType,
+](ctx context.Context, _ *T, id string) {
+	ctrllog.FromContext(ctx).
+		Info(
+			"entity not found in Konnect, trying to recreate",
+			"type", constraints.EntityTypeName[T](),
+			"id", id,
+		)
+}
+
+// sliceToEntityWithIDPtrSlice converts a slice of entities to a slice of entityWithIDPtr.
+func sliceToEntityWithIDPtrSlice[
+	T any,
+	TPtr interface {
+		*T
+		GetID() *string
+	},
+](
+	slice []T,
+) []TPtr {
+	result := make([]TPtr, 0, len(slice))
+	for _, item := range slice {
+		result = append(result, TPtr(&item))
+	}
+	return result
+}
+
+// sliceToEntityWithIDSlice converts a slice of entities to a slice of entityWithID.
+func sliceToEntityWithIDSlice[
+	T any,
+	TPtr interface {
+		*T
+		GetID() string
+	},
+](
+	slice []T,
+) []TPtr {
+	result := make([]TPtr, 0, len(slice))
+	for _, item := range slice {
+		result = append(result, TPtr(&item))
+	}
+	return result
+}
+
+// getMatchingEntryFromListResponseData returns the ID of the first entry in the list response data.
+// It returns an error if no entry with a non-empty ID was found.
+// It is used in conjunction with the list operation to get the ID of the entity that matches the UID
+// hence no filtering is done here because it is assumed that the provided list response data is already filtered.
+func getMatchingEntryFromListResponseData[
+	T interface {
+		GetID() IDType
+	},
+	IDType string | *string,
+](
+	data []T,
+	entity entity,
+) (string, error) {
+	var id string
+	for _, entry := range data {
+		entryID := entry.GetID()
+		switch entryID := any(entryID).(type) {
+		case string:
+			if entryID != "" {
+				id = entryID
+				break
+			}
+		case *string:
+			if entryID != nil && *entryID != "" {
+				id = *entryID
+				break
+			}
+		}
+	}
+
+	if id == "" {
+		return "", EntityWithMatchingUIDNotFoundError{
+			Entity: entity,
+		}
+	}
+
+	return id, nil
 }

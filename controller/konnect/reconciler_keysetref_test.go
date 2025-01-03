@@ -14,7 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/kong/gateway-operator/controller/konnect/conditions"
 	"github.com/kong/gateway-operator/controller/konnect/constraints"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
@@ -85,7 +84,7 @@ func TestHandleKeySetRef(t *testing.T) {
 				},
 				Conditions: []metav1.Condition{
 					{
-						Type:               conditions.KonnectEntityProgrammedConditionType,
+						Type:               konnectv1alpha1.KonnectEntityProgrammedConditionType,
 						Status:             metav1.ConditionTrue,
 						ObservedGeneration: 1,
 						LastTransitionTime: metav1.Now(),
@@ -124,7 +123,7 @@ func TestHandleKeySetRef(t *testing.T) {
 		keySetRefConditionIs = func(expectedStatus metav1.ConditionStatus) func(key *configurationv1alpha1.KongKey) (ok bool, message string) {
 			return func(key *configurationv1alpha1.KongKey) (ok bool, message string) {
 				containsCondition := lo.ContainsBy(key.Status.Conditions, func(condition metav1.Condition) bool {
-					return condition.Type == conditions.KeySetRefValidConditionType &&
+					return condition.Type == konnectv1alpha1.KeySetRefValidConditionType &&
 						condition.Status == expectedStatus
 				})
 				if !containsCondition {
@@ -335,7 +334,8 @@ func TestHandleKeySetRef(t *testing.T) {
 }
 
 func testHandleKeySetRef[T constraints.SupportedKonnectEntityType, TEnt constraints.EntityType[T]](
-	t *testing.T, testCases []handleKeySetRefTestCase[T, TEnt]) {
+	t *testing.T, testCases []handleKeySetRefTestCase[T, TEnt],
+) {
 	t.Helper()
 
 	for _, tc := range testCases {
@@ -343,15 +343,18 @@ func testHandleKeySetRef[T constraints.SupportedKonnectEntityType, TEnt constrai
 			scheme := runtime.NewScheme()
 			require.NoError(t, configurationv1alpha1.AddToScheme(scheme))
 			require.NoError(t, konnectv1alpha1.AddToScheme(scheme))
-			fakeClient := fake.NewClientBuilder().WithScheme(scheme).
-				WithObjects(tc.ent).WithObjects(tc.objects...).
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tc.ent).
+				WithObjects(tc.objects...).
 				// WithStatusSubresource is required for updating status of handled entity.
-				WithStatusSubresource(tc.ent).Build()
-			require.NoError(t, fakeClient.SubResource("status").Update(context.Background(), tc.ent))
+				WithStatusSubresource(tc.ent).
+				Build()
+			require.NoError(t, fakeClient.Status().Update(context.Background(), tc.ent))
 
 			res, err := handleKongKeySetRef(context.Background(), fakeClient, tc.ent)
 
-			var updatedEnt = tc.ent.DeepCopyObject().(TEnt)
+			updatedEnt := tc.ent.DeepCopyObject().(TEnt)
 			require.NoError(t, fakeClient.Get(context.Background(), client.ObjectKeyFromObject(tc.ent), updatedEnt))
 			for _, assertion := range tc.updatedEntAssertions {
 				ok, msg := assertion(updatedEnt)

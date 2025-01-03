@@ -142,7 +142,9 @@ func (r DataPlaneOwnedResourceFinalizerReconciler[T, PT]) Reconcile(ctx context.
 	// If the object does not have the finalizer, we don't need to do anything.
 	hasDataPlaneOwnedFinalizer := lo.Contains(obj.GetFinalizers(), consts.DataPlaneOwnedWaitForOwnerFinalizer)
 	if !hasDataPlaneOwnedFinalizer {
-		log.Debug(logger, fmt.Sprintf("object has no %q finalizer", consts.DataPlaneOwnedWaitForOwnerFinalizer), obj)
+		log.Debug(logger, "object has no finalizer",
+			"finalizer", consts.DataPlaneOwnedWaitForOwnerFinalizer,
+		)
 		return ctrl.Result{}, nil
 	}
 
@@ -172,7 +174,7 @@ func (r DataPlaneOwnedResourceFinalizerReconciler[T, PT]) Reconcile(ctx context.
 
 	// If the DataPlane still exists, we wait for it to be deleted.
 	if !ownerIsGone {
-		log.Debug(logger, "not deleting, owner dataplane still exists", obj, "dataplane", ownerRef.Name)
+		log.Debug(logger, "not deleting, owner dataplane still exists", "dataplane", ownerRef.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -185,13 +187,15 @@ func (r DataPlaneOwnedResourceFinalizerReconciler[T, PT]) Reconcile(ctx context.
 	if err := r.Client.Patch(ctx, obj, client.MergeFrom(old)); err != nil {
 		if k8serrors.IsNotFound(err) {
 			// If the object is already gone, we don't need to do anything.
-			log.Debug(logger, "object is already gone", obj)
+			log.Debug(logger, "object is already gone")
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer from %s %s: %w", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName(), err)
 	}
 
-	log.Debug(logger, fmt.Sprintf("removed %q finalizer", consts.DataPlaneOwnedWaitForOwnerFinalizer), obj)
+	log.Debug(logger, "removed finalizer",
+		"finalizer", consts.DataPlaneOwnedWaitForOwnerFinalizer,
+	)
 	return ctrl.Result{}, nil
 }
 

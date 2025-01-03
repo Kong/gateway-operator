@@ -12,8 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"github.com/kong/gateway-operator/controller/konnect/conditions"
 	"github.com/kong/gateway-operator/controller/konnect/constraints"
+	"github.com/kong/gateway-operator/controller/pkg/patch"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
@@ -53,11 +53,11 @@ func handleKongUpstreamRef[T constraints.SupportedKonnectEntityType, TEnt constr
 	}
 	err := cl.Get(ctx, nn, kongUpstream)
 	if err != nil {
-		if res, errStatus := updateStatusWithCondition(
+		if res, errStatus := patch.StatusWithCondition(
 			ctx, cl, ent,
-			conditions.KongUpstreamRefValidConditionType,
+			konnectv1alpha1.KongUpstreamRefValidConditionType,
 			metav1.ConditionFalse,
-			conditions.KongUpstreamRefReasonInvalid,
+			konnectv1alpha1.KongUpstreamRefReasonInvalid,
 			err.Error(),
 		); errStatus != nil || !res.IsZero() {
 			return res, errStatus
@@ -79,14 +79,14 @@ func handleKongUpstreamRef[T constraints.SupportedKonnectEntityType, TEnt constr
 	}
 
 	// requeue it if referenced KongUpstream is not programmed yet so we cannot do the following work.
-	cond, ok := k8sutils.GetCondition(conditions.KonnectEntityProgrammedConditionType, kongUpstream)
+	cond, ok := k8sutils.GetCondition(konnectv1alpha1.KonnectEntityProgrammedConditionType, kongUpstream)
 	if !ok || cond.Status != metav1.ConditionTrue {
 		ent.SetKonnectID("")
-		if res, err := updateStatusWithCondition(
+		if res, err := patch.StatusWithCondition(
 			ctx, cl, ent,
-			conditions.KongUpstreamRefValidConditionType,
+			konnectv1alpha1.KongUpstreamRefValidConditionType,
 			metav1.ConditionFalse,
-			conditions.KongUpstreamRefReasonInvalid,
+			konnectv1alpha1.KongUpstreamRefReasonInvalid,
 			fmt.Sprintf("Referenced KongUpstream %s is not programmed yet", nn),
 		); err != nil || !res.IsZero() {
 			return ctrl.Result{}, err
@@ -114,11 +114,11 @@ func handleKongUpstreamRef[T constraints.SupportedKonnectEntityType, TEnt constr
 		target.Status.Konnect.UpstreamID = kongUpstream.GetKonnectID()
 	}
 
-	if res, errStatus := updateStatusWithCondition(
+	if res, errStatus := patch.StatusWithCondition(
 		ctx, cl, ent,
-		conditions.KongUpstreamRefValidConditionType,
+		konnectv1alpha1.KongUpstreamRefValidConditionType,
 		metav1.ConditionTrue,
-		conditions.KongUpstreamRefReasonValid,
+		konnectv1alpha1.KongUpstreamRefReasonValid,
 		fmt.Sprintf("Referenced KongUpstream %s programmed", nn),
 	); errStatus != nil || !res.IsZero() {
 		return res, errStatus
@@ -136,11 +136,11 @@ func handleKongUpstreamRef[T constraints.SupportedKonnectEntityType, TEnt constr
 	}
 	cp, err := getCPForRef(ctx, cl, cpRef, ent.GetNamespace())
 	if err != nil {
-		if res, errStatus := updateStatusWithCondition(
+		if res, errStatus := patch.StatusWithCondition(
 			ctx, cl, ent,
-			conditions.ControlPlaneRefValidConditionType,
+			konnectv1alpha1.ControlPlaneRefValidConditionType,
 			metav1.ConditionFalse,
-			conditions.ControlPlaneRefReasonInvalid,
+			konnectv1alpha1.ControlPlaneRefReasonInvalid,
 			err.Error(),
 		); errStatus != nil || !res.IsZero() {
 			return res, errStatus
@@ -157,13 +157,13 @@ func handleKongUpstreamRef[T constraints.SupportedKonnectEntityType, TEnt constr
 		return ctrl.Result{}, err
 	}
 
-	cond, ok = k8sutils.GetCondition(conditions.KonnectEntityProgrammedConditionType, cp)
+	cond, ok = k8sutils.GetCondition(konnectv1alpha1.KonnectEntityProgrammedConditionType, cp)
 	if !ok || cond.Status != metav1.ConditionTrue || cond.ObservedGeneration != cp.GetGeneration() {
-		if res, errStatus := updateStatusWithCondition(
+		if res, errStatus := patch.StatusWithCondition(
 			ctx, cl, ent,
-			conditions.ControlPlaneRefValidConditionType,
+			konnectv1alpha1.ControlPlaneRefValidConditionType,
 			metav1.ConditionFalse,
-			conditions.ControlPlaneRefReasonInvalid,
+			konnectv1alpha1.ControlPlaneRefReasonInvalid,
 			fmt.Sprintf("Referenced ControlPlane %s is not programmed yet", nn),
 		); errStatus != nil || !res.IsZero() {
 			return res, errStatus
@@ -176,11 +176,11 @@ func handleKongUpstreamRef[T constraints.SupportedKonnectEntityType, TEnt constr
 		resource.SetControlPlaneID(cp.Status.ID)
 	}
 
-	if res, errStatus := updateStatusWithCondition(
+	if res, errStatus := patch.StatusWithCondition(
 		ctx, cl, ent,
-		conditions.ControlPlaneRefValidConditionType,
+		konnectv1alpha1.ControlPlaneRefValidConditionType,
 		metav1.ConditionTrue,
-		conditions.ControlPlaneRefReasonValid,
+		konnectv1alpha1.ControlPlaneRefReasonValid,
 		fmt.Sprintf("Referenced ControlPlane %s is programmed", nn),
 	); errStatus != nil || !res.IsZero() {
 		return res, errStatus

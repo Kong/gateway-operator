@@ -11,9 +11,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/kong/gateway-operator/controller/konnect/conditions"
 	"github.com/kong/gateway-operator/controller/konnect/constraints"
+	"github.com/kong/gateway-operator/controller/pkg/patch"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
@@ -56,11 +57,11 @@ func handleKongServiceRef[T constraints.SupportedKonnectEntityType, TEnt constra
 		}
 
 		if err := cl.Get(ctx, nn, &svc); err != nil {
-			if res, errStatus := updateStatusWithCondition(
+			if res, errStatus := patch.StatusWithCondition(
 				ctx, cl, ent,
-				conditions.KongServiceRefValidConditionType,
+				konnectv1alpha1.KongServiceRefValidConditionType,
 				metav1.ConditionFalse,
-				conditions.KongServiceRefReasonInvalid,
+				konnectv1alpha1.KongServiceRefReasonInvalid,
 				err.Error(),
 			); errStatus != nil || !res.IsZero() {
 				return res, errStatus
@@ -77,22 +78,28 @@ func handleKongServiceRef[T constraints.SupportedKonnectEntityType, TEnt constra
 			}
 		}
 
-		cond, ok := k8sutils.GetCondition(conditions.KonnectEntityProgrammedConditionType, &svc)
+		old := ent.DeepCopyObject().(TEnt)
+		cond, ok := k8sutils.GetCondition(konnectv1alpha1.KonnectEntityProgrammedConditionType, &svc)
 		if !ok || cond.Status != metav1.ConditionTrue {
 			ent.SetKonnectID("")
-			if res, err := updateStatusWithCondition(
-				ctx, cl, ent,
-				conditions.KongServiceRefValidConditionType,
+			_ = patch.SetStatusWithConditionIfDifferent(ent,
+				konnectv1alpha1.KongServiceRefValidConditionType,
 				metav1.ConditionFalse,
-				conditions.KongServiceRefReasonInvalid,
+				konnectv1alpha1.KongServiceRefReasonInvalid,
 				fmt.Sprintf("Referenced KongService %s is not programmed yet", nn),
-			); err != nil || !res.IsZero() {
+			)
+
+			_, err := patch.ApplyStatusPatchIfNotEmpty(ctx, cl, ctrllog.FromContext(ctx), ent, old)
+			if err != nil {
+				if k8serrors.IsConflict(err) {
+					return ctrl.Result{Requeue: true}, nil
+				}
 				return ctrl.Result{}, err
 			}
+
 			return ctrl.Result{Requeue: true}, nil
 		}
 
-		old := ent.DeepCopyObject().(TEnt)
 		if err := controllerutil.SetOwnerReference(&svc, ent, cl.Scheme(), controllerutil.WithBlockOwnerDeletion(true)); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to set owner reference: %w", err)
 		}
@@ -113,14 +120,19 @@ func handleKongServiceRef[T constraints.SupportedKonnectEntityType, TEnt constra
 			route.Status.Konnect.ServiceID = svc.Status.Konnect.GetKonnectID()
 		}
 
-		if res, errStatus := updateStatusWithCondition(
-			ctx, cl, ent,
-			conditions.KongServiceRefValidConditionType,
+		_ = patch.SetStatusWithConditionIfDifferent(ent,
+			konnectv1alpha1.KongServiceRefValidConditionType,
 			metav1.ConditionTrue,
-			conditions.KongServiceRefReasonValid,
+			konnectv1alpha1.KongServiceRefReasonValid,
 			fmt.Sprintf("Referenced KongService %s programmed", nn),
-		); errStatus != nil || !res.IsZero() {
-			return res, errStatus
+		)
+
+		_, err := patch.ApplyStatusPatchIfNotEmpty(ctx, cl, ctrllog.FromContext(ctx), ent, old)
+		if err != nil {
+			if k8serrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, err
 		}
 
 		cpRef, ok := getControlPlaneRef(&svc).Get()
@@ -132,11 +144,11 @@ func handleKongServiceRef[T constraints.SupportedKonnectEntityType, TEnt constra
 		}
 		cp, err := getCPForRef(ctx, cl, cpRef, ent.GetNamespace())
 		if err != nil {
-			if res, errStatus := updateStatusWithCondition(
+			if res, errStatus := patch.StatusWithCondition(
 				ctx, cl, ent,
-				conditions.ControlPlaneRefValidConditionType,
+				konnectv1alpha1.ControlPlaneRefValidConditionType,
 				metav1.ConditionFalse,
-				conditions.ControlPlaneRefReasonInvalid,
+				konnectv1alpha1.ControlPlaneRefReasonInvalid,
 				err.Error(),
 			); errStatus != nil || !res.IsZero() {
 				return res, errStatus
@@ -150,13 +162,13 @@ func handleKongServiceRef[T constraints.SupportedKonnectEntityType, TEnt constra
 			return ctrl.Result{}, err
 		}
 
-		cond, ok = k8sutils.GetCondition(conditions.KonnectEntityProgrammedConditionType, cp)
+		cond, ok = k8sutils.GetCondition(konnectv1alpha1.KonnectEntityProgrammedConditionType, cp)
 		if !ok || cond.Status != metav1.ConditionTrue || cond.ObservedGeneration != cp.GetGeneration() {
-			if res, errStatus := updateStatusWithCondition(
+			if res, errStatus := patch.StatusWithCondition(
 				ctx, cl, ent,
-				conditions.ControlPlaneRefValidConditionType,
+				konnectv1alpha1.ControlPlaneRefValidConditionType,
 				metav1.ConditionFalse,
-				conditions.ControlPlaneRefReasonInvalid,
+				konnectv1alpha1.ControlPlaneRefReasonInvalid,
 				fmt.Sprintf("Referenced ControlPlane %s is not programmed yet", nn),
 			); errStatus != nil || !res.IsZero() {
 				return res, errStatus
@@ -172,14 +184,19 @@ func handleKongServiceRef[T constraints.SupportedKonnectEntityType, TEnt constra
 			resource.SetControlPlaneID(cp.Status.ID)
 		}
 
-		if res, errStatus := updateStatusWithCondition(
-			ctx, cl, ent,
-			conditions.ControlPlaneRefValidConditionType,
+		_ = patch.SetStatusWithConditionIfDifferent(ent,
+			konnectv1alpha1.ControlPlaneRefValidConditionType,
 			metav1.ConditionTrue,
-			conditions.ControlPlaneRefReasonValid,
+			konnectv1alpha1.ControlPlaneRefReasonValid,
 			fmt.Sprintf("Referenced ControlPlane %s is programmed", client.ObjectKeyFromObject(cp)),
-		); errStatus != nil || !res.IsZero() {
-			return res, errStatus
+		)
+
+		_, err = patch.ApplyStatusPatchIfNotEmpty(ctx, cl, ctrllog.FromContext(ctx), ent, old)
+		if err != nil {
+			if k8serrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, err
 		}
 
 	default:

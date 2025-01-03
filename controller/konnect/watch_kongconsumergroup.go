@@ -53,7 +53,9 @@ func KongConsumerGroupReconciliationWatchOptions(
 			return b.Watches(
 				&konnectv1alpha1.KonnectGatewayControlPlane{},
 				handler.EnqueueRequestsFromMapFunc(
-					enqueueKongConsumerGroupForKonnectGatewayControlPlane(cl),
+					enqueueObjectForKonnectGatewayControlPlane[configurationv1beta1.KongConsumerGroupList](
+						cl, IndexFieldKongConsumerGroupOnKonnectGatewayControlPlane,
+					),
 				),
 			)
 		},
@@ -105,62 +107,6 @@ func enqueueKongConsumerGroupForKonnectAPIAuthConfiguration(
 
 				// TODO: change this when cross namespace refs are allowed.
 				if cp.GetKonnectAPIAuthConfigurationRef().Name != auth.Name {
-					continue
-				}
-
-				ret = append(ret, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Namespace: group.Namespace,
-						Name:      group.Name,
-					},
-				})
-
-			case configurationv1alpha1.ControlPlaneRefKonnectID:
-				ctrllog.FromContext(ctx).Error(
-					fmt.Errorf("unimplemented ControlPlaneRef type %q", cpRef.Type),
-					"unimplemented ControlPlaneRef for KongConsumerGroup",
-					"KongConsumerGroup", group, "refType", cpRef.Type,
-				)
-				continue
-
-			default:
-				ctrllog.FromContext(ctx).V(logging.DebugLevel.Value()).Info(
-					"unsupported ControlPlaneRef for KongConsumerGroup",
-					"KongConsumerGroup", group, "refType", cpRef.Type,
-				)
-				continue
-			}
-		}
-		return ret
-	}
-}
-
-func enqueueKongConsumerGroupForKonnectGatewayControlPlane(
-	cl client.Client,
-) func(ctx context.Context, obj client.Object) []reconcile.Request {
-	return func(ctx context.Context, obj client.Object) []reconcile.Request {
-		cp, ok := obj.(*konnectv1alpha1.KonnectGatewayControlPlane)
-		if !ok {
-			return nil
-		}
-		var l configurationv1beta1.KongConsumerGroupList
-		if err := cl.List(ctx, &l, &client.ListOptions{
-			// TODO: change this when cross namespace refs are allowed.
-			Namespace: cp.GetNamespace(),
-		}); err != nil {
-			return nil
-		}
-
-		var ret []reconcile.Request
-		for _, group := range l.Items {
-			cpRef, ok := getControlPlaneRef(&group).Get()
-			if !ok {
-				continue
-			}
-			switch cpRef.Type {
-			case configurationv1alpha1.ControlPlaneRefKonnectNamespacedRef:
-				// TODO: change this when cross namespace refs are allowed.
-				if cpRef.KonnectNamespacedRef.Name != cp.Name {
 					continue
 				}
 

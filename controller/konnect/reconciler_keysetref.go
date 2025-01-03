@@ -13,8 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/kong/gateway-operator/controller/konnect/conditions"
 	"github.com/kong/gateway-operator/controller/konnect/constraints"
+	"github.com/kong/gateway-operator/controller/pkg/patch"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
@@ -33,15 +33,22 @@ func handleKongKeySetRef[T constraints.SupportedKonnectEntityType, TEnt constrai
 			// If the entity has a resolved reference, but the spec has changed, we need to adjust the status
 			// and transfer the ownership back from the KeySet to the ControlPlane.
 			if key.Status.Konnect != nil && key.Status.Konnect.GetKeySetID() != "" {
+				old := key.DeepCopyObject().(TEnt)
 				// Reset the KeySetID in the status and set the condition to True.
 				key.Status.Konnect.KeySetID = ""
-				if res, err := updateStatusWithCondition(ctx, cl, key,
-					conditions.KeySetRefValidConditionType,
+				_ = patch.SetStatusWithConditionIfDifferent(ent,
+					konnectv1alpha1.KeySetRefValidConditionType,
 					metav1.ConditionTrue,
-					conditions.KeySetRefReasonValid,
+					konnectv1alpha1.KeySetRefReasonValid,
 					"KeySetRef is unset",
-				); err != nil || !res.IsZero() {
-					return res, fmt.Errorf("failed to update status: %w", err)
+				)
+
+				// Patch the status
+				if _, err := patch.ApplyStatusPatchIfNotEmpty(ctx, cl, ctrllog.FromContext(ctx), ent, old); err != nil {
+					if k8serrors.IsConflict(err) {
+						return ctrl.Result{Requeue: true}, nil
+					}
+					return ctrl.Result{}, fmt.Errorf("failed to patch status: %w", err)
 				}
 
 				// Transfer the ownership back to the ControlPlane if it's resolved.
@@ -71,11 +78,11 @@ func handleKongKeySetRef[T constraints.SupportedKonnectEntityType, TEnt constrai
 		Namespace: ent.GetNamespace(),
 	}
 	if err := cl.Get(ctx, nn, &keySet); err != nil {
-		if res, errStatus := updateStatusWithCondition(
+		if res, errStatus := patch.StatusWithCondition(
 			ctx, cl, ent,
-			conditions.KeySetRefValidConditionType,
+			konnectv1alpha1.KeySetRefValidConditionType,
 			metav1.ConditionFalse,
-			conditions.KeySetRefReasonInvalid,
+			konnectv1alpha1.KeySetRefReasonInvalid,
 			err.Error(),
 		); errStatus != nil || !res.IsZero() {
 			return res, errStatus
@@ -101,13 +108,13 @@ func handleKongKeySetRef[T constraints.SupportedKonnectEntityType, TEnt constrai
 	}
 
 	// Verify that the KongKeySet is programmed.
-	cond, ok := k8sutils.GetCondition(conditions.KonnectEntityProgrammedConditionType, &keySet)
+	cond, ok := k8sutils.GetCondition(konnectv1alpha1.KonnectEntityProgrammedConditionType, &keySet)
 	if !ok || cond.Status != metav1.ConditionTrue {
-		if res, err := updateStatusWithCondition(
+		if res, err := patch.StatusWithCondition(
 			ctx, cl, ent,
-			conditions.KeySetRefValidConditionType,
+			konnectv1alpha1.KeySetRefValidConditionType,
 			metav1.ConditionFalse,
-			conditions.KeySetRefReasonInvalid,
+			konnectv1alpha1.KeySetRefReasonInvalid,
 			fmt.Sprintf("Referenced KongKeySet %s is not programmed yet", nn),
 		); err != nil || !res.IsZero() {
 			return ctrl.Result{}, err
@@ -124,6 +131,8 @@ func handleKongKeySetRef[T constraints.SupportedKonnectEntityType, TEnt constrai
 		return res, err
 	}
 
+	old := ent.DeepCopyObject().(TEnt)
+
 	// TODO: make this generic.
 	// KongKeySet ID is not stored in KonnectEntityStatus because not all entities
 	// have a KeySetRef, hence the type constraints in the reconciler can't be used.
@@ -134,14 +143,19 @@ func handleKongKeySetRef[T constraints.SupportedKonnectEntityType, TEnt constrai
 		key.Status.Konnect.KeySetID = keySet.Status.Konnect.GetKonnectID()
 	}
 
-	if res, errStatus := updateStatusWithCondition(
-		ctx, cl, ent,
-		conditions.KeySetRefValidConditionType,
+	_ = patch.SetStatusWithConditionIfDifferent(ent,
+		konnectv1alpha1.KeySetRefValidConditionType,
 		metav1.ConditionTrue,
-		conditions.KeySetRefReasonValid,
+		konnectv1alpha1.KeySetRefReasonValid,
 		fmt.Sprintf("Referenced KongKeySet %s programmed", nn),
-	); errStatus != nil || res.Requeue {
-		return res, errStatus
+	)
+
+	_, err := patch.ApplyStatusPatchIfNotEmpty(ctx, cl, ctrllog.FromContext(ctx), ent, old)
+	if err != nil {
+		if k8serrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
@@ -179,12 +193,12 @@ func passOwnershipExclusivelyTo[T constraints.SupportedKonnectEntityType, TEnt c
 		return ctrl.Result{}, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
-	// Patch the entity.
-	if err := cl.Patch(ctx, ent, client.MergeFrom(old)); err != nil {
+	// Patch the spec
+	if _, _, err := patch.ApplyPatchIfNotEmpty(ctx, cl, ctrllog.FromContext(ctx), ent, old, true); err != nil {
 		if k8serrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("failed to patch owner references: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to patch: %w", err)
 	}
 
 	return ctrl.Result{}, nil

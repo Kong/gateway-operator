@@ -3,23 +3,24 @@ package konnect
 import (
 	"context"
 	"fmt"
-	"regexp"
-	"strings"
 	"time"
 
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	"github.com/kong/gateway-operator/controller/konnect/conditions"
 	"github.com/kong/gateway-operator/controller/konnect/ops"
+	sdkops "github.com/kong/gateway-operator/controller/konnect/ops/sdk"
 	"github.com/kong/gateway-operator/controller/pkg/log"
+	"github.com/kong/gateway-operator/controller/pkg/patch"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 
 	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
@@ -27,7 +28,7 @@ import (
 
 // KonnectAPIAuthConfigurationReconciler reconciles a KonnectAPIAuthConfiguration object.
 type KonnectAPIAuthConfigurationReconciler struct {
-	sdkFactory      ops.SDKFactory
+	sdkFactory      sdkops.SDKFactory
 	developmentMode bool
 	client          client.Client
 }
@@ -45,7 +46,7 @@ const (
 
 // NewKonnectAPIAuthConfigurationReconciler creates a new KonnectAPIAuthConfigurationReconciler.
 func NewKonnectAPIAuthConfigurationReconciler(
-	sdkFactory ops.SDKFactory,
+	sdkFactory sdkops.SDKFactory,
 	developmentMode bool,
 	client client.Client,
 ) *KonnectAPIAuthConfigurationReconciler {
@@ -97,7 +98,7 @@ func (r *KonnectAPIAuthConfigurationReconciler) Reconcile(
 		logger         = log.GetLogger(ctx, entityTypeName, r.developmentMode)
 	)
 
-	log.Debug(logger, "reconciling", apiAuth)
+	log.Debug(logger, "reconciling")
 	if !apiAuth.GetDeletionTimestamp().IsZero() {
 		logger.Info("resource is being deleted")
 		// wait for termination grace period before cleaning up
@@ -117,11 +118,11 @@ func (r *KonnectAPIAuthConfigurationReconciler) Reconcile(
 
 	token, err := getTokenFromKonnectAPIAuthConfiguration(ctx, r.client, &apiAuth)
 	if err != nil {
-		if res, errStatus := updateStatusWithCondition(
+		if res, errStatus := patch.StatusWithCondition(
 			ctx, r.client, &apiAuth,
-			conditions.KonnectEntityAPIAuthConfigurationValidConditionType,
+			konnectv1alpha1.KonnectEntityAPIAuthConfigurationValidConditionType,
 			metav1.ConditionFalse,
-			conditions.KonnectEntityAPIAuthConfigurationReasonInvalid,
+			konnectv1alpha1.KonnectEntityAPIAuthConfigurationReasonInvalid,
 			err.Error(),
 		); errStatus != nil || !res.IsZero() {
 			return res, errStatus
@@ -129,13 +130,10 @@ func (r *KonnectAPIAuthConfigurationReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	serverURL, err := getKonnectServerURL(apiAuth.Spec.ServerURL)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
+	serverURL := ops.NewServerURL(apiAuth.Spec.ServerURL)
 	sdk := r.sdkFactory.NewKonnectSDK(
-		serverURL,
-		ops.SDKToken(token),
+		serverURL.String(),
+		sdkops.SDKToken(token),
 	)
 
 	// TODO(pmalek): check if api auth config has a valid status condition
@@ -147,29 +145,46 @@ func (r *KonnectAPIAuthConfigurationReconciler) Reconcile(
 
 	// NOTE: This is needed because currently the SDK only lists the prod global API as supported:
 	// https://github.com/Kong/sdk-konnect-go/blob/999d9a987e1aa7d2e09ac11b1450f4563adf21ea/models/operations/getorganizationsme.go#L10-L12
-	respOrg, err := sdk.GetMeSDK().GetOrganizationsMe(ctx, sdkkonnectops.WithServerURL("https://"+apiAuth.Spec.ServerURL))
-	if err != nil {
+	respOrg, err := sdk.GetMeSDK().GetOrganizationsMe(ctx, sdkkonnectops.WithServerURL(serverURL.String()))
+	if err != nil ||
+		respOrg == nil ||
+		respOrg.MeOrganization == nil ||
+		respOrg.MeOrganization.ID == nil {
+
+		var errMsg string
+		if err != nil {
+			errMsg = err.Error()
+		} else {
+			errMsg = "response from Konnect is nil"
+		}
+
 		logger.Error(err, "failed to get organization info from Konnect")
-		if cond, ok := k8sutils.GetCondition(conditions.KonnectEntityAPIAuthConfigurationValidConditionType, &apiAuth); !ok ||
+		if cond, ok := k8sutils.GetCondition(konnectv1alpha1.KonnectEntityAPIAuthConfigurationValidConditionType, &apiAuth); !ok ||
 			cond.Status != metav1.ConditionFalse ||
-			cond.Reason != conditions.KonnectEntityAPIAuthConfigurationReasonInvalid ||
+			cond.Reason != konnectv1alpha1.KonnectEntityAPIAuthConfigurationReasonInvalid ||
 			cond.ObservedGeneration != apiAuth.GetGeneration() ||
 			apiAuth.Status.OrganizationID != "" ||
-			apiAuth.Status.ServerURL != apiAuth.Spec.ServerURL {
+			apiAuth.Status.ServerURL != serverURL.String() {
 
+			old := apiAuth.DeepCopy()
 			apiAuth.Status.OrganizationID = ""
-			apiAuth.Status.ServerURL = apiAuth.Spec.ServerURL
+			apiAuth.Status.ServerURL = serverURL.String()
 
-			res, errUpdate := updateStatusWithCondition(
-				ctx, r.client, &apiAuth,
-				conditions.KonnectEntityAPIAuthConfigurationValidConditionType,
+			_ = patch.SetStatusWithConditionIfDifferent(&apiAuth,
+				konnectv1alpha1.KonnectEntityAPIAuthConfigurationValidConditionType,
 				metav1.ConditionFalse,
-				conditions.KonnectEntityAPIAuthConfigurationReasonInvalid,
-				err.Error(),
+				konnectv1alpha1.KonnectEntityAPIAuthConfigurationReasonInvalid,
+				errMsg,
 			)
-			if errUpdate != nil || !res.IsZero() {
-				return res, errUpdate
+
+			_, errUpdate := patch.ApplyStatusPatchIfNotEmpty(ctx, r.client, ctrllog.FromContext(ctx), &apiAuth, old)
+			if errUpdate != nil {
+				if k8serrors.IsConflict(errUpdate) {
+					return ctrl.Result{Requeue: true}, nil
+				}
+				return ctrl.Result{}, errUpdate
 			}
+
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, nil
@@ -187,27 +202,34 @@ func (r *KonnectAPIAuthConfigurationReconciler) Reconcile(
 		}
 		condMessage = fmt.Sprintf("Token from Secret %s is valid", nn)
 	}
-	if cond, ok := k8sutils.GetCondition(conditions.KonnectEntityAPIAuthConfigurationValidConditionType, &apiAuth); !ok ||
+	if cond, ok := k8sutils.GetCondition(konnectv1alpha1.KonnectEntityAPIAuthConfigurationValidConditionType, &apiAuth); !ok ||
 		cond.Status != metav1.ConditionTrue ||
 		cond.Message != condMessage ||
-		cond.Reason != conditions.KonnectEntityAPIAuthConfigurationReasonValid ||
+		cond.Reason != konnectv1alpha1.KonnectEntityAPIAuthConfigurationReasonValid ||
 		cond.ObservedGeneration != apiAuth.GetGeneration() ||
 		apiAuth.Status.OrganizationID != *respOrg.MeOrganization.ID ||
-		apiAuth.Status.ServerURL != apiAuth.Spec.ServerURL {
+		apiAuth.Status.ServerURL != serverURL.String() {
+
+		old := apiAuth.DeepCopy()
 
 		apiAuth.Status.OrganizationID = *respOrg.MeOrganization.ID
-		apiAuth.Status.ServerURL = apiAuth.Spec.ServerURL
+		apiAuth.Status.ServerURL = serverURL.String()
 
-		res, err := updateStatusWithCondition(
-			ctx, r.client, &apiAuth,
-			conditions.KonnectEntityAPIAuthConfigurationValidConditionType,
+		_ = patch.SetStatusWithConditionIfDifferent(&apiAuth,
+			konnectv1alpha1.KonnectEntityAPIAuthConfigurationValidConditionType,
 			metav1.ConditionTrue,
-			conditions.KonnectEntityAPIAuthConfigurationReasonValid,
+			konnectv1alpha1.KonnectEntityAPIAuthConfigurationReasonValid,
 			condMessage,
 		)
-		if err != nil || !res.IsZero() {
-			return res, err
+
+		_, errUpdate := patch.ApplyStatusPatchIfNotEmpty(ctx, r.client, ctrllog.FromContext(ctx), &apiAuth, old)
+		if errUpdate != nil {
+			if k8serrors.IsConflict(errUpdate) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, errUpdate
 		}
+
 		return ctrl.Result{}, nil
 	}
 
@@ -247,15 +269,4 @@ func getTokenFromKonnectAPIAuthConfiguration(
 	}
 
 	return "", fmt.Errorf("unknown KonnectAPIAuthType: %s", apiAuth.Spec.Type)
-}
-
-var serverURLRegexp = regexp.MustCompile(".*://")
-
-func getKonnectServerURL(serverURL string) (string, error) {
-	if !serverURLRegexp.MatchString(serverURL) {
-		serverURL = "https://" + serverURL
-	} else if !strings.HasPrefix(serverURL, "https://") {
-		return "", fmt.Errorf("in case scheme is specified in the ServerURL, it must be https://: %s", serverURL)
-	}
-	return serverURL, nil
 }

@@ -2,27 +2,25 @@ package ops
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
-	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
 	"github.com/samber/lo"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+
+	sdkops "github.com/kong/gateway-operator/controller/konnect/ops/sdk"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 )
 
 func createKongCredentialAPIKey(
 	ctx context.Context,
-	sdk KongCredentialAPIKeySDK,
+	sdk sdkops.KongCredentialAPIKeySDK,
 	cred *configurationv1alpha1.KongCredentialAPIKey,
 ) error {
 	cpID := cred.GetControlPlaneID()
 	if cpID == "" {
-		return fmt.Errorf("can't create %T %s without a Konnect ControlPlane ID", cred, client.ObjectKeyFromObject(cred))
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: cred, Op: CreateOp}
 	}
 
 	resp, err := sdk.CreateKeyAuthWithConsumer(ctx,
@@ -37,12 +35,14 @@ func createKongCredentialAPIKey(
 	// Can't adopt it as it will cause conflicts between the controller
 	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, CreateOp, cred); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(cred, "FailedToCreate", errWrap.Error())
 		return errWrap
 	}
 
-	cred.Status.Konnect.SetKonnectID(*resp.KeyAuth.ID)
-	SetKonnectEntityProgrammedCondition(cred)
+	if resp == nil || resp.KeyAuth == nil || resp.KeyAuth.ID == nil {
+		return fmt.Errorf("failed creating %s: %w", cred.GetTypeName(), ErrNilResponse)
+	}
+
+	cred.SetKonnectID(*resp.KeyAuth.ID)
 
 	return nil
 }
@@ -53,12 +53,12 @@ func createKongCredentialAPIKey(
 // if the operation fails.
 func updateKongCredentialAPIKey(
 	ctx context.Context,
-	sdk KongCredentialAPIKeySDK,
+	sdk sdkops.KongCredentialAPIKeySDK,
 	cred *configurationv1alpha1.KongCredentialAPIKey,
 ) error {
 	cpID := cred.GetControlPlaneID()
 	if cpID == "" {
-		return fmt.Errorf("can't update %T %s without a Konnect ControlPlane ID", cred, client.ObjectKeyFromObject(cred))
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: cred, Op: UpdateOp}
 	}
 
 	_, err := sdk.UpsertKeyAuthWithConsumer(ctx,
@@ -69,15 +69,9 @@ func updateKongCredentialAPIKey(
 			KeyAuthWithoutParents:       kongCredentialAPIKeyToKeyAuthWithoutParents(cred),
 		})
 
-	// TODO: handle already exists
-	// Can't adopt it as it will cause conflicts between the controller
-	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, UpdateOp, cred); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(cred, "FailedToUpdate", errWrap.Error())
 		return errWrap
 	}
-
-	SetKonnectEntityProgrammedCondition(cred)
 
 	return nil
 }
@@ -87,7 +81,7 @@ func updateKongCredentialAPIKey(
 // It returns an error if the operation fails.
 func deleteKongCredentialAPIKey(
 	ctx context.Context,
-	sdk KongCredentialAPIKeySDK,
+	sdk sdkops.KongCredentialAPIKeySDK,
 	cred *configurationv1alpha1.KongCredentialAPIKey,
 ) error {
 	cpID := cred.GetControlPlaneID()
@@ -96,28 +90,10 @@ func deleteKongCredentialAPIKey(
 		sdkkonnectops.DeleteKeyAuthWithConsumerRequest{
 			ControlPlaneID:              cpID,
 			ConsumerIDForNestedEntities: cred.Status.Konnect.GetConsumerID(),
-			// BasicAuthID:                 id,
+			KeyAuthID:                   id,
 		})
 	if errWrap := wrapErrIfKonnectOpFailed(err, DeleteOp, cred); errWrap != nil {
-		// Service delete operation returns an SDKError instead of a NotFoundError.
-		var sdkError *sdkkonnecterrs.SDKError
-		if errors.As(errWrap, &sdkError) {
-			if sdkError.StatusCode == 404 {
-				ctrllog.FromContext(ctx).
-					Info("entity not found in Konnect, skipping delete",
-						"op", DeleteOp, "type", cred.GetTypeName(), "id", id,
-					)
-				return nil
-			}
-			return FailedKonnectOpError[configurationv1alpha1.KongCredentialAPIKey]{
-				Op:  DeleteOp,
-				Err: sdkError,
-			}
-		}
-		return FailedKonnectOpError[configurationv1alpha1.KongService]{
-			Op:  DeleteOp,
-			Err: errWrap,
-		}
+		return handleDeleteError(ctx, err, cred)
 	}
 
 	return nil
@@ -127,7 +103,34 @@ func kongCredentialAPIKeyToKeyAuthWithoutParents(
 	cred *configurationv1alpha1.KongCredentialAPIKey,
 ) sdkkonnectcomp.KeyAuthWithoutParents {
 	return sdkkonnectcomp.KeyAuthWithoutParents{
-		Key:  lo.ToPtr(cred.Spec.Key),
+		Key:  cred.Spec.Key,
 		Tags: GenerateTagsForObject(cred, cred.Spec.Tags...),
 	}
+}
+
+// getKongCredentialAPIKeyForUID lists API key credentials in Konnect with given k8s uid as its tag.
+func getKongCredentialAPIKeyForUID(
+	ctx context.Context,
+	sdk sdkops.KongCredentialAPIKeySDK,
+	cred *configurationv1alpha1.KongCredentialAPIKey,
+) (string, error) {
+	cpID := cred.GetControlPlaneID()
+
+	req := sdkkonnectops.ListKeyAuthRequest{
+		// NOTE: only filter on object's UID.
+		// Other fields like name might have changed in the meantime but that's OK.
+		// Those will be enforced via subsequent updates.
+		ControlPlaneID: cpID,
+		Tags:           lo.ToPtr(UIDLabelForObject(cred)),
+	}
+
+	resp, err := sdk.ListKeyAuth(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed listing %s: %w", cred.GetTypeName(), err)
+	}
+	if resp == nil || resp.Object == nil {
+		return "", fmt.Errorf("failed listing %s: %w", cred.GetTypeName(), ErrNilResponse)
+	}
+
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDPtrSlice(resp.Object.Data), cred)
 }

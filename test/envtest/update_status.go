@@ -8,7 +8,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/kong/gateway-operator/controller/konnect/conditions"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 
 	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
@@ -107,6 +106,24 @@ func updateKongKeySetStatusWithProgrammed(
 	require.NoError(t, cl.Status().Update(ctx, obj))
 }
 
+func updateKongUpstreamStatusWithProgrammed(
+	t *testing.T,
+	ctx context.Context,
+	cl client.Client,
+	obj *configurationv1alpha1.KongUpstream,
+	id, cpID string,
+) {
+	obj.Status.Konnect = &konnectv1alpha1.KonnectEntityStatusWithControlPlaneRef{
+		ControlPlaneID:      cpID,
+		KonnectEntityStatus: konnectEntityStatus(id),
+	}
+	obj.Status.Conditions = []metav1.Condition{
+		programmedCondition(obj.GetGeneration()),
+	}
+
+	require.NoError(t, cl.Status().Update(ctx, obj))
+}
+
 func konnectEntityStatus(id string) konnectv1alpha1.KonnectEntityStatus {
 	return konnectv1alpha1.KonnectEntityStatus{
 		ID:        id,
@@ -117,9 +134,9 @@ func konnectEntityStatus(id string) konnectv1alpha1.KonnectEntityStatus {
 
 func programmedCondition(generation int64) metav1.Condition {
 	return k8sutils.NewConditionWithGeneration(
-		conditions.KonnectEntityProgrammedConditionType,
+		konnectv1alpha1.KonnectEntityProgrammedConditionType,
 		metav1.ConditionTrue,
-		conditions.KonnectEntityProgrammedReasonProgrammed,
+		konnectv1alpha1.KonnectEntityProgrammedReasonProgrammed,
 		"",
 		generation,
 	)

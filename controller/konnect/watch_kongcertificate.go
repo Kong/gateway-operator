@@ -41,7 +41,9 @@ func KongCertificateReconciliationWatchOptions(cl client.Client) []func(*ctrl.Bu
 			return b.Watches(
 				&konnectv1alpha1.KonnectGatewayControlPlane{},
 				handler.EnqueueRequestsFromMapFunc(
-					enqueueKongCertificateForKonnectControlPlane(cl),
+					enqueueObjectForKonnectGatewayControlPlane[configurationv1alpha1.KongCertificateList](
+						cl, IndexFieldKongCertificateOnKonnectGatewayControlPlane,
+					),
 				),
 			)
 		},
@@ -91,62 +93,6 @@ func enqueueKongCertificateForKonnectAPIAuthConfiguration(cl client.Client) hand
 
 				// TODO: change this when cross namespace refs are allowed.
 				if cp.GetKonnectAPIAuthConfigurationRef().Name != auth.Name {
-					continue
-				}
-
-				ret = append(ret, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Namespace: cert.Namespace,
-						Name:      cert.Name,
-					},
-				})
-
-			case configurationv1alpha1.ControlPlaneRefKonnectID:
-				ctrllog.FromContext(ctx).Error(
-					fmt.Errorf("unimplemented ControlPlaneRef type %q", cpRef.Type),
-					"unimplemented ControlPlaneRef for KongCertificate",
-					"KongCertificate", cert, "refType", cpRef.Type,
-				)
-				continue
-
-			default:
-				ctrllog.FromContext(ctx).V(logging.DebugLevel.Value()).Info(
-					"unsupported ControlPlaneRef for KongCertificate",
-					"KongCertificate", cert, "refType", cpRef.Type,
-				)
-				continue
-			}
-		}
-		return ret
-	}
-}
-
-func enqueueKongCertificateForKonnectControlPlane(
-	cl client.Client,
-) func(ctx context.Context, obj client.Object) []reconcile.Request {
-	return func(ctx context.Context, obj client.Object) []reconcile.Request {
-		cp, ok := obj.(*konnectv1alpha1.KonnectGatewayControlPlane)
-		if !ok {
-			return nil
-		}
-		var l configurationv1alpha1.KongCertificateList
-		if err := cl.List(ctx, &l, &client.ListOptions{
-			// TODO: change this when cross namespace refs are allowed.
-			Namespace: cp.GetNamespace(),
-		}); err != nil {
-			return nil
-		}
-
-		var ret []reconcile.Request
-		for _, cert := range l.Items {
-			cpRef, ok := getControlPlaneRef(&cert).Get()
-			if !ok {
-				continue
-			}
-			switch cpRef.Type {
-			case configurationv1alpha1.ControlPlaneRefKonnectNamespacedRef:
-				// TODO: change this when cross namespace refs are allowed.
-				if cpRef.KonnectNamespacedRef.Name != cp.Name {
 					continue
 				}
 

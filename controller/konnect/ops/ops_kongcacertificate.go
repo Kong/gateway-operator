@@ -2,28 +2,27 @@ package ops
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
-	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"github.com/samber/lo"
+
+	sdkops "github.com/kong/gateway-operator/controller/konnect/ops/sdk"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 )
 
 // createCACertificate creates a KongCACertificate in Konnect.
-// It sets the KonnectID and the Programmed condition in the KongCACertificate status.
+// It sets the KonnectID the KongCACertificate status.
 func createCACertificate(
 	ctx context.Context,
-	sdk CACertificatesSDK,
+	sdk sdkops.CACertificatesSDK,
 	cert *configurationv1alpha1.KongCACertificate,
 ) error {
 	cpID := cert.GetControlPlaneID()
 	if cpID == "" {
-		return fmt.Errorf("can't create %T %s without a Konnect ControlPlane ID", cert, client.ObjectKeyFromObject(cert))
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: cert, Op: CreateOp}
 	}
 
 	resp, err := sdk.CreateCaCertificate(ctx,
@@ -35,12 +34,15 @@ func createCACertificate(
 	// Can't adopt it as it will cause conflicts between the controller
 	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, CreateOp, cert); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(cert, "FailedToCreate", errWrap.Error())
 		return errWrap
 	}
 
-	cert.Status.Konnect.SetKonnectID(*resp.CACertificate.ID)
-	SetKonnectEntityProgrammedCondition(cert)
+	if resp == nil || resp.CACertificate == nil || resp.CACertificate.ID == nil || *resp.CACertificate.ID == "" {
+		return fmt.Errorf("failed creating %s: %w", cert.GetTypeName(), ErrNilResponse)
+	}
+
+	// At this point, the CACertificate has been created successfully.
+	cert.SetKonnectID(*resp.CACertificate.ID)
 
 	return nil
 }
@@ -50,12 +52,12 @@ func createCACertificate(
 // It returns an error if the KongCACertificate does not have a KonnectID.
 func updateCACertificate(
 	ctx context.Context,
-	sdk CACertificatesSDK,
+	sdk sdkops.CACertificatesSDK,
 	cert *configurationv1alpha1.KongCACertificate,
 ) error {
 	cpID := cert.GetControlPlaneID()
 	if cpID == "" {
-		return fmt.Errorf("can't update %T without a ControlPlaneID", cert)
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: cert, Op: UpdateOp}
 	}
 
 	_, err := sdk.UpsertCaCertificate(ctx,
@@ -66,15 +68,9 @@ func updateCACertificate(
 		},
 	)
 
-	// TODO: handle already exists
-	// Can't adopt it as it will cause conflicts between the controller
-	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, UpdateOp, cert); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(cert, "FailedToUpdate", errWrap.Error())
 		return errWrap
 	}
-
-	SetKonnectEntityProgrammedCondition(cert)
 
 	return nil
 }
@@ -84,30 +80,13 @@ func updateCACertificate(
 // It returns an error if the operation fails.
 func deleteCACertificate(
 	ctx context.Context,
-	sdk CACertificatesSDK,
+	sdk sdkops.CACertificatesSDK,
 	cert *configurationv1alpha1.KongCACertificate,
 ) error {
 	id := cert.Status.Konnect.GetKonnectID()
 	_, err := sdk.DeleteCaCertificate(ctx, cert.GetControlPlaneID(), id)
 	if errWrap := wrapErrIfKonnectOpFailed(err, DeleteOp, cert); errWrap != nil {
-		var sdkError *sdkkonnecterrs.SDKError
-		if errors.As(errWrap, &sdkError) {
-			if sdkError.StatusCode == 404 {
-				ctrllog.FromContext(ctx).
-					Info("entity not found in Konnect, skipping delete",
-						"op", DeleteOp, "type", cert.GetTypeName(), "id", id,
-					)
-				return nil
-			}
-			return FailedKonnectOpError[configurationv1alpha1.KongCACertificate]{
-				Op:  DeleteOp,
-				Err: sdkError,
-			}
-		}
-		return FailedKonnectOpError[configurationv1alpha1.KongCACertificate]{
-			Op:  DeleteOp,
-			Err: errWrap,
-		}
+		return handleDeleteError(ctx, err, cert)
 	}
 
 	return nil
@@ -119,4 +98,24 @@ func kongCACertificateToCACertificateInput(cert *configurationv1alpha1.KongCACer
 		// Deduplicate tags to avoid rejection by Konnect.
 		Tags: GenerateTagsForObject(cert, cert.Spec.Tags...),
 	}
+}
+
+func getKongCACertificateForUID(
+	ctx context.Context,
+	sdk sdkops.CACertificatesSDK,
+	cert *configurationv1alpha1.KongCACertificate,
+) (string, error) {
+	resp, err := sdk.ListCaCertificate(ctx, sdkkonnectops.ListCaCertificateRequest{
+		ControlPlaneID: cert.GetControlPlaneID(),
+		Tags:           lo.ToPtr(UIDLabelForObject(cert)),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to list %s: %w", cert.GetTypeName(), err)
+	}
+
+	if resp == nil || resp.Object == nil {
+		return "", fmt.Errorf("failed listing %s: %w", cert.GetTypeName(), ErrNilResponse)
+	}
+
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDPtrSlice(resp.Object.Data), cert)
 }

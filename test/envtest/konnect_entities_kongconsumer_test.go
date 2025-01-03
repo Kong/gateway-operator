@@ -2,26 +2,30 @@ package envtest
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
+	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kong/gateway-operator/controller/konnect"
-	"github.com/kong/gateway-operator/controller/konnect/conditions"
-	konnectops "github.com/kong/gateway-operator/controller/konnect/ops"
+	sdkmocks "github.com/kong/gateway-operator/controller/konnect/ops/sdk/mocks"
 	"github.com/kong/gateway-operator/modules/manager/scheme"
+	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 	"github.com/kong/gateway-operator/test/helpers/deploy"
 
 	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
 	configurationv1beta1 "github.com/kong/kubernetes-configuration/api/configuration/v1beta1"
+	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
 func TestKongConsumer(t *testing.T) {
@@ -32,7 +36,7 @@ func TestKongConsumer(t *testing.T) {
 
 	t.Log("Setting up the manager with reconcilers")
 	mgr, logs := NewManager(t, ctx, cfg, scheme.Get())
-	factory := konnectops.NewMockSDKFactory(t)
+	factory := sdkmocks.NewMockSDKFactory(t)
 	sdk := factory.SDK
 	reconcilers := []Reconciler{
 		konnect.NewKonnectEntityReconciler(factory, false, mgr.GetClient(),
@@ -60,8 +64,9 @@ func TestKongConsumer(t *testing.T) {
 
 	t.Run("should create, update and delete Consumer without ConsumerGroups successfully", func(t *testing.T) {
 		const (
-			consumerID = "consumer-id"
-			username   = "user-1"
+			consumerID      = "consumer-id"
+			username        = "user-1"
+			updatedUsername = "user-1-updated"
 		)
 		t.Log("Setting up SDK expectations on KongConsumer creation")
 		sdk.ConsumersSDK.EXPECT().
@@ -99,7 +104,7 @@ func TestKongConsumer(t *testing.T) {
 				return false
 			}
 			return lo.ContainsBy(c.Status.Conditions, func(condition metav1.Condition) bool {
-				return condition.Type == conditions.KonnectEntityProgrammedConditionType &&
+				return condition.Type == konnectv1alpha1.KonnectEntityProgrammedConditionType &&
 					condition.Status == metav1.ConditionTrue
 			})
 		}, "KongConsumer's Programmed condition should be true eventually")
@@ -112,14 +117,15 @@ func TestKongConsumer(t *testing.T) {
 		t.Log("Setting up SDK expectations on KongConsumer update")
 		sdk.ConsumersSDK.EXPECT().
 			UpsertConsumer(mock.Anything, mock.MatchedBy(func(r sdkkonnectops.UpsertConsumerRequest) bool {
-				return r.ConsumerID == consumerID &&
-					r.Consumer.Username != nil && *r.Consumer.Username == "user-1-updated"
+				match := r.ConsumerID == consumerID &&
+					r.Consumer.Username != nil && *r.Consumer.Username == updatedUsername
+				return match
 			})).
 			Return(&sdkkonnectops.UpsertConsumerResponse{}, nil)
 
 		t.Log("Patching KongConsumer")
 		consumerToPatch := createdConsumer.DeepCopy()
-		consumerToPatch.Username = "user-1-updated"
+		consumerToPatch.Username = updatedUsername
 		require.NoError(t, clientNamespaced.Patch(ctx, consumerToPatch, client.MergeFrom(createdConsumer)))
 
 		t.Log("Waiting for KongConsumer to be updated in the SDK")
@@ -134,6 +140,14 @@ func TestKongConsumer(t *testing.T) {
 
 		t.Log("Deleting KongConsumer")
 		require.NoError(t, cl.Delete(ctx, createdConsumer))
+
+		require.EventuallyWithT(t,
+			func(c *assert.CollectT) {
+				assert.True(c, k8serrors.IsNotFound(
+					clientNamespaced.Get(ctx, client.ObjectKeyFromObject(createdConsumer), createdConsumer),
+				))
+			}, waitTime, tickTime,
+		)
 
 		t.Log("Waiting for KongConsumer to be deleted in the SDK")
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -222,7 +236,7 @@ func TestKongConsumer(t *testing.T) {
 				return false
 			}
 			return lo.ContainsBy(c.Status.Conditions, func(condition metav1.Condition) bool {
-				return condition.Type == conditions.KonnectEntityProgrammedConditionType &&
+				return condition.Type == konnectv1alpha1.KonnectEntityProgrammedConditionType &&
 					condition.Status == metav1.ConditionTrue
 			})
 		}, "KongConsumer's Programmed condition should be true eventually")
@@ -233,7 +247,7 @@ func TestKongConsumer(t *testing.T) {
 				return false
 			}
 			return lo.ContainsBy(c.Status.Conditions, func(condition metav1.Condition) bool {
-				return condition.Type == conditions.KonnectEntityProgrammedConditionType &&
+				return condition.Type == konnectv1alpha1.KonnectEntityProgrammedConditionType &&
 					condition.Status == metav1.ConditionTrue
 			})
 		}, "KongConsumerGroup's Programmed condition should be true eventually")
@@ -288,6 +302,51 @@ func TestKongConsumer(t *testing.T) {
 		t.Log("Waiting for SDK expectations to be met")
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.True(c, factory.SDK.ConsumerGroupSDK.AssertExpectations(t))
+		}, waitTime, tickTime)
+	})
+
+	t.Run("should handle conflict in creation correctly", func(t *testing.T) {
+		const (
+			consumerID = "consumer-id-conflict"
+			username   = "user-3"
+		)
+		t.Log("Setup mock SDK for creating consumer and listing consumers by UID")
+		cpID := cp.GetKonnectStatus().GetKonnectID()
+		sdk.ConsumersSDK.EXPECT().CreateConsumer(
+			mock.Anything,
+			cpID,
+			mock.MatchedBy(func(input sdkkonnectcomp.ConsumerInput) bool {
+				return input.Username != nil && *input.Username == username
+			}),
+		).Return(&sdkkonnectops.CreateConsumerResponse{}, &sdkkonnecterrs.ConflictError{})
+
+		sdk.ConsumersSDK.EXPECT().ListConsumer(
+			mock.Anything,
+			mock.MatchedBy(func(req sdkkonnectops.ListConsumerRequest) bool {
+				return req.ControlPlaneID == cpID &&
+					req.Tags != nil && strings.HasPrefix(*req.Tags, "k8s-uid")
+			}),
+		).Return(&sdkkonnectops.ListConsumerResponse{
+			Object: &sdkkonnectops.ListConsumerResponseBody{
+				Data: []sdkkonnectcomp.Consumer{
+					{
+						ID: lo.ToPtr(consumerID),
+					},
+				},
+			},
+		}, nil)
+
+		t.Log("Creating a KongConsumer")
+		deploy.KongConsumerAttachedToCP(t, ctx, clientNamespaced, username, cp)
+
+		t.Log("Watching for KongConsumers to verify the created KongConsumer programmed")
+		watchFor(t, ctx, cWatch, watch.Modified, func(c *configurationv1.KongConsumer) bool {
+			return c.GetKonnectID() == consumerID && k8sutils.IsProgrammed(c)
+		}, "KongConsumer should be programmed and have ID in status after handling conflict")
+
+		t.Log("Ensuring that the SDK's create and list methods are called")
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.True(c, factory.SDK.ConsumersSDK.AssertExpectations(t))
 		}, waitTime, tickTime)
 	})
 }

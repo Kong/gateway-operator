@@ -17,6 +17,7 @@ import (
 	"github.com/kong/gateway-operator/controller/pkg/log"
 	"github.com/kong/gateway-operator/controller/pkg/watch"
 	operatorerrors "github.com/kong/gateway-operator/internal/errors"
+	"github.com/kong/gateway-operator/internal/utils/gatewayclass"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 	"github.com/kong/gateway-operator/pkg/vars"
 )
@@ -60,43 +61,43 @@ func (r *AIGatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	log.Trace(logger, "verifying gatewayclass for aigateway", aigateway)
+	log.Trace(logger, "verifying gatewayclass for aigateway")
 	// we verify the GatewayClass in the watch predicates as well, but the watch
 	// predicates are known to be lossy, so they are considered only an optimization
 	// and this check must be done here to ensure consistency.
 	//
 	// See: https://github.com/kubernetes-sigs/controller-runtime/issues/1996
-	gwc, err := r.verifyGatewayClassSupport(ctx, &aigateway)
+	gwc, err := gatewayclass.Get(ctx, r.Client, aigateway.Spec.GatewayClassName)
 	if err != nil {
-		if errors.Is(err, operatorerrors.ErrUnsupportedGateway) {
-			log.Debug(logger, "resource not supported, ignoring", aigateway, "ExpectedGatewayClass", vars.ControllerName())
+		if errors.As(err, &operatorerrors.ErrUnsupportedGatewayClass{}) {
+			log.Debug(logger, "resource not supported, ignoring", "ExpectedGatewayClass", vars.ControllerName())
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
 	}
 	if !gwc.IsAccepted() {
-		log.Debug(logger, "gatewayclass for aigateway is not accepted, ignoring", aigateway)
+		log.Debug(logger, "gatewayclass for aigateway is not accepted")
 		return ctrl.Result{}, nil
 	}
 
-	log.Trace(logger, "handling any necessary aigateway cleanup", aigateway)
+	log.Trace(logger, "handling any necessary aigateway cleanup")
 	if aigateway.GetDeletionTimestamp() != nil {
-		log.Debug(logger, "aigateway is being deleted, ignoring", aigateway)
+		log.Debug(logger, "aigateway is being deleted")
 		return ctrl.Result{}, nil
 	}
 
-	log.Trace(logger, "marking aigateway as accepted", aigateway)
+	log.Trace(logger, "marking aigateway as accepted")
 	oldAIGateway := aigateway.DeepCopy()
 	k8sutils.SetCondition(newAIGatewayAcceptedCondition(&aigateway), &aigateway)
 	if k8sutils.NeedsUpdate(oldAIGateway, &aigateway) {
 		if err := r.Client.Status().Patch(ctx, &aigateway, client.MergeFrom(oldAIGateway)); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to patch status for aigateway: %w", err)
 		}
-		log.Info(logger, "aigateway marked as accepted", aigateway)
+		log.Info(logger, "aigateway marked as accepted")
 		return ctrl.Result{}, nil // update will re-queue
 	}
 
-	log.Info(logger, "managing gateway resources for aigateway", aigateway)
+	log.Info(logger, "managing gateway resources for aigateway")
 	gatewayResourcesChanged, err := r.manageGateway(ctx, logger, &aigateway)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -105,7 +106,7 @@ func (r *AIGatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	log.Info(logger, "configuring plugin and route resources for aigateway", aigateway)
+	log.Info(logger, "configuring plugin and route resources for aigateway")
 	pluginResourcesChanged, err := r.configurePlugins(ctx, logger, &aigateway)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -118,6 +119,6 @@ func (r *AIGatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	//
 	// See: https://github.com/Kong/gateway-operator/issues/137
 
-	log.Info(logger, "reconciliation complete for aigateway resource", aigateway)
+	log.Info(logger, "reconciliation complete for aigateway resource")
 	return ctrl.Result{}, nil
 }

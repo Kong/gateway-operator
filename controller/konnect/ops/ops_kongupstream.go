@@ -2,28 +2,24 @@ package ops
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
-	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"github.com/samber/lo"
+
+	sdkops "github.com/kong/gateway-operator/controller/konnect/ops/sdk"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 )
 
 func createUpstream(
 	ctx context.Context,
-	sdk UpstreamsSDK,
+	sdk sdkops.UpstreamsSDK,
 	upstream *configurationv1alpha1.KongUpstream,
 ) error {
 	if upstream.GetControlPlaneID() == "" {
-		return fmt.Errorf(
-			"can't create %T %s without a Konnect ControlPlane ID",
-			upstream, client.ObjectKeyFromObject(upstream),
-		)
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: upstream, Op: CreateOp}
 	}
 
 	resp, err := sdk.CreateUpstream(ctx,
@@ -31,16 +27,15 @@ func createUpstream(
 		kongUpstreamToSDKUpstreamInput(upstream),
 	)
 
-	// TODO: handle already exists
-	// Can't adopt it as it will cause conflicts between the controller
-	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, CreateOp, upstream); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(upstream, "FailedToCreate", errWrap.Error())
 		return errWrap
 	}
 
-	upstream.Status.Konnect.SetKonnectID(*resp.Upstream.ID)
-	SetKonnectEntityProgrammedCondition(upstream)
+	if resp == nil || resp.Upstream == nil || resp.Upstream.ID == nil {
+		return fmt.Errorf("failed creating %s: %w", upstream.GetTypeName(), ErrNilResponse)
+	}
+
+	upstream.SetKonnectID(*resp.Upstream.ID)
 
 	return nil
 }
@@ -51,13 +46,11 @@ func createUpstream(
 // if the operation fails.
 func updateUpstream(
 	ctx context.Context,
-	sdk UpstreamsSDK,
+	sdk sdkops.UpstreamsSDK,
 	upstream *configurationv1alpha1.KongUpstream,
 ) error {
 	if upstream.GetControlPlaneID() == "" {
-		return fmt.Errorf("can't update %T %s without a Konnect ControlPlane ID",
-			upstream, client.ObjectKeyFromObject(upstream),
-		)
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: upstream, Op: UpdateOp}
 	}
 
 	id := upstream.GetKonnectStatus().GetKonnectID()
@@ -69,37 +62,9 @@ func updateUpstream(
 		},
 	)
 
-	// TODO: handle already exists
-	// Can't adopt it as it will cause conflicts between the controller
-	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, UpdateOp, upstream); errWrap != nil {
-		// Upstream update operation returns an SDKError instead of a NotFoundError.
-		var sdkError *sdkkonnecterrs.SDKError
-		if errors.As(errWrap, &sdkError) {
-			switch sdkError.StatusCode {
-			case 404:
-				if err := createUpstream(ctx, sdk, upstream); err != nil {
-					return FailedKonnectOpError[configurationv1alpha1.KongUpstream]{
-						Op:  UpdateOp,
-						Err: err,
-					}
-				}
-				// Create succeeded, createUpstream sets the status so no need to do this here.
-
-				return nil
-			default:
-				return FailedKonnectOpError[configurationv1alpha1.KongUpstream]{
-					Op:  UpdateOp,
-					Err: sdkError,
-				}
-			}
-		}
-
-		SetKonnectEntityProgrammedConditionFalse(upstream, "FailedToUpdate", errWrap.Error())
 		return errWrap
 	}
-
-	SetKonnectEntityProgrammedCondition(upstream)
 
 	return nil
 }
@@ -109,33 +74,13 @@ func updateUpstream(
 // It returns an error if the operation fails.
 func deleteUpstream(
 	ctx context.Context,
-	sdk UpstreamsSDK,
-	svc *configurationv1alpha1.KongUpstream,
+	sdk sdkops.UpstreamsSDK,
+	upstream *configurationv1alpha1.KongUpstream,
 ) error {
-	id := svc.GetKonnectStatus().GetKonnectID()
-	_, err := sdk.DeleteUpstream(ctx, svc.Status.Konnect.ControlPlaneID, id)
-	if errWrap := wrapErrIfKonnectOpFailed(err, DeleteOp, svc); errWrap != nil {
-		// Upstream delete operation returns an SDKError instead of a NotFoundError.
-		var sdkError *sdkkonnecterrs.SDKError
-		if errors.As(errWrap, &sdkError) {
-			switch sdkError.StatusCode {
-			case 404:
-				ctrllog.FromContext(ctx).
-					Info("entity not found in Konnect, skipping delete",
-						"op", DeleteOp, "type", svc.GetTypeName(), "id", id,
-					)
-				return nil
-			default:
-				return FailedKonnectOpError[configurationv1alpha1.KongUpstream]{
-					Op:  DeleteOp,
-					Err: sdkError,
-				}
-			}
-		}
-		return FailedKonnectOpError[configurationv1alpha1.KongUpstream]{
-			Op:  DeleteOp,
-			Err: errWrap,
-		}
+	id := upstream.GetKonnectStatus().GetKonnectID()
+	_, err := sdk.DeleteUpstream(ctx, upstream.Status.Konnect.ControlPlaneID, id)
+	if errWrap := wrapErrIfKonnectOpFailed(err, DeleteOp, upstream); errWrap != nil {
+		return handleDeleteError(ctx, err, upstream)
 	}
 
 	return nil
@@ -164,4 +109,31 @@ func kongUpstreamToSDKUpstreamInput(
 		Tags:                   GenerateTagsForObject(upstream, upstream.Spec.Tags...),
 		UseSrvName:             upstream.Spec.UseSrvName,
 	}
+}
+
+// getKongUpstreamForUID lists upstreams in Konnect with given k8s uid as its tag.
+func getKongUpstreamForUID(
+	ctx context.Context,
+	sdk sdkops.UpstreamsSDK,
+	u *configurationv1alpha1.KongUpstream,
+) (string, error) {
+	cpID := u.GetControlPlaneID()
+
+	reqList := sdkkonnectops.ListUpstreamRequest{
+		// NOTE: only filter on object's UID.
+		// Other fields like name might have changed in the meantime but that's OK.
+		// Those will be enforced via subsequent updates.
+		ControlPlaneID: cpID,
+		Tags:           lo.ToPtr(UIDLabelForObject(u)),
+	}
+
+	resp, err := sdk.ListUpstream(ctx, reqList)
+	if err != nil {
+		return "", fmt.Errorf("failed listing %s: %w", u.GetTypeName(), err)
+	}
+	if resp == nil || resp.Object == nil {
+		return "", fmt.Errorf("failed listing %s: %w", u.GetTypeName(), ErrNilResponse)
+	}
+
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDPtrSlice(resp.Object.Data), u)
 }

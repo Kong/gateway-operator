@@ -8,31 +8,32 @@ import (
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
-	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
 	"github.com/samber/lo"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/kong/gateway-operator/controller/konnect/conditions"
+	sdkops "github.com/kong/gateway-operator/controller/konnect/ops/sdk"
 	"github.com/kong/gateway-operator/controller/pkg/log"
+	"github.com/kong/gateway-operator/pkg/consts"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 
 	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
 	configurationv1beta1 "github.com/kong/kubernetes-configuration/api/configuration/v1beta1"
+	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
 func createConsumer(
 	ctx context.Context,
-	sdk ConsumersSDK,
-	cgSDK ConsumerGroupSDK,
+	sdk sdkops.ConsumersSDK,
+	cgSDK sdkops.ConsumerGroupSDK,
 	cl client.Client,
 	consumer *configurationv1.KongConsumer,
 ) error {
 	cpID := consumer.GetControlPlaneID()
 	if cpID == "" {
-		return fmt.Errorf("can't create %T %s without a Konnect ControlPlane ID", consumer, client.ObjectKeyFromObject(consumer))
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: consumer, Op: CreateOp}
 	}
 
 	resp, err := sdk.CreateConsumer(ctx,
@@ -40,24 +41,25 @@ func createConsumer(
 		kongConsumerToSDKConsumerInput(consumer),
 	)
 
-	// TODO: handle already exists
-	// Can't adopt it as it will cause conflicts between the controller
-	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, CreateOp, consumer); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(consumer, conditions.KonnectEntityProgrammedReasonKonnectAPIOpFailed, errWrap.Error())
 		return errWrap
 	}
 
-	// Set the Konnect ID in the status to keep it even if ConsumerGroup assignments fail.
-	consumer.Status.Konnect.SetKonnectID(*resp.Consumer.ID)
-
-	if err = handleConsumerGroupAssignments(ctx, consumer, cl, cgSDK, cpID); err != nil {
-		return fmt.Errorf("failed to handle ConsumerGroup assignments: %w", err)
+	if resp == nil || resp.Consumer == nil || resp.Consumer.ID == nil || *resp.Consumer.ID == "" {
+		return fmt.Errorf("failed creating %s: %w", consumer.GetTypeName(), ErrNilResponse)
 	}
 
-	// The Consumer is considered Programmed if it was successfully created and all its _valid_ ConsumerGroup references
-	// are in sync.
-	SetKonnectEntityProgrammedCondition(consumer)
+	// Set the Konnect ID in the status to keep it even if ConsumerGroup assignments fail.
+	id := *resp.Consumer.ID
+	consumer.SetKonnectID(id)
+
+	if err = handleConsumerGroupAssignments(ctx, consumer, cl, cgSDK, cpID); err != nil {
+		return KonnectEntityCreatedButRelationsFailedError{
+			KonnectID: id,
+			Reason:    consts.FailedToAttachConsumerToConsumerGroupReason,
+			Err:       err,
+		}
+	}
 
 	return nil
 }
@@ -67,46 +69,42 @@ func createConsumer(
 // It returns an error if the KongConsumer does not have a ControlPlaneRef.
 func updateConsumer(
 	ctx context.Context,
-	sdk ConsumersSDK,
-	cgSDK ConsumerGroupSDK,
+	sdk sdkops.ConsumersSDK,
+	cgSDK sdkops.ConsumerGroupSDK,
 	cl client.Client,
 	consumer *configurationv1.KongConsumer,
 ) error {
 	cpID := consumer.GetControlPlaneID()
 	if cpID == "" {
-		return fmt.Errorf("can't update %T without a ControlPlaneID", consumer)
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: consumer, Op: UpdateOp}
 	}
+	id := consumer.GetKonnectStatus().GetKonnectID()
 
 	_, err := sdk.UpsertConsumer(ctx,
 		sdkkonnectops.UpsertConsumerRequest{
 			ControlPlaneID: cpID,
-			ConsumerID:     consumer.GetKonnectStatus().GetKonnectID(),
+			ConsumerID:     id,
 			Consumer:       kongConsumerToSDKConsumerInput(consumer),
 		},
 	)
 
-	// TODO: handle already exists
-	// Can't adopt it as it will cause conflicts between the controller
-	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, UpdateOp, consumer); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(consumer, conditions.KonnectEntityProgrammedReasonKonnectAPIOpFailed, errWrap.Error())
 		return errWrap
 	}
 
 	if err = handleConsumerGroupAssignments(ctx, consumer, cl, cgSDK, cpID); err != nil {
-		return fmt.Errorf("failed to handle ConsumerGroup assignments: %w", err)
+		return KonnectEntityCreatedButRelationsFailedError{
+			KonnectID: id,
+			Reason:    consts.FailedToAttachConsumerToConsumerGroupReason,
+			Err:       err,
+		}
 	}
-
-	// The Consumer is considered Programmed if it was successfully updated and all its _valid_ ConsumerGroup references
-	// are in sync.
-	SetKonnectEntityProgrammedCondition(consumer)
 
 	return nil
 }
 
 // handleConsumerGroupAssignments resolves ConsumerGroup references of a KongConsumer, reconciles them with Konnect, and
 // updates the Consumer conditions accordingly:
-// - sets Programmed to False if any operation fails
 // - sets KongConsumerGroupRefsValid to False if any of the ConsumerGroup references are invalid
 // - sets KongConsumerGroupRefsValid to True if all ConsumerGroup references are valid
 // It returns an error if any of the operations fail (fetching KongConsumers from cache, fetching the actual Konnect
@@ -115,7 +113,7 @@ func handleConsumerGroupAssignments(
 	ctx context.Context,
 	consumer *configurationv1.KongConsumer,
 	cl client.Client,
-	cgSDK ConsumerGroupSDK,
+	cgSDK sdkops.ConsumerGroupSDK,
 	cpID string,
 ) error {
 	// Resolve the Konnect IDs of the ConsumerGroups referenced by the KongConsumer.
@@ -126,15 +124,21 @@ func handleConsumerGroupAssignments(
 	populateConsumerGroupRefsValidCondition(invalidConsumerGroups, consumer)
 
 	if err != nil {
-		SetKonnectEntityProgrammedConditionFalse(consumer, conditions.KonnectEntityProgrammedReasonFailedToResolveConsumerGroupRefs, err.Error())
-		return err
+		return KonnectEntityCreatedButRelationsFailedError{
+			KonnectID: consumer.GetKonnectID(),
+			Reason:    konnectv1alpha1.KonnectEntityProgrammedReasonFailedToResolveConsumerGroupRefs,
+			Err:       err,
+		}
 	}
 
 	// Reconcile the ConsumerGroups assigned to the KongConsumer in Konnect (list the actual ConsumerGroups, calculate the
 	// difference, and add/remove the Consumer from the ConsumerGroups accordingly).
 	if err := reconcileConsumerGroupsWithKonnect(ctx, desiredConsumerGroupsIDs, cgSDK, cpID, consumer); err != nil {
-		SetKonnectEntityProgrammedConditionFalse(consumer, conditions.KonnectEntityProgrammedReasonFailedToReconcileConsumerGroupsWithKonnect, err.Error())
-		return err
+		return KonnectEntityCreatedButRelationsFailedError{
+			KonnectID: consumer.GetKonnectID(),
+			Reason:    konnectv1alpha1.KonnectEntityProgrammedReasonFailedToReconcileConsumerGroupsWithKonnect,
+			Err:       err,
+		}
 	}
 	return nil
 }
@@ -150,7 +154,7 @@ func handleConsumerGroupAssignments(
 func reconcileConsumerGroupsWithKonnect(
 	ctx context.Context,
 	desiredConsumerGroupsIDs []string,
-	cgSDK ConsumerGroupSDK,
+	cgSDK sdkops.ConsumerGroupSDK,
 	cpID string,
 	consumer *configurationv1.KongConsumer,
 ) error {
@@ -221,9 +225,9 @@ func populateConsumerGroupRefsValidCondition(invalidConsumerGroups []invalidCons
 		}
 		k8sutils.SetCondition(
 			k8sutils.NewConditionWithGeneration(
-				conditions.KongConsumerGroupRefsValidConditionType,
+				konnectv1alpha1.KongConsumerGroupRefsValidConditionType,
 				metav1.ConditionFalse,
-				conditions.KongConsumerGroupRefsReasonInvalid,
+				konnectv1alpha1.KongConsumerGroupRefsReasonInvalid,
 				fmt.Sprintf("Invalid ConsumerGroup references: %s", strings.Join(reasons, ", ")),
 				consumer.GetGeneration(),
 			),
@@ -232,9 +236,9 @@ func populateConsumerGroupRefsValidCondition(invalidConsumerGroups []invalidCons
 	} else {
 		k8sutils.SetCondition(
 			k8sutils.NewConditionWithGeneration(
-				conditions.KongConsumerGroupRefsValidConditionType,
+				konnectv1alpha1.KongConsumerGroupRefsValidConditionType,
 				metav1.ConditionTrue,
-				conditions.KongConsumerGroupRefsReasonValid,
+				konnectv1alpha1.KongConsumerGroupRefsReasonValid,
 				"",
 				consumer.GetGeneration(),
 			),
@@ -293,31 +297,13 @@ func resolveConsumerGroupsKonnectIDs(
 // It returns an error if the operation fails.
 func deleteConsumer(
 	ctx context.Context,
-	sdk ConsumersSDK,
+	sdk sdkops.ConsumersSDK,
 	consumer *configurationv1.KongConsumer,
 ) error {
 	id := consumer.Status.Konnect.GetKonnectID()
 	_, err := sdk.DeleteConsumer(ctx, consumer.Status.Konnect.ControlPlaneID, id)
 	if errWrap := wrapErrIfKonnectOpFailed(err, DeleteOp, consumer); errWrap != nil {
-		// Consumer delete operation returns an SDKError instead of a NotFoundError.
-		var sdkError *sdkkonnecterrs.SDKError
-		if errors.As(errWrap, &sdkError) {
-			if sdkError.StatusCode == 404 {
-				ctrllog.FromContext(ctx).
-					Info("entity not found in Konnect, skipping delete",
-						"op", DeleteOp, "type", consumer.GetTypeName(), "id", id,
-					)
-				return nil
-			}
-			return FailedKonnectOpError[configurationv1.KongConsumer]{
-				Op:  DeleteOp,
-				Err: sdkError,
-			}
-		}
-		return FailedKonnectOpError[configurationv1.KongConsumer]{
-			Op:  DeleteOp,
-			Err: errWrap,
-		}
+		return handleDeleteError(ctx, err, consumer)
 	}
 
 	return nil
@@ -328,7 +314,33 @@ func kongConsumerToSDKConsumerInput(
 ) sdkkonnectcomp.ConsumerInput {
 	return sdkkonnectcomp.ConsumerInput{
 		CustomID: lo.ToPtr(consumer.CustomID),
-		Tags:     GenerateTagsForObject(consumer),
+		Tags:     GenerateTagsForObject(consumer, consumer.Spec.Tags...),
 		Username: lo.ToPtr(consumer.Username),
 	}
+}
+
+// getKongConsumerForUID lists consumers in Konnect with given k8s uid as its tag.
+func getKongConsumerForUID(
+	ctx context.Context,
+	sdk sdkops.ConsumersSDK,
+	consumer *configurationv1.KongConsumer,
+) (string, error) {
+	cpID := consumer.GetControlPlaneID()
+	reqList := sdkkonnectops.ListConsumerRequest{
+		// NOTE: only filter on object's UID.
+		// Other fields like name might have changed in the meantime but that's OK.
+		// Those will be enforced via subsequent updates.
+		ControlPlaneID: cpID,
+		Tags:           lo.ToPtr(UIDLabelForObject(consumer)),
+	}
+
+	resp, err := sdk.ListConsumer(ctx, reqList)
+	if err != nil {
+		return "", fmt.Errorf("failed listing %s: %w", consumer.GetTypeName(), err)
+	}
+	if resp == nil || resp.Object == nil {
+		return "", fmt.Errorf("failed listing %s: %w", consumer.GetTypeName(), ErrNilResponse)
+	}
+
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDPtrSlice(resp.Object.Data), consumer)
 }

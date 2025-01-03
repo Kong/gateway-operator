@@ -25,6 +25,7 @@ import (
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 	testutils "github.com/kong/gateway-operator/pkg/utils/test"
 	"github.com/kong/gateway-operator/pkg/vars"
+	"github.com/kong/gateway-operator/test/helpers"
 )
 
 func init() {
@@ -35,7 +36,6 @@ func TestHelmUpgrade(t *testing.T) {
 	const (
 		// Rel: https://github.com/Kong/charts/tree/main/charts/gateway-operator
 		chart = "kong/gateway-operator"
-		image = "docker.io/kong/gateway-operator-oss"
 
 		waitTime = 3 * time.Minute
 	)
@@ -47,13 +47,13 @@ func TestHelmUpgrade(t *testing.T) {
 	// and dumping diagnostics if the test fails.
 	e := CreateEnvironment(t, ctx)
 
-	// assertion is run after the upgrade to assert the state of the resources in the cluster.
+	// Assertion is run after the upgrade to assert the state of the resources in the cluster.
 	type assertion struct {
 		Name string
 		Func func(*assert.CollectT, *testutils.K8sClients)
 	}
 
-	testcases := []struct {
+	testCases := []struct {
 		name                   string
 		fromVersion            string
 		toVersion              string
@@ -62,44 +62,40 @@ func TestHelmUpgrade(t *testing.T) {
 		assertionsAfterInstall []assertion
 		assertionsAfterUpgrade []assertion
 	}{
-		// NOTE: We do not support versions earlier than 1.2 with the helm chart.
-		// The initial version of the chart contained CRDs from KGO 1.2. which
-		// introduced a breaking change which makes it impossible to upgrade from
-		// automatically (without manually deleting the CRDs).
 		{
-			name:        "upgrade from 1.2.0 to 1.2.3",
-			fromVersion: "1.2.0",
-			toVersion:   "1.2.3",
+			name:        "upgrade from one before latest to latest minor",
+			fromVersion: "1.3.0", // renovate: datasource=docker packageName=kong/gateway-operator-oss depName=kong/gateway-operator-oss@only-patch
+			toVersion:   "1.4.0", // renovate: datasource=docker packageName=kong/gateway-operator-oss
 			objectsToDeploy: []client.Object{
 				&operatorv1beta1.GatewayConfiguration{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "gwconf-upgrade-120-123",
+						Name: "gwconf-upgrade-onebeforelatestminor-latestminor",
 					},
 					Spec: baseGatewayConfigurationSpec(),
 				},
 				&gatewayv1.GatewayClass{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "gwclass-upgrade-120-123",
+						Name: "gwclass-upgrade-onebeforelatestminor-latestminor",
 					},
 					Spec: gatewayv1.GatewayClassSpec{
 						ParametersRef: &gatewayv1.ParametersReference{
 							Group:     gatewayv1.Group(operatorv1beta1.SchemeGroupVersion.Group),
 							Kind:      gatewayv1.Kind("GatewayConfiguration"),
 							Namespace: (*gatewayv1.Namespace)(&e.Namespace.Name),
-							Name:      "gwconf-upgrade-120-123",
+							Name:      "gwconf-upgrade-onebeforelatestminor-latestminor",
 						},
 						ControllerName: gatewayv1.GatewayController(vars.ControllerName()),
 					},
 				},
 				&gatewayv1.Gateway{
 					ObjectMeta: metav1.ObjectMeta{
-						GenerateName: "gw-upgrade-120-123-",
+						GenerateName: "gw-upgrade-onebeforelatestminor-latestminor-",
 						Labels: map[string]string{
-							"gw-upgrade-120-123": "true",
+							"gw-upgrade-onebeforelatestminor-latestminor": "true",
 						},
 					},
 					Spec: gatewayv1.GatewaySpec{
-						GatewayClassName: gatewayv1.ObjectName("gwclass-upgrade-120-123"),
+						GatewayClassName: gatewayv1.ObjectName("gwclass-upgrade-onebeforelatestminor-latestminor"),
 						Listeners: []gatewayv1.Listener{{
 							Name:     "http",
 							Protocol: gatewayv1.HTTPProtocolType,
@@ -112,7 +108,7 @@ func TestHelmUpgrade(t *testing.T) {
 				{
 					Name: "Gateway is programmed",
 					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						gatewayAndItsListenersAreProgrammedAssertion("gw-upgrade-120-123=true")(ctx, c, cl.MgrClient)
+						gatewayAndItsListenersAreProgrammedAssertion("gw-upgrade-onebeforelatestminor-latestminor=true")(ctx, c, cl.MgrClient)
 					},
 				},
 			},
@@ -120,156 +116,91 @@ func TestHelmUpgrade(t *testing.T) {
 				{
 					Name: "Gateway is programmed",
 					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						gatewayAndItsListenersAreProgrammedAssertion("gw-upgrade-120-123=true")(ctx, c, cl.MgrClient)
+						gatewayAndItsListenersAreProgrammedAssertion("gw-upgrade-onebeforelatestminor-latestminor=true")(ctx, c, cl.MgrClient)
 					},
 				},
 				{
-					Name: "DataPlane deployment is not patched after operator upgrade",
+					Name: "DataPlane deployment is patched after operator upgrade (due to change in default Kong image version to kong:3.8)",
 					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						gatewayDataPlaneDeploymentIsNotPatched("gw-upgrade-120-123=true")(ctx, c, cl.MgrClient)
-					},
-				},
-			},
-		},
-		{
-			// TODO: use renovate to bump the version in these 2 lines.
-			// https://github.com/Kong/gateway-operator/issues/121
-			name:        "upgrade from 1.2.3 to 1.3.0",
-			fromVersion: "1.2.3",
-			toVersion:   "1.3.0",
-			objectsToDeploy: []client.Object{
-				&operatorv1beta1.GatewayConfiguration{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "gwconf-upgrade-123-130",
-					},
-					Spec: baseGatewayConfigurationSpec(),
-				},
-				&gatewayv1.GatewayClass{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "gwclass-upgrade-123-130",
-					},
-					Spec: gatewayv1.GatewayClassSpec{
-						ParametersRef: &gatewayv1.ParametersReference{
-							Group:     gatewayv1.Group(operatorv1beta1.SchemeGroupVersion.Group),
-							Kind:      gatewayv1.Kind("GatewayConfiguration"),
-							Namespace: (*gatewayv1.Namespace)(&e.Namespace.Name),
-							Name:      "gwconf-upgrade-123-130",
-						},
-						ControllerName: gatewayv1.GatewayController(vars.ControllerName()),
-					},
-				},
-				&gatewayv1.Gateway{
-					ObjectMeta: metav1.ObjectMeta{
-						GenerateName: "gw-upgrade-123-130-",
-						Labels: map[string]string{
-							"gw-upgrade-123-130": "true",
-						},
-					},
-					Spec: gatewayv1.GatewaySpec{
-						GatewayClassName: gatewayv1.ObjectName("gwclass-upgrade-123-130"),
-						Listeners: []gatewayv1.Listener{{
-							Name:     "http",
-							Protocol: gatewayv1.HTTPProtocolType,
-							Port:     gatewayv1.PortNumber(80),
-						}},
-					},
-				},
-			},
-			assertionsAfterInstall: []assertion{
-				{
-					Name: "Gateway is programmed",
-					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						gatewayAndItsListenersAreProgrammedAssertion("gw-upgrade-123-130=true")(ctx, c, cl.MgrClient)
-					},
-				},
-			},
-			assertionsAfterUpgrade: []assertion{
-				{
-					Name: "Gateway is programmed",
-					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						gatewayAndItsListenersAreProgrammedAssertion("gw-upgrade-123-130=true")(ctx, c, cl.MgrClient)
-					},
-				},
-				{
-					Name: "DataPlane deployment is patched after operator upgrade (due to change in default Kong image version to 3.7)",
-					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						gatewayDataPlaneDeploymentIsPatched("gw-upgrade-123-130=true")(ctx, c, cl.MgrClient)
-						gatewayDataPlaneDeploymentHasImageSetTo("gw-upgrade-123-130=true", "kong:3.7")(ctx, c, cl.MgrClient)
-					},
-				},
-				// NOTE: We do not check managed cluster wide resource labels because the fix for migrating
-				// labels from older versions to new has been merged after 1.3.0 release:
-				// https://github.com/Kong/gateway-operator/pull/369
-			},
-		},
-		{
-			name:             "upgrade from 1.3.0 to current",
-			fromVersion:      "1.3.0",
-			upgradeToCurrent: true,
-			objectsToDeploy: []client.Object{
-				&operatorv1beta1.GatewayConfiguration{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "gwconf-upgrade-130-current",
-					},
-					Spec: baseGatewayConfigurationSpec(),
-				},
-				&gatewayv1.GatewayClass{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "gwclass-upgrade-130-current",
-					},
-					Spec: gatewayv1.GatewayClassSpec{
-						ParametersRef: &gatewayv1.ParametersReference{
-							Group:     gatewayv1.Group(operatorv1beta1.SchemeGroupVersion.Group),
-							Kind:      gatewayv1.Kind("GatewayConfiguration"),
-							Namespace: (*gatewayv1.Namespace)(&e.Namespace.Name),
-							Name:      "gwconf-upgrade-130-current",
-						},
-						ControllerName: gatewayv1.GatewayController(vars.ControllerName()),
-					},
-				},
-				&gatewayv1.Gateway{
-					ObjectMeta: metav1.ObjectMeta{
-						GenerateName: "gw-upgrade-130-current-",
-						Labels: map[string]string{
-							"gw-upgrade-130-current": "true",
-						},
-					},
-					Spec: gatewayv1.GatewaySpec{
-						GatewayClassName: gatewayv1.ObjectName("gwclass-upgrade-130-current"),
-						Listeners: []gatewayv1.Listener{{
-							Name:     "http",
-							Protocol: gatewayv1.HTTPProtocolType,
-							Port:     gatewayv1.PortNumber(80),
-						}},
-					},
-				},
-			},
-			assertionsAfterInstall: []assertion{
-				{
-					Name: "Gateway is programmed",
-					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						gatewayAndItsListenersAreProgrammedAssertion("gw-upgrade-130-current=true")(ctx, c, cl.MgrClient)
-					},
-				},
-			},
-			assertionsAfterUpgrade: []assertion{
-				{
-					Name: "Gateway is programmed",
-					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						gatewayAndItsListenersAreProgrammedAssertion("gw-upgrade-130-current=true")(ctx, c, cl.MgrClient)
-					},
-				},
-				{
-					Name: "DataPlane deployment is patched after operator upgrade (due to change in default Kong image version to 3.8)",
-					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						gatewayDataPlaneDeploymentIsPatched("gw-upgrade-130-current=true")(ctx, c, cl.MgrClient)
-						gatewayDataPlaneDeploymentHasImageSetTo("gw-upgrade-130-current=true", "kong:3.8")(ctx, c, cl.MgrClient)
+						gatewayDataPlaneDeploymentIsPatched("gw-upgrade-onebeforelatestminor-latestminor=true")(ctx, c, cl.MgrClient)
+						gatewayDataPlaneDeploymentHasImageSetTo("gw-upgrade-onebeforelatestminor-latestminor=true", "kong:3.8")(ctx, c, cl.MgrClient)
 					},
 				},
 				{
 					Name: "Cluster wide resources owned by the ControlPlane get the proper set of labels",
 					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						clusterWideResourcesAreProperlyManaged("gw-upgrade-130-current=true")(ctx, c, cl.MgrClient)
+						clusterWideResourcesAreProperlyManaged("gw-upgrade-onebeforelatestminor-latestminor=true")(ctx, c, cl.MgrClient)
+					},
+				},
+			},
+		},
+		{
+			name:             "upgrade from latest minor to current",
+			fromVersion:      "1.4.0", // renovate: datasource=docker packageName=kong/gateway-operator-oss
+			upgradeToCurrent: true,
+			objectsToDeploy: []client.Object{
+				&operatorv1beta1.GatewayConfiguration{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "gwconf-upgrade-latestminor-current",
+					},
+					Spec: baseGatewayConfigurationSpec(),
+				},
+				&gatewayv1.GatewayClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "gwclass-upgrade-latestminor-current",
+					},
+					Spec: gatewayv1.GatewayClassSpec{
+						ParametersRef: &gatewayv1.ParametersReference{
+							Group:     gatewayv1.Group(operatorv1beta1.SchemeGroupVersion.Group),
+							Kind:      gatewayv1.Kind("GatewayConfiguration"),
+							Namespace: (*gatewayv1.Namespace)(&e.Namespace.Name),
+							Name:      "gwconf-upgrade-latestminor-current",
+						},
+						ControllerName: gatewayv1.GatewayController(vars.ControllerName()),
+					},
+				},
+				&gatewayv1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						GenerateName: "gw-upgrade-latestminor-current-",
+						Labels: map[string]string{
+							"gw-upgrade-latestminor-current": "true",
+						},
+					},
+					Spec: gatewayv1.GatewaySpec{
+						GatewayClassName: gatewayv1.ObjectName("gwclass-upgrade-latestminor-current"),
+						Listeners: []gatewayv1.Listener{{
+							Name:     "http",
+							Protocol: gatewayv1.HTTPProtocolType,
+							Port:     gatewayv1.PortNumber(80),
+						}},
+					},
+				},
+			},
+			assertionsAfterInstall: []assertion{
+				{
+					Name: "Gateway is programmed",
+					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
+						gatewayAndItsListenersAreProgrammedAssertion("gw-upgrade-latestminor-current=true")(ctx, c, cl.MgrClient)
+					},
+				},
+			},
+			assertionsAfterUpgrade: []assertion{
+				{
+					Name: "Gateway is programmed",
+					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
+						gatewayAndItsListenersAreProgrammedAssertion("gw-upgrade-latestminor-current=true")(ctx, c, cl.MgrClient)
+					},
+				},
+				{
+					Name: "DataPlane deployment is not patched after operator upgrade",
+					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
+						gatewayDataPlaneDeploymentIsPatched("gw-upgrade-latestminor-current=true")(ctx, c, cl.MgrClient)
+					},
+				},
+				{
+					Name: "Cluster wide resources owned by the ControlPlane get the proper set of labels",
+					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
+						clusterWideResourcesAreProperlyManaged("gw-upgrade-latestminor-current=true")(ctx, c, cl.MgrClient)
 					},
 				},
 			},
@@ -334,7 +265,7 @@ func TestHelmUpgrade(t *testing.T) {
 				{
 					Name: "DataPlane deployment is not patched after operator upgrade",
 					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						gatewayDataPlaneDeploymentIsNotPatched("gw-upgrade-nightly-to-current=true")(ctx, c, cl.MgrClient)
+						gatewayDataPlaneDeploymentIsPatched("gw-upgrade-nightly-to-current=true")(ctx, c, cl.MgrClient)
 					},
 				},
 				{
@@ -359,11 +290,16 @@ func TestHelmUpgrade(t *testing.T) {
 		currentRepository, currentTag = splitRepoVersionFromImage(t, imageOverride)
 	}
 
-	for _, tc := range testcases {
+	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Repository is different for OSS and Enterprise images and it should be set accordingly.
+			kgoImageRepository := "docker.io/kong/gateway-operator-oss"
+			if helpers.GetDefaultDataPlaneBaseImage() == consts.DefaultDataPlaneBaseEnterpriseImage {
+				kgoImageRepository = "docker.io/kong/gateway-operator"
+			}
 			var (
 				tag              string
-				targetRepository = image
+				targetRepository = kgoImageRepository
 			)
 			if tc.upgradeToCurrent {
 				if currentTag == "" {
@@ -385,7 +321,7 @@ func TestHelmUpgrade(t *testing.T) {
 			releaseName := strings.ReplaceAll(fmt.Sprintf("kgo-%s-to-%s", tc.fromVersion, tagInReleaseName), ".", "-")
 			values := map[string]string{
 				"image.tag":                          tc.fromVersion,
-				"image.repository":                   image,
+				"image.repository":                   kgoImageRepository,
 				"readinessProbe.initialDelaySeconds": "1",
 				"readinessProbe.periodSeconds":       "1",
 				// Disable leader election and anonymous reports for tests.
@@ -499,6 +435,7 @@ func baseGatewayConfigurationSpec() operatorv1beta1.GatewayConfigurationSpec {
 				},
 			},
 		},
+
 		ControlPlaneOptions: &operatorv1beta1.ControlPlaneOptions{
 			Deployment: operatorv1beta1.ControlPlaneDeploymentOptions{
 				PodTemplateSpec: &corev1.PodTemplateSpec{
@@ -540,7 +477,7 @@ func getGatewayByLabelSelector(gatewayLabelSelector string, ctx context.Context,
 	}
 
 	if len(gws.Items) != 1 {
-		c.Errorf("got %d gateways, expected 1", len(gws.Items))
+		c.Errorf("expected 1 Gateway, got %d", len(gws.Items))
 		return nil
 	}
 
@@ -573,15 +510,15 @@ func gatewayDataPlaneDeploymentHasImageSetTo(
 		}
 
 		if container[0].Image != image {
-			return fmt.Errorf("Gateway's DataPlane Deployment %q expected image %s but got %s",
-				client.ObjectKeyFromObject(d), container[0].Image, image,
+			return fmt.Errorf("Gateway's DataPlane Deployment %q expected image %s got %s",
+				client.ObjectKeyFromObject(d), image, container[0].Image,
 			)
 		}
 		return nil
 	})
 }
 
-func gatewayDataPlaneDeploymentIsNotPatched(
+func gatewayDataPlaneDeploymentIsNotPatched( //nolint:unused
 	gatewayLabelSelector string,
 ) func(context.Context, *assert.CollectT, client.Client) {
 	return gatewayDataPlaneDeploymentCheck(gatewayLabelSelector, func(d *appsv1.Deployment) error {

@@ -19,19 +19,19 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"net/http"
+	http "net/http"
 
-	v1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
-	"github.com/kong/gateway-operator/pkg/clientset/scheme"
+	apisv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
+	scheme "github.com/kong/gateway-operator/pkg/clientset/scheme"
 	rest "k8s.io/client-go/rest"
 )
 
 type ApisV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	AIGatewaysGetter
-	DataPlaneKonnectExtensionsGetter
 	DataPlaneMetricsExtensionsGetter
 	KongPluginInstallationsGetter
+	KonnectExtensionsGetter
 }
 
 // ApisV1alpha1Client is used to interact with features provided by the apis group.
@@ -43,16 +43,16 @@ func (c *ApisV1alpha1Client) AIGateways(namespace string) AIGatewayInterface {
 	return newAIGateways(c, namespace)
 }
 
-func (c *ApisV1alpha1Client) DataPlaneKonnectExtensions(namespace string) DataPlaneKonnectExtensionInterface {
-	return newDataPlaneKonnectExtensions(c, namespace)
-}
-
 func (c *ApisV1alpha1Client) DataPlaneMetricsExtensions(namespace string) DataPlaneMetricsExtensionInterface {
 	return newDataPlaneMetricsExtensions(c, namespace)
 }
 
 func (c *ApisV1alpha1Client) KongPluginInstallations(namespace string) KongPluginInstallationInterface {
 	return newKongPluginInstallations(c, namespace)
+}
+
+func (c *ApisV1alpha1Client) KonnectExtensions(namespace string) KonnectExtensionInterface {
+	return newKonnectExtensions(c, namespace)
 }
 
 // NewForConfig creates a new ApisV1alpha1Client for the given config.
@@ -100,10 +100,10 @@ func New(c rest.Interface) *ApisV1alpha1Client {
 }
 
 func setConfigDefaults(config *rest.Config) error {
-	gv := v1alpha1.SchemeGroupVersion
+	gv := apisv1alpha1.SchemeGroupVersion
 	config.GroupVersion = &gv
 	config.APIPath = "/apis"
-	config.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
+	config.NegotiatedSerializer = rest.CodecFactoryForGeneratedClient(scheme.Scheme, scheme.Codecs).WithoutConversion()
 
 	if config.UserAgent == "" {
 		config.UserAgent = rest.DefaultKubernetesUserAgent()

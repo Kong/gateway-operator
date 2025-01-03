@@ -2,25 +2,24 @@ package ops
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
-	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"github.com/samber/lo"
+
+	sdkops "github.com/kong/gateway-operator/controller/konnect/ops/sdk"
 
 	configurationv1beta1 "github.com/kong/kubernetes-configuration/api/configuration/v1beta1"
 )
 
 func createConsumerGroup(
 	ctx context.Context,
-	sdk ConsumerGroupSDK,
+	sdk sdkops.ConsumerGroupSDK,
 	group *configurationv1beta1.KongConsumerGroup,
 ) error {
 	if group.GetControlPlaneID() == "" {
-		return fmt.Errorf("can't create %T %s without a Konnect ControlPlane ID", group, client.ObjectKeyFromObject(group))
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: group, Op: CreateOp}
 	}
 
 	resp, err := sdk.CreateConsumerGroup(ctx,
@@ -28,16 +27,16 @@ func createConsumerGroup(
 		kongConsumerGroupToSDKConsumerGroupInput(group),
 	)
 
-	// TODO: handle already exists
-	// Can't adopt it as it will cause conflicts between the controller
-	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, CreateOp, group); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(group, "FailedToCreate", errWrap.Error())
 		return errWrap
 	}
 
-	group.Status.Konnect.SetKonnectID(*resp.ConsumerGroup.ID)
-	SetKonnectEntityProgrammedCondition(group)
+	if resp == nil || resp.ConsumerGroup == nil || resp.ConsumerGroup.ID == nil || *resp.ConsumerGroup.ID == "" {
+		return fmt.Errorf("failed creating %s: %w", group.GetTypeName(), ErrNilResponse)
+	}
+
+	id := *resp.ConsumerGroup.ID
+	group.SetKonnectID(id)
 
 	return nil
 }
@@ -47,12 +46,12 @@ func createConsumerGroup(
 // It returns an error if the KongConsumerGroup does not have a ControlPlaneRef.
 func updateConsumerGroup(
 	ctx context.Context,
-	sdk ConsumerGroupSDK,
+	sdk sdkops.ConsumerGroupSDK,
 	group *configurationv1beta1.KongConsumerGroup,
 ) error {
 	cpID := group.GetControlPlaneID()
 	if cpID == "" {
-		return fmt.Errorf("can't update %T %s without a Konnect ControlPlane ID", group, client.ObjectKeyFromObject(group))
+		return CantPerformOperationWithoutControlPlaneIDError{Entity: group, Op: UpdateOp}
 	}
 
 	_, err := sdk.UpsertConsumerGroup(ctx,
@@ -63,15 +62,9 @@ func updateConsumerGroup(
 		},
 	)
 
-	// TODO: handle already exists
-	// Can't adopt it as it will cause conflicts between the controller
-	// that created that entity and already manages it, hm
 	if errWrap := wrapErrIfKonnectOpFailed(err, UpdateOp, group); errWrap != nil {
-		SetKonnectEntityProgrammedConditionFalse(group, "FailedToUpdate", errWrap.Error())
 		return errWrap
 	}
-
-	SetKonnectEntityProgrammedCondition(group)
 
 	return nil
 }
@@ -81,31 +74,13 @@ func updateConsumerGroup(
 // It returns an error if the operation fails.
 func deleteConsumerGroup(
 	ctx context.Context,
-	sdk ConsumerGroupSDK,
+	sdk sdkops.ConsumerGroupSDK,
 	consumer *configurationv1beta1.KongConsumerGroup,
 ) error {
 	id := consumer.Status.Konnect.GetKonnectID()
 	_, err := sdk.DeleteConsumerGroup(ctx, consumer.Status.Konnect.ControlPlaneID, id)
 	if errWrap := wrapErrIfKonnectOpFailed(err, DeleteOp, consumer); errWrap != nil {
-		// Consumer delete operation returns an SDKError instead of a NotFoundError.
-		var sdkError *sdkkonnecterrs.SDKError
-		if errors.As(errWrap, &sdkError) {
-			if sdkError.StatusCode == 404 {
-				ctrllog.FromContext(ctx).
-					Info("entity not found in Konnect, skipping delete",
-						"op", DeleteOp, "type", consumer.GetTypeName(), "id", id,
-					)
-				return nil
-			}
-			return FailedKonnectOpError[configurationv1beta1.KongConsumerGroup]{
-				Op:  DeleteOp,
-				Err: sdkError,
-			}
-		}
-		return FailedKonnectOpError[configurationv1beta1.KongConsumerGroup]{
-			Op:  DeleteOp,
-			Err: errWrap,
-		}
+		return handleDeleteError(ctx, err, consumer)
 	}
 
 	return nil
@@ -115,7 +90,34 @@ func kongConsumerGroupToSDKConsumerGroupInput(
 	group *configurationv1beta1.KongConsumerGroup,
 ) sdkkonnectcomp.ConsumerGroupInput {
 	return sdkkonnectcomp.ConsumerGroupInput{
-		Tags: GenerateTagsForObject(group),
+		Tags: GenerateTagsForObject(group, group.Spec.Tags...),
 		Name: group.Spec.Name,
 	}
+}
+
+// getKongConsumerGroupForUID lists consumer groups in Konnect with given k8s uid as its tag.
+func getKongConsumerGroupForUID(
+	ctx context.Context,
+	sdk sdkops.ConsumerGroupSDK,
+	cg *configurationv1beta1.KongConsumerGroup,
+) (string, error) {
+	cpID := cg.GetControlPlaneID()
+
+	reqList := sdkkonnectops.ListConsumerGroupRequest{
+		// NOTE: only filter on object's UID.
+		// Other fields like name might have changed in the meantime but that's OK.
+		// Those will be enforced via subsequent updates.
+		ControlPlaneID: cpID,
+		Tags:           lo.ToPtr(UIDLabelForObject(cg)),
+	}
+
+	resp, err := sdk.ListConsumerGroup(ctx, reqList)
+	if err != nil {
+		return "", fmt.Errorf("failed listing %s: %w", cg.GetTypeName(), err)
+	}
+	if resp == nil || resp.Object == nil {
+		return "", fmt.Errorf("failed listing %s: %w", cg.GetTypeName(), ErrNilResponse)
+	}
+
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDPtrSlice(resp.Object.Data), cg)
 }

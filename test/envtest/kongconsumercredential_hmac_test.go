@@ -2,22 +2,27 @@ package envtest
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"testing"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	sdkkonnectops "github.com/Kong/sdk-konnect-go/models/operations"
+	sdkkonnecterrs "github.com/Kong/sdk-konnect-go/models/sdkerrors"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kong/gateway-operator/controller/konnect"
-	"github.com/kong/gateway-operator/controller/konnect/ops"
+	sdkmocks "github.com/kong/gateway-operator/controller/konnect/ops/sdk/mocks"
 	"github.com/kong/gateway-operator/modules/manager"
 	"github.com/kong/gateway-operator/modules/manager/scheme"
+	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 	"github.com/kong/gateway-operator/test/helpers/deploy"
 
 	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
@@ -35,7 +40,7 @@ func TestKongConsumerCredential_HMAC(t *testing.T) {
 
 	mgr, logs := NewManager(t, ctx, cfg, scheme.Get())
 
-	clientWithWatch, err := client.NewWithWatch(mgr.GetConfig(), client.Options{
+	cl, err := client.NewWithWatch(mgr.GetConfig(), client.Options{
 		Scheme: scheme.Get(),
 	})
 	require.NoError(t, err)
@@ -78,15 +83,16 @@ func TestKongConsumerCredential_HMAC(t *testing.T) {
 		"k8s-version:v1alpha1",
 	}
 
-	factory := ops.NewMockSDKFactory(t)
-	factory.SDK.KongCredentialsHMACSDK.EXPECT().
+	factory := sdkmocks.NewMockSDKFactory(t)
+	sdk := factory.SDK.KongCredentialsHMACSDK
+	sdk.EXPECT().
 		CreateHmacAuthWithConsumer(
 			mock.Anything,
 			sdkkonnectops.CreateHmacAuthWithConsumerRequest{
 				ControlPlaneID:              cp.GetKonnectStatus().GetKonnectID(),
 				ConsumerIDForNestedEntities: consumerID,
 				HMACAuthWithoutParents: sdkkonnectcomp.HMACAuthWithoutParents{
-					Username: lo.ToPtr("username"),
+					Username: "username",
 					Tags:     tags,
 				},
 			},
@@ -99,7 +105,7 @@ func TestKongConsumerCredential_HMAC(t *testing.T) {
 			},
 			nil,
 		)
-	factory.SDK.KongCredentialsHMACSDK.EXPECT().
+	sdk.EXPECT().
 		UpsertHmacAuthWithConsumer(mock.Anything, mock.Anything, mock.Anything).Maybe().
 		Return(
 			&sdkkonnectops.UpsertHmacAuthWithConsumerResponse{
@@ -113,17 +119,23 @@ func TestKongConsumerCredential_HMAC(t *testing.T) {
 	require.NoError(t, manager.SetupCacheIndicesForKonnectTypes(ctx, mgr, false))
 	reconcilers := []Reconciler{
 		konnect.NewKonnectEntityReconciler(factory, false, mgr.GetClient(),
-			konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongCredentialHMAC](konnectSyncTime),
+			konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongCredentialHMAC](konnectInfiniteSyncTime),
 		),
 	}
 
 	StartReconcilers(ctx, t, mgr, logs, reconcilers...)
 
+	assert.EventuallyWithT(t,
+		assertCollectObjectExistsAndHasKonnectID(t, ctx, clientNamespaced, kongCredentialHMAC, hmacID),
+		waitTime, tickTime,
+		"KongCredentialHMAC wasn't created",
+	)
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(c, factory.SDK.KongCredentialsHMACSDK.AssertExpectations(t))
+		assert.True(c, sdk.AssertExpectations(t))
 	}, waitTime, tickTime)
 
-	factory.SDK.KongCredentialsHMACSDK.EXPECT().
+	sdk.EXPECT().
 		DeleteHmacAuthWithConsumer(
 			mock.Anything,
 			sdkkonnectops.DeleteHmacAuthWithConsumerRequest{
@@ -140,24 +152,74 @@ func TestKongConsumerCredential_HMAC(t *testing.T) {
 		)
 	require.NoError(t, clientNamespaced.Delete(ctx, kongCredentialHMAC))
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(c, factory.SDK.KongCredentialsHMACSDK.AssertExpectations(t))
-	}, waitTime, tickTime)
-
-	w := setupWatch[configurationv1alpha1.KongCredentialHMACList](t, ctx, clientWithWatch, client.InNamespace(ns.Name))
-
-	kongCredentialHMAC = deploy.KongCredentialHMAC(t, ctx, clientNamespaced, consumer.Name)
-	t.Logf("redeployed %s KongCredentialHMAC resource", client.ObjectKeyFromObject(kongCredentialHMAC))
-	t.Logf("checking if KongConsumer %s removal will delete the associated credentials %s",
-		client.ObjectKeyFromObject(consumer),
-		client.ObjectKeyFromObject(kongCredentialHMAC),
-	)
-
-	require.NoError(t, clientNamespaced.Delete(ctx, consumer))
-	_ = watchFor(t, ctx, w, watch.Modified,
-		func(c *configurationv1alpha1.KongCredentialHMAC) bool {
-			return c.Name == kongCredentialHMAC.Name
-		},
+	assert.EventuallyWithT(t,
+		func(c *assert.CollectT) {
+			assert.True(c, k8serrors.IsNotFound(
+				clientNamespaced.Get(ctx, client.ObjectKeyFromObject(kongCredentialHMAC), kongCredentialHMAC),
+			))
+		}, waitTime, tickTime,
 		"KongCredentialHMAC wasn't deleted but it should have been",
 	)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.True(c, sdk.AssertExpectations(t))
+	}, waitTime, tickTime)
+
+	t.Run("conflict on creation should be handled successfully", func(t *testing.T) {
+		t.Log("Setting up SDK expectations on creation with conflict")
+		sdk.EXPECT().
+			CreateHmacAuthWithConsumer(
+				mock.Anything,
+				mock.MatchedBy(func(r sdkkonnectops.CreateHmacAuthWithConsumerRequest) bool {
+					return r.ControlPlaneID == cp.GetKonnectID() &&
+						r.ConsumerIDForNestedEntities == consumerID &&
+						r.HMACAuthWithoutParents.Tags != nil &&
+						slices.ContainsFunc(
+							r.HMACAuthWithoutParents.Tags,
+							func(t string) bool {
+								return strings.HasPrefix(t, "k8s-uid:")
+							},
+						)
+				},
+				),
+			).
+			Return(
+				nil,
+				&sdkkonnecterrs.SDKError{
+					StatusCode: 400,
+					Body:       ErrBodyDataConstraintError,
+				},
+			)
+
+		sdk.EXPECT().
+			ListHmacAuth(
+				mock.Anything,
+				mock.MatchedBy(func(r sdkkonnectops.ListHmacAuthRequest) bool {
+					return r.ControlPlaneID == cp.GetKonnectID() &&
+						r.Tags != nil && strings.HasPrefix(*r.Tags, "k8s-uid")
+				}),
+			).
+			Return(&sdkkonnectops.ListHmacAuthResponse{
+				Object: &sdkkonnectops.ListHmacAuthResponseBody{
+					Data: []sdkkonnectcomp.HMACAuth{
+						{
+							ID: lo.ToPtr(hmacID),
+						},
+					},
+				},
+			}, nil)
+
+		w := setupWatch[configurationv1alpha1.KongCredentialHMACList](t, ctx, cl, client.InNamespace(ns.Name))
+		created := deploy.KongCredentialHMAC(t, ctx, clientNamespaced, consumer.Name)
+
+		t.Log("Waiting for KongCredentialHMAC to be programmed")
+		watchFor(t, ctx, w, watch.Modified, func(k *configurationv1alpha1.KongCredentialHMAC) bool {
+			return k.GetName() == created.GetName() && k8sutils.IsProgrammed(k)
+		}, "KongCredentialHMAC's Programmed condition should be true eventually")
+
+		t.Log("Checking SDK KongCredentialHMAC operations")
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.True(c, sdk.AssertExpectations(t))
+		}, waitTime, tickTime)
+	})
 }

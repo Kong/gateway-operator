@@ -141,7 +141,7 @@ func (d *DeploymentBuilder) BuildAndDeploy(
 		return nil, op.Noop, err
 	}
 	// apply default envvars and restore the hacked-out ones
-	desiredDeployment = applyEnvForDataPlane(existingEnvVars, desiredDeployment)
+	desiredDeployment = applyEnvForDataPlane(existingEnvVars, desiredDeployment, dputils.KongDefaults)
 
 	// push the complete Deployment to Kubernetes
 	res, deployment, err := reconcileDataPlaneDeployment(ctx, d.client, d.logger,
@@ -200,8 +200,9 @@ func applyDeploymentUserPatchesForDataPlane(
 func applyEnvForDataPlane(
 	existing []corev1.EnvVar,
 	deployment *k8sresources.Deployment,
+	envSet map[string]string,
 ) *k8sresources.Deployment {
-	dputils.FillDataPlaneProxyContainerEnvs(existing, &deployment.Spec.Template)
+	dputils.FillDataPlaneProxyContainerEnvs(existing, &deployment.Spec.Template, envSet)
 	return deployment
 }
 
@@ -330,7 +331,7 @@ func reconcileDataPlaneDeployment(
 			// the replicas to the minReplicas if the existing Deployment replicas
 			// are less than the minReplicas to enforce faster scaling before HPA
 			// kicks in.
-			(scaling != nil && scaling.HorizontalScaling != nil &&
+			(scaling.HorizontalScaling != nil &&
 				scaling.HorizontalScaling.MinReplicas != nil &&
 				existing.Spec.Replicas != nil &&
 				*existing.Spec.Replicas < *scaling.HorizontalScaling.MinReplicas) {
@@ -341,16 +342,16 @@ func reconcileDataPlaneDeployment(
 		}
 		if updated {
 			diff := cmp.Diff(original.Spec.Template, desired.Spec.Template, opts...)
-			log.Trace(logger, "Deployment diff detected", diff)
+			log.Trace(logger, "DataPlane Deployment diff detected", "diff", diff)
 		}
 
-		return patch.ApplyPatchIfNonEmpty(ctx, cl, logger, existing, original, dataplane, updated)
+		return patch.ApplyPatchIfNotEmpty(ctx, cl, logger, existing, original, updated)
 	}
 
 	if err = cl.Create(ctx, desired); err != nil {
 		return op.Noop, nil, fmt.Errorf("failed creating Deployment for DataPlane %s: %w", dataplane.Name, err)
 	}
 
-	log.Debug(logger, "deployment for DataPlane created", dataplane, "deployment", desired.Name)
+	log.Debug(logger, "deployment for DataPlane created", "deployment", desired.Name)
 	return op.Created, desired, nil
 }

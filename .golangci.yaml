@@ -40,17 +40,16 @@ linters-settings:
       - default
       - prefix(github.com/kong/kubernetes-configuration)
       - prefix(github.com/kong/gateway-operator)
+  govet:
+    enable-all: true # To have checks like e.g. unusedwrite.
+    disable:
+      - fieldalignment
+      - shadow
   importas:
     no-unaliased: true
     alias:
-      - pkg: k8s.io/api/core/v1
-        alias: corev1
-      - pkg: k8s.io/api/apps/v1
-        alias: appsv1
-      - pkg: k8s.io/api/admission/v1
-        alias: admissionv1
-      - pkg: k8s.io/api/certificates/v1
-        alias: certificatesv1
+      - pkg: k8s.io/api/([a-z])/(v[\w\d]+)
+        alias: ${1}${2}
 
       - pkg: k8s.io/apimachinery/pkg/apis/meta/v1
         alias: metav1
@@ -62,6 +61,8 @@ linters-settings:
 
       - pkg: github.com/kong/gateway-operator/internal/types
         alias: gwtypes
+      - pkg: github.com/kong/kubernetes-configuration/api/configuration/([\w\d]+)
+        alias: configuration${1}
 
       - pkg: github.com/Kong/sdk-konnect-go/models/components
         alias: sdkkonnectcomp
@@ -69,6 +70,11 @@ linters-settings:
         alias: sdkkonnectops
       - pkg: github.com/Kong/sdk-konnect-go/models/sdkerrors
         alias: sdkkonnecterrs
+      - pkg: github.com/kong/gateway-operator/controller/konnect/ops/sdk
+        alias: sdkops
+      - pkg: github.com/kong/gateway-operator/controller/konnect/ops/sdk/mocks
+        alias: sdkmocks
+
   revive:
     rules:
       - name: errorf

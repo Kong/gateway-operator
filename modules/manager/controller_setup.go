@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
@@ -23,7 +24,7 @@ import (
 	"github.com/kong/gateway-operator/controller/kongplugininstallation"
 	"github.com/kong/gateway-operator/controller/konnect"
 	"github.com/kong/gateway-operator/controller/konnect/constraints"
-	konnectops "github.com/kong/gateway-operator/controller/konnect/ops"
+	sdkops "github.com/kong/gateway-operator/controller/konnect/ops/sdk"
 	"github.com/kong/gateway-operator/controller/pkg/log"
 	"github.com/kong/gateway-operator/controller/specialized"
 	"github.com/kong/gateway-operator/internal/utils/index"
@@ -40,26 +41,26 @@ import (
 const (
 	// GatewayClassControllerName is the name of the GatewayClass controller.
 	GatewayClassControllerName = "GatewayClass"
-	// GatewayControllerName is the name of the GatewayClass controller.
+	// GatewayControllerName is the name of the Gateway controller.
 	GatewayControllerName = "Gateway"
-	// ControlPlaneControllerName is the name of the GatewayClass controller.
+	// ControlPlaneControllerName is the name of ControlPlane controller.
 	ControlPlaneControllerName = "ControlPlane"
-	// DataPlaneControllerName is the name of the GatewayClass controller.
+	// DataPlaneControllerName is the name of the DataPlane controller.
 	DataPlaneControllerName = "DataPlane"
-	// DataPlaneBlueGreenControllerName is the name of the GatewayClass controller.
+	// DataPlaneBlueGreenControllerName is the name of the DataPlaneBlueGreen controller.
 	DataPlaneBlueGreenControllerName = "DataPlaneBlueGreen"
-	// DataPlaneOwnedServiceFinalizerControllerName is the name of the GatewayClass controller.
+	// DataPlaneOwnedServiceFinalizerControllerName is the name of the DataPlaneOwnedServiceFinalizer controller.
 	DataPlaneOwnedServiceFinalizerControllerName = "DataPlaneOwnedServiceFinalizer"
-	// DataPlaneOwnedSecretFinalizerControllerName is the name of the GatewayClass controller.
+	// DataPlaneOwnedSecretFinalizerControllerName is the name of the DataPlaneOwnedSecretFinalizer controller.
 	DataPlaneOwnedSecretFinalizerControllerName = "DataPlaneOwnedSecretFinalizer"
-	// DataPlaneOwnedDeploymentFinalizerControllerName is the name of the GatewayClass controller.
+	// DataPlaneOwnedDeploymentFinalizerControllerName is the name of the DataPlaneOwnedDeploymentFinalizer controller.
 	DataPlaneOwnedDeploymentFinalizerControllerName = "DataPlaneOwnedDeploymentFinalizer"
-	// AIGatewayControllerName is the name of the GatewayClass controller.
+	// KonnectExtensionControllerName is the name of the KonnectExtension controller.
+	KonnectExtensionControllerName = "KonnectExtension"
+	// AIGatewayControllerName is the name of the AIGateway controller.
 	AIGatewayControllerName = "AIGateway"
-
 	// KongPluginInstallationControllerName is the name of the KongPluginInstallation controller.
 	KongPluginInstallationControllerName = "KongPluginInstallation"
-
 	// KonnectAPIAuthConfigurationControllerName is the name of the KonnectAPIAuthConfiguration controller.
 	KonnectAPIAuthConfigurationControllerName = "KonnectAPIAuthConfiguration"
 	// KonnectGatewayControlPlaneControllerName is the name of the KonnectGatewayControlPlane controller.
@@ -82,6 +83,12 @@ const (
 	KongTargetControllerName = "KongTarget"
 	// KongServicePluginBindingFinalizerControllerName is the name of the KongService PluginBinding finalizer controller.
 	KongServicePluginBindingFinalizerControllerName = "KongServicePluginBindingFinalizer"
+	// KongRoutePluginBindingFinalizerControllerName is the name of the KongRoute PluginBinding finalizer controller.
+	KongRoutePluginBindingFinalizerControllerName = "KongRoutePluginBindingFinalizer"
+	// KongConsumerPluginBindingFinalizerControllerName is the name of the KongConsumer PluginBinding finalizer controller.
+	KongConsumerPluginBindingFinalizerControllerName = "KongConsumerPluginBindingFinalizer"
+	// KongConsumerGroupPluginBindingFinalizerControllerName is the name of the KongConsumerGroup PluginBinding finalizer controller.
+	KongConsumerGroupPluginBindingFinalizerControllerName = "KongConsumerGroupPluginBindingFinalizer"
 	// KongCredentialsSecretControllerName is the name of the Credentials Secret controller.
 	KongCredentialsSecretControllerName = "KongCredentialSecret"
 	// KongCredentialBasicAuthControllerName is the name of the KongCredentialBasicAuth controller.
@@ -171,6 +178,9 @@ func setupIndexes(ctx context.Context, mgr manager.Manager, cfg Config) error {
 				return fmt.Errorf("failed to setup index for KongPluginInstallations on DataPlane: %w", err)
 			}
 		}
+		if err := index.DataPlaneOnDataPlaneKonnecExtension(ctx, mgr.GetCache()); err != nil {
+			return fmt.Errorf("failed to setup index for DataPlanes on KonnectExtensions: %w", err)
+		}
 	}
 	return nil
 }
@@ -195,6 +205,7 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 			Condition: c.GatewayControllerEnabled || c.DataPlaneBlueGreenControllerEnabled || c.DataPlaneControllerEnabled,
 			GVRs: []schema.GroupVersionResource{
 				operatorv1beta1.DataPlaneGVR(),
+				operatorv1alpha1.KongPluginInstallationGVR(),
 			},
 		},
 		{
@@ -216,6 +227,7 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 					Version:  gatewayv1.SchemeGroupVersion.Version,
 					Resource: "gateways",
 				},
+				operatorv1alpha1.KongPluginInstallationGVR(),
 			},
 		},
 		{
@@ -224,7 +236,130 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 				operatorv1alpha1.AIGatewayGVR(),
 			},
 		},
+		{
+			Condition: c.KongPluginInstallationControllerEnabled,
+			GVRs: []schema.GroupVersionResource{
+				operatorv1alpha1.KongPluginInstallationGVR(),
+			},
+		},
+		{
+			Condition: c.KonnectControllersEnabled,
+			GVRs: []schema.GroupVersionResource{
+				operatorv1alpha1.KonnectExtensionGVR(),
+				{
+					Group:    konnectv1alpha1.SchemeGroupVersion.Group,
+					Version:  konnectv1alpha1.SchemeGroupVersion.Version,
+					Resource: "konnectgatewaycontrolplanes",
+				},
+				{
+					Group:    konnectv1alpha1.SchemeGroupVersion.Group,
+					Version:  konnectv1alpha1.SchemeGroupVersion.Version,
+					Resource: "konnectapiauthconfigurations",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongcacertificates",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongcertificates",
+				},
+				{
+					Group:    configurationv1beta1.SchemeGroupVersion.Group,
+					Version:  configurationv1beta1.SchemeGroupVersion.Version,
+					Resource: "kongconsumergroups",
+				},
+				{
+					Group:    configurationv1.SchemeGroupVersion.Group,
+					Version:  configurationv1.SchemeGroupVersion.Version,
+					Resource: "kongconsumers",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongcredentialacls",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongcredentialapikeys",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongcredentialbasicauths",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongcredentialhmacs",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongcredentialjwts",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongdataplaneclientcertificates",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongkeys",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongkeysets",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongpluginbindings",
+				},
+				{
+					Group:    configurationv1.SchemeGroupVersion.Group,
+					Version:  configurationv1.SchemeGroupVersion.Version,
+					Resource: "kongplugins",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongroutes",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongservices",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongsnis",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongtargets",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongupstreams",
+				},
+				{
+					Group:    configurationv1alpha1.SchemeGroupVersion.Group,
+					Version:  configurationv1alpha1.SchemeGroupVersion.Version,
+					Resource: "kongvaults",
+				},
+			},
+		},
 	}
+
 	checker := k8sutils.CRDChecker{Client: mgr.GetClient()}
 	for _, check := range crdChecks {
 		if !check.Condition {
@@ -285,7 +420,8 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 					BeforeDeployment: dataplane.CreateCallbackManager(),
 					AfterDeployment:  dataplane.CreateCallbackManager(),
 				},
-				DefaultImage: consts.DefaultDataPlaneImage,
+				DefaultImage:   consts.DefaultDataPlaneImage,
+				KonnectEnabled: c.KonnectControllersEnabled,
 			},
 		},
 		// DataPlaneBlueGreen controller
@@ -308,12 +444,14 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 						BeforeDeployment: dataplane.CreateCallbackManager(),
 						AfterDeployment:  dataplane.CreateCallbackManager(),
 					},
+					KonnectEnabled: c.KonnectControllersEnabled,
 				},
 				Callbacks: dataplane.DataPlaneCallbacks{
 					BeforeDeployment: dataplane.CreateCallbackManager(),
 					AfterDeployment:  dataplane.CreateCallbackManager(),
 				},
-				DefaultImage: consts.DefaultDataPlaneImage,
+				DefaultImage:   consts.DefaultDataPlaneImage,
+				KonnectEnabled: c.KonnectControllersEnabled,
 			},
 		},
 		DataPlaneOwnedServiceFinalizerControllerName: {
@@ -336,6 +474,13 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 				mgr.GetClient(),
 				c.DevelopmentMode,
 			),
+		},
+		KonnectExtensionControllerName: {
+			Enabled: (c.DataPlaneControllerEnabled || c.DataPlaneBlueGreenControllerEnabled) && c.KonnectControllersEnabled,
+			Controller: &dataplane.KonnectExtensionReconciler{
+				Client:          mgr.GetClient(),
+				DevelopmentMode: c.DevelopmentMode,
+			},
 		},
 		// AIGateway Controller
 		AIGatewayControllerName: {
@@ -363,7 +508,15 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 			return nil, err
 		}
 
-		sdkFactory := konnectops.NewSDKFactory()
+		sdkFactory := sdkops.NewSDKFactory()
+		controllerFactory := konnectControllerFactory{
+			sdkFactory:              sdkFactory,
+			devMode:                 c.DevelopmentMode,
+			client:                  mgr.GetClient(),
+			syncPeriod:              c.KonnectSyncPeriod,
+			maxConcurrentReconciles: c.KonnectMaxConcurrentReconciles,
+		}
+
 		konnectControllers := map[string]ControllerDef{
 			KonnectAPIAuthConfigurationControllerName: {
 				Enabled: c.KonnectControllersEnabled,
@@ -373,168 +526,7 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 					mgr.GetClient(),
 				),
 			},
-			KonnectGatewayControlPlaneControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[konnectv1alpha1.KonnectGatewayControlPlane](c.KonnectSyncPeriod),
-				),
-			},
-			KongServiceControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongService](c.KonnectSyncPeriod),
-				),
-			},
-			KongRouteControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongRoute](c.KonnectSyncPeriod),
-				),
-			},
-			KongConsumerControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1.KongConsumer](c.KonnectSyncPeriod),
-				),
-			},
-			KongConsumerGroupControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1beta1.KongConsumerGroup](c.KonnectSyncPeriod),
-				),
-			},
-			KongUpstreamControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongUpstream](c.KonnectSyncPeriod),
-				),
-			},
-			KongCACertificateControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongCACertificate](c.KonnectSyncPeriod),
-				),
-			},
-			KongCertificateControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongCertificate](c.KonnectSyncPeriod),
-				),
-			},
-			KongTargetControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongTarget](c.KonnectSyncPeriod),
-				),
-			},
-			KongPluginBindingControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongPluginBinding](c.KonnectSyncPeriod),
-				),
-			},
-			KongCredentialBasicAuthControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongCredentialBasicAuth](c.KonnectSyncPeriod),
-				),
-			},
-			KongCredentialAPIKeyControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongCredentialAPIKey](c.KonnectSyncPeriod),
-				),
-			},
-			KongCredentialACLControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongCredentialACL](c.KonnectSyncPeriod),
-				),
-			},
-			KongCredentialHMACControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongCredentialHMAC](c.KonnectSyncPeriod),
-				),
-			},
-			KongCredentialJWTControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongCredentialJWT](c.KonnectSyncPeriod),
-				),
-			},
-			KongKeyControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongKey](c.KonnectSyncPeriod),
-				),
-			},
-			KongKeySetControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongKeySet](c.KonnectSyncPeriod),
-				),
-			},
-			KongDataPlaneClientCertificateControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler[configurationv1alpha1.KongDataPlaneClientCertificate](
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongDataPlaneClientCertificate](c.KonnectSyncPeriod),
-				),
-			},
+
 			KongPluginControllerName: {
 				Enabled: c.KonnectControllersEnabled,
 				Controller: konnect.NewKongPluginReconciler(
@@ -542,32 +534,35 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 					mgr.GetClient(),
 				),
 			},
+
 			// Controllers responsible for cleaning up KongPluginBinding cleanup finalizers.
-			KongServicePluginBindingFinalizerControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityPluginReconciler[configurationv1alpha1.KongService](
-					c.DevelopmentMode,
-					mgr.GetClient(),
-				),
-			},
-			KongVaultControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler[configurationv1alpha1.KongVault](
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongVault](c.KonnectSyncPeriod),
-				),
-			},
-			KongSNIControllerName: {
-				Enabled: c.KonnectControllersEnabled,
-				Controller: konnect.NewKonnectEntityReconciler(
-					sdkFactory,
-					c.DevelopmentMode,
-					mgr.GetClient(),
-					konnect.WithKonnectEntitySyncPeriod[configurationv1alpha1.KongSNI](c.KonnectSyncPeriod),
-				),
-			},
+			KongServicePluginBindingFinalizerControllerName:       newKonnectPluginController[configurationv1alpha1.KongService](controllerFactory),
+			KongRoutePluginBindingFinalizerControllerName:         newKonnectPluginController[configurationv1alpha1.KongRoute](controllerFactory),
+			KongConsumerPluginBindingFinalizerControllerName:      newKonnectPluginController[configurationv1.KongConsumer](controllerFactory),
+			KongConsumerGroupPluginBindingFinalizerControllerName: newKonnectPluginController[configurationv1beta1.KongConsumerGroup](controllerFactory),
+
+			// Controllers responsible for creating, updating and deleting Konnect entities.
+			KonnectGatewayControlPlaneControllerName:     newKonnectController[konnectv1alpha1.KonnectGatewayControlPlane](controllerFactory),
+			KongServiceControllerName:                    newKonnectController[configurationv1alpha1.KongService](controllerFactory),
+			KongRouteControllerName:                      newKonnectController[configurationv1alpha1.KongRoute](controllerFactory),
+			KongConsumerControllerName:                   newKonnectController[configurationv1.KongConsumer](controllerFactory),
+			KongConsumerGroupControllerName:              newKonnectController[configurationv1beta1.KongConsumerGroup](controllerFactory),
+			KongUpstreamControllerName:                   newKonnectController[configurationv1alpha1.KongUpstream](controllerFactory),
+			KongCACertificateControllerName:              newKonnectController[configurationv1alpha1.KongCACertificate](controllerFactory),
+			KongCertificateControllerName:                newKonnectController[configurationv1alpha1.KongCertificate](controllerFactory),
+			KongTargetControllerName:                     newKonnectController[configurationv1alpha1.KongTarget](controllerFactory),
+			KongPluginBindingControllerName:              newKonnectController[configurationv1alpha1.KongPluginBinding](controllerFactory),
+			KongCredentialBasicAuthControllerName:        newKonnectController[configurationv1alpha1.KongCredentialBasicAuth](controllerFactory),
+			KongCredentialAPIKeyControllerName:           newKonnectController[configurationv1alpha1.KongCredentialAPIKey](controllerFactory),
+			KongCredentialACLControllerName:              newKonnectController[configurationv1alpha1.KongCredentialACL](controllerFactory),
+			KongCredentialHMACControllerName:             newKonnectController[configurationv1alpha1.KongCredentialHMAC](controllerFactory),
+			KongCredentialJWTControllerName:              newKonnectController[configurationv1alpha1.KongCredentialJWT](controllerFactory),
+			KongKeyControllerName:                        newKonnectController[configurationv1alpha1.KongKey](controllerFactory),
+			KongKeySetControllerName:                     newKonnectController[configurationv1alpha1.KongKeySet](controllerFactory),
+			KongDataPlaneClientCertificateControllerName: newKonnectController[configurationv1alpha1.KongDataPlaneClientCertificate](controllerFactory),
+			KongVaultControllerName:                      newKonnectController[configurationv1alpha1.KongVault](controllerFactory),
+			KongSNIControllerName:                        newKonnectController[configurationv1alpha1.KongSNI](controllerFactory),
+			// NOTE: Reconcilers for new supported entities should be added here.
 		}
 
 		// Merge Konnect controllers into the controllers map. This is done this way instead of directly assigning
@@ -651,8 +646,28 @@ func SetupCacheIndicesForKonnectTypes(ctx context.Context, mgr manager.Manager, 
 			IndexOptions: konnect.IndexOptionsForKongKey(),
 		},
 		{
+			Object:       &configurationv1alpha1.KongKeySet{},
+			IndexOptions: konnect.IndexOptionsForKongKeySet(),
+		},
+		{
 			Object:       &configurationv1alpha1.KongDataPlaneClientCertificate{},
 			IndexOptions: konnect.IndexOptionsForKongDataPlaneCertificate(),
+		},
+		{
+			Object:       &configurationv1alpha1.KongVault{},
+			IndexOptions: konnect.IndexOptionsForKongVault(),
+		},
+		{
+			Object:       &configurationv1alpha1.KongCertificate{},
+			IndexOptions: konnect.IndexOptionsForKongCertificate(),
+		},
+		{
+			Object:       &configurationv1alpha1.KongCACertificate{},
+			IndexOptions: konnect.IndexOptionsForKongCACertificate(),
+		},
+		{
+			Object:       &konnectv1alpha1.KonnectGatewayControlPlane{},
+			IndexOptions: konnect.IndexOptionsForKonnectGatewayControlPlane(),
 		},
 	}
 
@@ -673,4 +688,41 @@ func SetupCacheIndicesForKonnectTypes(ctx context.Context, mgr manager.Manager, 
 	}
 
 	return nil
+}
+
+type konnectControllerFactory struct {
+	sdkFactory              sdkops.SDKFactory
+	devMode                 bool
+	client                  client.Client
+	syncPeriod              time.Duration
+	maxConcurrentReconciles uint
+}
+
+func newKonnectController[
+	T constraints.SupportedKonnectEntityType,
+	TEnt constraints.EntityType[T],
+](f konnectControllerFactory) ControllerDef {
+	return ControllerDef{
+		Enabled: true,
+		Controller: konnect.NewKonnectEntityReconciler(
+			f.sdkFactory,
+			f.devMode,
+			f.client,
+			konnect.WithKonnectEntitySyncPeriod[T, TEnt](f.syncPeriod),
+			konnect.WithKonnectMaxConcurrentReconciles[T, TEnt](f.maxConcurrentReconciles),
+		),
+	}
+}
+
+func newKonnectPluginController[
+	T constraints.SupportedKonnectEntityPluginReferenceableType,
+	TEnt constraints.EntityType[T],
+](f konnectControllerFactory) ControllerDef {
+	return ControllerDef{
+		Enabled: true,
+		Controller: konnect.NewKonnectEntityPluginReconciler[T, TEnt](
+			f.devMode,
+			f.client,
+		),
+	}
 }

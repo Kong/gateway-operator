@@ -119,6 +119,14 @@ const (
 
 	// CAFieldSecret is the field name in Kubernetes secret - WebhookCertificateConfigSecretName.
 	CAFieldSecret = "ca"
+
+	// KongClusterCertVolume is the name of the volume that holds the certificate the enables
+	// communication between Kong and Konnect.
+	KongClusterCertVolume = "kong-cluster-cert"
+
+	// KongClusterCertVolumeMountPath holds the path where the Kong Cluster certificate
+	// volume will be mounted.
+	KongClusterCertVolumeMountPath = "/etc/secrets/kong-cluster-cert"
 )
 
 // -----------------------------------------------------------------------------
@@ -161,4 +169,7 @@ const (
 const (
 	// DefaultKonnectSyncPeriod is the default sync period for Konnect entities.
 	DefaultKonnectSyncPeriod = time.Minute
+
+	// DefaultKonnectMaxConcurrentReconciles is the default max concurrent reconciles for Konnect entities.
+	DefaultKonnectMaxConcurrentReconciles = uint(8)
 )

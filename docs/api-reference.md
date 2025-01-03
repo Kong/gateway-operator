@@ -3,6 +3,7 @@
 ## Packages
 - [configuration.konghq.com/v1](#configurationkonghqcomv1)
 - [configuration.konghq.com/v1alpha1](#configurationkonghqcomv1alpha1)
+- [configuration.konghq.com/v1beta1](#configurationkonghqcomv1beta1)
 - [gateway-operator.konghq.com/v1alpha1](#gateway-operatorkonghqcomv1alpha1)
 - [gateway-operator.konghq.com/v1beta1](#gateway-operatorkonghqcomv1beta1)
 - [konnect.konghq.com/v1alpha1](#konnectkonghqcomv1alpha1)
@@ -78,6 +79,23 @@ KongConsumerSpec defines the specification of the KongConsumer.
 | Field | Description |
 | --- | --- |
 | `controlPlaneRef` _[ControlPlaneRef](#controlplaneref)_ | ControlPlaneRef is a reference to a ControlPlane this Consumer is associated with. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of tags applied to the consumer. |
+
+
+_Appears in:_
+- [KongConsumer](#kongconsumer)
+
+#### KongConsumerStatus
+
+
+KongConsumerStatus represents the current status of the KongConsumer resource.
+
+
+
+| Field | Description |
+| --- | --- |
+| `konnect` _[KonnectEntityStatusWithControlPlaneRef](#konnectentitystatuswithcontrolplaneref)_ | Konnect contains the Konnect entity status. |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#condition-v1-meta) array_ | Conditions describe the current conditions of the KongConsumer.<br /><br /> Known condition types are:<br /><br /> * "Programmed" |
 
 
 _Appears in:_
@@ -460,7 +478,7 @@ It is used to reference a Control Plane entity.
 
 | Field | Description |
 | --- | --- |
-| `type` _string_ | Type can be one of: - konnectID - konnectNamespacedRef |
+| `type` _string_ | Type indicates the type of the control plane being referenced. Allowed values: - konnectID - konnectNamespacedRef - kic<br /><br /> The default is kic, which implies that the Control Plane is KIC. |
 | `konnectID` _string_ | KonnectID is the schema for the KonnectID type. This field is required when the Type is konnectID. |
 | `konnectNamespacedRef` _[KonnectNamespacedRef](#konnectnamespacedref)_ | KonnectNamespacedRef is a reference to a Konnect Control Plane entity inside the cluster. It contains the name of the Konnect Control Plane. This field is required when the Type is konnectNamespacedRef. |
 
@@ -575,7 +593,7 @@ KongCACertificateAPISpec contains the API specification for the KongCACertificat
 | Field | Description |
 | --- | --- |
 | `cert` _string_ | Cert is the PEM-encoded CA certificate. |
-| `tags` _string array_ | Tags is an optional set of tags applied to the certificate. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of tags applied to the certificate. |
 
 
 _Appears in:_
@@ -592,7 +610,7 @@ KongCACertificateSpec contains the specification for the KongCACertificate.
 | --- | --- |
 | `controlPlaneRef` _[ControlPlaneRef](#controlplaneref)_ | ControlPlaneRef references the Konnect Control Plane that this KongCACertificate should be created in. |
 | `cert` _string_ | Cert is the PEM-encoded CA certificate. |
-| `tags` _string array_ | Tags is an optional set of tags applied to the certificate. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of tags applied to the certificate. |
 
 
 _Appears in:_
@@ -627,7 +645,7 @@ KongCertificateAPISpec contains the API specification for the KongCertificate.
 | `cert_alt` _string_ | CertAlt is the PEM-encoded certificate. This should only be set if you have both RSA and ECDSA types of certificate available and would like Kong to prefer serving using ECDSA certs when client advertises support for it. |
 | `key` _string_ | Key is the PEM-encoded private key. |
 | `key_alt` _string_ | KeyAlt is the PEM-encoded private key. This should only be set if you have both RSA and ECDSA types of certificate available and would like Kong to prefer serving using ECDSA certs when client advertises support for it. |
-| `tags` _string array_ | Tags is an optional set of tags applied to the certificate. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of tags applied to the certificate. |
 
 
 _Appears in:_
@@ -647,7 +665,7 @@ KongCertificateSpec contains the specification for the KongCertificate.
 | `cert_alt` _string_ | CertAlt is the PEM-encoded certificate. This should only be set if you have both RSA and ECDSA types of certificate available and would like Kong to prefer serving using ECDSA certs when client advertises support for it. |
 | `key` _string_ | Key is the PEM-encoded private key. |
 | `key_alt` _string_ | KeyAlt is the PEM-encoded private key. This should only be set if you have both RSA and ECDSA types of certificate available and would like Kong to prefer serving using ECDSA certs when client advertises support for it. |
-| `tags` _string array_ | Tags is an optional set of tags applied to the certificate. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of tags applied to the certificate. |
 
 
 _Appears in:_
@@ -679,7 +697,7 @@ KongCredentialACLAPISpec defines specification of an ACL credential.
 | Field | Description |
 | --- | --- |
 | `group` _string_ | Group is the name for the ACL credential. |
-| `tags` _string array_ | Tags is a list of tags for the ACL credential. |
+| `tags` _[Tags](#tags)_ | Tags is a list of tags for the ACL credential. |
 
 
 _Appears in:_
@@ -696,7 +714,7 @@ KongCredentialACLSpec defines specification of Kong ACL.
 | --- | --- |
 | `consumerRef` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#localobjectreference-v1-core)_ | ConsumerRef is a reference to a Consumer this KongCredentialACL is associated with. |
 | `group` _string_ | Group is the name for the ACL credential. |
-| `tags` _string array_ | Tags is a list of tags for the ACL credential. |
+| `tags` _[Tags](#tags)_ | Tags is a list of tags for the ACL credential. |
 
 
 _Appears in:_
@@ -728,7 +746,7 @@ KongCredentialAPIKeyAPISpec defines specification of an API Key credential.
 | Field | Description |
 | --- | --- |
 | `key` _string_ | Key is the key for the API Key credential. |
-| `tags` _string array_ | Tags is a list of tags for the API Key credential. |
+| `tags` _[Tags](#tags)_ | Tags is a list of tags for the API Key credential. |
 
 
 _Appears in:_
@@ -745,7 +763,7 @@ KongCredentialAPIKeySpec defines specification of a Kong Route.
 | --- | --- |
 | `consumerRef` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#localobjectreference-v1-core)_ | ConsumerRef is a reference to a Consumer this KongCredentialAPIKey is associated with. |
 | `key` _string_ | Key is the key for the API Key credential. |
-| `tags` _string array_ | Tags is a list of tags for the API Key credential. |
+| `tags` _[Tags](#tags)_ | Tags is a list of tags for the API Key credential. |
 
 
 _Appears in:_
@@ -777,7 +795,7 @@ KongCredentialBasicAuthAPISpec defines specification of a BasicAuth credential.
 | Field | Description |
 | --- | --- |
 | `password` _string_ | Password is the password for the BasicAuth credential. |
-| `tags` _string array_ | Tags is a list of tags for the BasicAuth credential. |
+| `tags` _[Tags](#tags)_ | Tags is a list of tags for the BasicAuth credential. |
 | `username` _string_ | Username is the username for the BasicAuth credential. |
 
 
@@ -795,7 +813,7 @@ KongCredentialBasicAuthSpec defines specification of a Kong Route.
 | --- | --- |
 | `consumerRef` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#localobjectreference-v1-core)_ | ConsumerRef is a reference to a Consumer this CredentialBasicAuth is associated with. |
 | `password` _string_ | Password is the password for the BasicAuth credential. |
-| `tags` _string array_ | Tags is a list of tags for the BasicAuth credential. |
+| `tags` _[Tags](#tags)_ | Tags is a list of tags for the BasicAuth credential. |
 | `username` _string_ | Username is the username for the BasicAuth credential. |
 
 
@@ -829,7 +847,7 @@ KongCredentialHMACAPISpec defines specification of an HMAC credential.
 | --- | --- |
 | `id` _string_ | ID is the unique identifier for the HMAC credential. |
 | `secret` _string_ | Secret is the secret for the HMAC credential. |
-| `tags` _string array_ | Tags is a list of tags for the HMAC credential. |
+| `tags` _[Tags](#tags)_ | Tags is a list of tags for the HMAC credential. |
 | `username` _string_ | Username is the username for the HMAC credential. |
 
 
@@ -848,7 +866,7 @@ KongCredentialHMACSpec defines specification of a Kong Route.
 | `consumerRef` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#localobjectreference-v1-core)_ | ConsumerRef is a reference to a Consumer this KongCredentialHMAC is associated with. |
 | `id` _string_ | ID is the unique identifier for the HMAC credential. |
 | `secret` _string_ | Secret is the secret for the HMAC credential. |
-| `tags` _string array_ | Tags is a list of tags for the HMAC credential. |
+| `tags` _[Tags](#tags)_ | Tags is a list of tags for the HMAC credential. |
 | `username` _string_ | Username is the username for the HMAC credential. |
 
 
@@ -885,7 +903,7 @@ KongCredentialJWTAPISpec defines specification of an JWT credential.
 | `key` _string_ | Key is the key for the JWT credential. |
 | `rsa_public_key` _string_ | RSA PublicKey is the RSA public key for the JWT credential. |
 | `secret` _string_ | Secret is the secret for the JWT credential. |
-| `tags` _string array_ | Tags is a list of tags for the JWT credential. |
+| `tags` _[Tags](#tags)_ | Tags is a list of tags for the JWT credential. |
 
 
 _Appears in:_
@@ -906,7 +924,7 @@ KongCredentialJWTSpec defines specification of a Kong Route.
 | `key` _string_ | Key is the key for the JWT credential. |
 | `rsa_public_key` _string_ | RSA PublicKey is the RSA public key for the JWT credential. |
 | `secret` _string_ | Secret is the secret for the JWT credential. |
-| `tags` _string array_ | Tags is a list of tags for the JWT credential. |
+| `tags` _[Tags](#tags)_ | Tags is a list of tags for the JWT credential. |
 
 
 _Appears in:_
@@ -988,7 +1006,7 @@ KongKeyAPISpec defines the attributes of a Kong Key.
 | `name` _string_ | Name is an optional name to associate with the given key. |
 | `jwk` _string_ | JWK is a JSON Web Key represented as a string. The JWK must contain a KID field that matches the KID in the KongKey. Either JWK or PEM must be set. |
 | `pem` _[PEMKeyPair](#pemkeypair)_ | PEM is a keypair in PEM format. Either JWK or PEM must be set. |
-| `tags` _string array_ | Tags is an optional set of strings associated with the Key for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of strings associated with the Key for grouping and filtering. |
 
 
 _Appears in:_
@@ -1004,7 +1022,7 @@ KongKeySetAPISpec defines the attributes of a Kong KeySet.
 | Field | Description |
 | --- | --- |
 | `name` _string_ | Name is a name of the KeySet. |
-| `tags` _string array_ | Tags is an optional set of strings associated with the KeySet for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of strings associated with the KeySet for grouping and filtering. |
 
 
 _Appears in:_
@@ -1021,7 +1039,7 @@ KongKeySetSpec defines the spec for a KongKeySet.
 | --- | --- |
 | `controlPlaneRef` _[ControlPlaneRef](#controlplaneref)_ | ControlPlaneRef is a reference to a Konnect ControlPlane with which KongKeySet is associated. |
 | `name` _string_ | Name is a name of the KeySet. |
-| `tags` _string array_ | Tags is an optional set of strings associated with the KeySet for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of strings associated with the KeySet for grouping and filtering. |
 
 
 _Appears in:_
@@ -1058,7 +1076,7 @@ KongKeySpec defines the spec for a KongKey.
 | `name` _string_ | Name is an optional name to associate with the given key. |
 | `jwk` _string_ | JWK is a JSON Web Key represented as a string. The JWK must contain a KID field that matches the KID in the KongKey. Either JWK or PEM must be set. |
 | `pem` _[PEMKeyPair](#pemkeypair)_ | PEM is a keypair in PEM format. Either JWK or PEM must be set. |
-| `tags` _string array_ | Tags is an optional set of strings associated with the Key for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of strings associated with the Key for grouping and filtering. |
 
 
 _Appears in:_
@@ -1116,19 +1134,18 @@ _Appears in:_
 #### KongObjectRef
 
 
-KongObjectRef is a reference to another object representing a Kong entity with deterministic type.<br /><br />
-TODO: https://github.com/Kong/kubernetes-configuration/issues/96
-change other types to use the generic `KongObjectRef` and move it to a common package to prevent possible import cycles.
+KongObjectRef is a reference to another object representing a Kong entity with deterministic type.
 
 
 
 | Field | Description |
 | --- | --- |
-| `name` _string_ | Name is the name of the entity.<br /><br /> NOTE: the `Required` validation rule does not reject empty strings so we use `MinLength` to reject empty string here. |
+| `name` _string_ | Name is the name of the entity. |
 
 
 _Appears in:_
 - [KongSNISpec](#kongsnispec)
+- [ServiceRef](#serviceref)
 
 #### KongPluginBindingSpec
 
@@ -1201,14 +1218,14 @@ to make the code generation required for Kubernetes CRDs work.
 | `path_handling` _[PathHandling](#pathhandling)_ | Controls how the Service path, Route path and requested path are combined when sending a request to the upstream. See above for a detailed description of each behavior. |
 | `paths` _string array_ | A list of paths that match this Route. |
 | `preserve_host` _boolean_ | When matching a Route via one of the `hosts` domain names, use the request `Host` header in the upstream request headers. If set to `false`, the upstream `Host` header will be that of the Service's `host`. |
-| `protocols` _RouteProtocols array_ | An array of the protocols this Route should allow. See the [Route Object](#route-object) section for a list of accepted protocols. When set to only `"https"`, HTTP requests are answered with an upgrade error. When set to only `"http"`, HTTPS requests are answered with an error. |
+| `protocols` _RouteProtocols array_ | An array of the protocols this Route should allow. See KongRoute for a list of accepted protocols. When set to only `"https"`, HTTP requests are answered with an upgrade error. When set to only `"http"`, HTTPS requests are answered with an error. |
 | `regex_priority` _integer_ | A number used to choose which route resolves a given request when several routes match it using regexes simultaneously. When two routes match the path and have the same `regex_priority`, the older one (lowest `created_at`) is used. Note that the priority for non-regex routes is different (longer non-regex routes are matched before shorter ones). |
 | `request_buffering` _boolean_ | Whether to enable request body buffering or not. With HTTP 1.1, it may make sense to turn this off on services that receive data with chunked transfer encoding. |
 | `response_buffering` _boolean_ | Whether to enable response body buffering or not. With HTTP 1.1, it may make sense to turn this off on services that send data with chunked transfer encoding. |
 | `snis` _string array_ | A list of SNIs that match this Route when using stream routing. |
 | `sources` _Sources array_ | A list of IP sources of incoming connections that match this Route when using stream routing. Each entry is an object with fields "ip" (optionally in CIDR range notation) and/or "port". |
 | `strip_path` _boolean_ | When matching a Route via one of the `paths`, strip the matching prefix from the upstream request URL. |
-| `tags` _string array_ | An optional set of strings associated with the Route for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | An optional set of strings associated with the Route for grouping and filtering. |
 
 
 _Appears in:_
@@ -1217,7 +1234,7 @@ _Appears in:_
 #### KongRouteSpec
 
 
-KongRouteSpec defines specification of a Kong Route.
+KongRouteSpec defines spec of a Kong Route.
 
 
 
@@ -1234,14 +1251,14 @@ KongRouteSpec defines specification of a Kong Route.
 | `path_handling` _[PathHandling](#pathhandling)_ | Controls how the Service path, Route path and requested path are combined when sending a request to the upstream. See above for a detailed description of each behavior. |
 | `paths` _string array_ | A list of paths that match this Route. |
 | `preserve_host` _boolean_ | When matching a Route via one of the `hosts` domain names, use the request `Host` header in the upstream request headers. If set to `false`, the upstream `Host` header will be that of the Service's `host`. |
-| `protocols` _RouteProtocols array_ | An array of the protocols this Route should allow. See the [Route Object](#route-object) section for a list of accepted protocols. When set to only `"https"`, HTTP requests are answered with an upgrade error. When set to only `"http"`, HTTPS requests are answered with an error. |
+| `protocols` _RouteProtocols array_ | An array of the protocols this Route should allow. See KongRoute for a list of accepted protocols. When set to only `"https"`, HTTP requests are answered with an upgrade error. When set to only `"http"`, HTTPS requests are answered with an error. |
 | `regex_priority` _integer_ | A number used to choose which route resolves a given request when several routes match it using regexes simultaneously. When two routes match the path and have the same `regex_priority`, the older one (lowest `created_at`) is used. Note that the priority for non-regex routes is different (longer non-regex routes are matched before shorter ones). |
 | `request_buffering` _boolean_ | Whether to enable request body buffering or not. With HTTP 1.1, it may make sense to turn this off on services that receive data with chunked transfer encoding. |
 | `response_buffering` _boolean_ | Whether to enable response body buffering or not. With HTTP 1.1, it may make sense to turn this off on services that send data with chunked transfer encoding. |
 | `snis` _string array_ | A list of SNIs that match this Route when using stream routing. |
 | `sources` _Sources array_ | A list of IP sources of incoming connections that match this Route when using stream routing. Each entry is an object with fields "ip" (optionally in CIDR range notation) and/or "port". |
 | `strip_path` _boolean_ | When matching a Route via one of the `paths`, strip the matching prefix from the upstream request URL. |
-| `tags` _string array_ | An optional set of strings associated with the Route for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | An optional set of strings associated with the Route for grouping and filtering. |
 
 
 _Appears in:_
@@ -1266,14 +1283,14 @@ _Appears in:_
 #### KongSNIAPISpec
 
 
-KongSNIAPISpec defines specification of an SNI.
+KongSNIAPISpec defines the spec of an SNI.
 
 
 
 | Field | Description |
 | --- | --- |
 | `name` _string_ | Name is the name of the SNI. Required and must be a host or wildcard host. |
-| `tags` _string array_ | Tags is an optional set of strings associated with the SNI for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of strings associated with the SNI for grouping and filtering. |
 
 
 _Appears in:_
@@ -1290,7 +1307,7 @@ KongSNISpec defines specification of a Kong SNI.
 | --- | --- |
 | `certificateRef` _[KongObjectRef](#kongobjectref)_ | CertificateRef is the reference to the certificate to which the KongSNI is attached. |
 | `name` _string_ | Name is the name of the SNI. Required and must be a host or wildcard host. |
-| `tags` _string array_ | Tags is an optional set of strings associated with the SNI for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of strings associated with the SNI for grouping and filtering. |
 
 
 _Appears in:_
@@ -1315,7 +1332,7 @@ _Appears in:_
 #### KongServiceAPISpec
 
 
-KongServiceAPISpec defines specification of a Kong Service.
+KongServiceAPISpec defines the specification of a Kong Service.
 
 
 
@@ -1331,7 +1348,7 @@ KongServiceAPISpec defines specification of a Kong Service.
 | `protocol` _[Protocol](#protocol)_ | The protocol used to communicate with the upstream. |
 | `read_timeout` _integer_ | The timeout in milliseconds between two successive read operations for transmitting a request to the upstream server. |
 | `retries` _integer_ | The number of retries to execute upon failure to proxy. |
-| `tags` _string array_ | An optional set of strings associated with the Service for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | An optional set of strings associated with the Service for grouping and filtering. |
 | `tls_verify` _boolean_ | Whether to enable verification of upstream server TLS certificate. If set to `null`, then the Nginx default is respected. |
 | `tls_verify_depth` _integer_ | Maximum depth of chain while verifying Upstream server's TLS certificate. If set to `null`, then the Nginx default is respected. |
 | `write_timeout` _integer_ | The timeout in milliseconds between two successive write operations for transmitting a request to the upstream server. |
@@ -1360,7 +1377,7 @@ KongServiceSpec defines specification of a Kong Route.
 | `protocol` _[Protocol](#protocol)_ | The protocol used to communicate with the upstream. |
 | `read_timeout` _integer_ | The timeout in milliseconds between two successive read operations for transmitting a request to the upstream server. |
 | `retries` _integer_ | The number of retries to execute upon failure to proxy. |
-| `tags` _string array_ | An optional set of strings associated with the Service for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | An optional set of strings associated with the Service for grouping and filtering. |
 | `tls_verify` _boolean_ | Whether to enable verification of upstream server TLS certificate. If set to `null`, then the Nginx default is respected. |
 | `tls_verify_depth` _integer_ | Maximum depth of chain while verifying Upstream server's TLS certificate. If set to `null`, then the Nginx default is respected. |
 | `write_timeout` _integer_ | The timeout in milliseconds between two successive write operations for transmitting a request to the upstream server. |
@@ -1396,7 +1413,7 @@ KongTargetAPISpec are the attributes of the Kong Target itself.
 | --- | --- |
 | `target` _string_ | Target is the target address of the upstream. |
 | `weight` _integer_ | Weight is the weight this target gets within the upstream loadbalancer. |
-| `tags` _string array_ | Tags is an optional set of strings associated with the Target for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of strings associated with the Target for grouping and filtering. |
 
 
 _Appears in:_
@@ -1405,8 +1422,7 @@ _Appears in:_
 #### KongTargetSpec
 
 
-KongTargetSpec defines the specification of a Kong Target.
-KongTargetSpec defines the desired state of KongTarget.
+KongTargetSpec defines the spec of KongTarget.
 
 
 
@@ -1415,7 +1431,7 @@ KongTargetSpec defines the desired state of KongTarget.
 | `upstreamRef` _[TargetRef](#targetref)_ | UpstreamRef is a reference to a KongUpstream this KongTarget is attached to. |
 | `target` _string_ | Target is the target address of the upstream. |
 | `weight` _integer_ | Weight is the weight this target gets within the upstream loadbalancer. |
-| `tags` _string array_ | Tags is an optional set of strings associated with the Target for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | Tags is an optional set of strings associated with the Target for grouping and filtering. |
 
 
 _Appears in:_
@@ -1462,7 +1478,7 @@ KongUpstreamAPISpec defines specification of a Kong Upstream.
 | `host_header` _string_ | The hostname to be used as `Host` header when proxying requests through Kong. |
 | `name` _string_ | This is a hostname, which must be equal to the `host` of a Service. |
 | `slots` _integer_ | The number of slots in the load balancer algorithm. If `algorithm` is set to `round-robin`, this setting determines the maximum number of slots. If `algorithm` is set to `consistent-hashing`, this setting determines the actual number of slots in the algorithm. Accepts an integer in the range `10`-`65536`. |
-| `tags` _string array_ | An optional set of strings associated with the Upstream for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | An optional set of strings associated with the Upstream for grouping and filtering. |
 | `use_srv_name` _boolean_ | If set, the balancer will use SRV hostname(if DNS Answer has SRV record) as the proxy upstream `Host`. |
 
 
@@ -1472,7 +1488,7 @@ _Appears in:_
 #### KongUpstreamSpec
 
 
-KongUpstreamSpec defines specification of a Kong Upstream.
+KongUpstreamSpec defines the spec of Kong Upstream.
 
 
 
@@ -1495,7 +1511,7 @@ KongUpstreamSpec defines specification of a Kong Upstream.
 | `host_header` _string_ | The hostname to be used as `Host` header when proxying requests through Kong. |
 | `name` _string_ | This is a hostname, which must be equal to the `host` of a Service. |
 | `slots` _integer_ | The number of slots in the load balancer algorithm. If `algorithm` is set to `round-robin`, this setting determines the maximum number of slots. If `algorithm` is set to `consistent-hashing`, this setting determines the actual number of slots in the algorithm. Accepts an integer in the range `10`-`65536`. |
-| `tags` _string array_ | An optional set of strings associated with the Upstream for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | An optional set of strings associated with the Upstream for grouping and filtering. |
 | `use_srv_name` _boolean_ | If set, the balancer will use SRV hostname(if DNS Answer has SRV record) as the proxy upstream `Host`. |
 
 
@@ -1531,7 +1547,7 @@ KongVaultSpec defines specification of a custom Kong vault.
 | `prefix` _string_ | Prefix is the prefix of vault URI for referencing values in the vault. It is immutable after created. |
 | `description` _string_ | Description is the additional information about the vault. |
 | `config` _[JSON](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#json-v1-apiextensions-k8s-io)_ | Config is the configuration of the vault. Varies for different backends. |
-| `tags` _string array_ | Tags are the tags associated to the vault for grouping and filtering. |
+| `tags` _[Tags](#tags)_ | Tags are the tags associated to the vault for grouping and filtering. |
 | `controlPlaneRef` _[ControlPlaneRef](#controlplaneref)_ | ControlPlaneRef is a reference to a Konnect ControlPlane this KongVault is associated with. |
 
 
@@ -1581,22 +1597,6 @@ Namespace refers to a Kubernetes namespace. It must be a RFC 1123 label.
 
 _Appears in:_
 - [ControllerReference](#controllerreference)
-
-#### NamespacedServiceRef
-
-
-NamespacedServiceRef is a namespaced reference to a KongService.<br /><br />
-NOTE: currently cross namespace references are not supported.
-
-
-
-| Field | Description |
-| --- | --- |
-| `name` _string_ |  |
-
-
-_Appears in:_
-- [ServiceRef](#serviceref)
 
 #### ObjectName
 _Underlying type:_ `string`
@@ -1655,7 +1655,7 @@ ServiceRef is a reference to a KongService.
 | Field | Description |
 | --- | --- |
 | `type` _string_ | Type can be one of: - namespacedRef |
-| `namespacedRef` _[NamespacedServiceRef](#namespacedserviceref)_ | NamespacedRef is a reference to a KongService. |
+| `namespacedRef` _[KongObjectRef](#kongobjectref)_ | NamespacedRef is a reference to a KongService. |
 
 
 _Appears in:_
@@ -1695,15 +1695,43 @@ _Appears in:_
 - [KongPluginBindingTargets](#kongpluginbindingtargets)
 
 
+## configuration.konghq.com/v1beta1
+
+Package v1beta1 contains API Schema definitions for the configuration.konghq.com v1beta1 API group.
+
+- [KongConsumerGroup](#kongconsumergroup)
+### KongConsumerGroup
+
+
+KongConsumerGroup is the Schema for the kongconsumergroups API.
+
+<!-- kong_consumer_group description placeholder -->
+
+| Field | Description |
+| --- | --- |
+| `apiVersion` _string_ | `configuration.konghq.com/v1beta1`
+| `kind` _string_ | `KongConsumerGroup`
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
+| `spec` _[KongConsumerGroupSpec](#kongconsumergroupspec)_ |  |
+| `status` _[KongConsumerGroupStatus](#kongconsumergroupstatus)_ | Status represents the current status of the KongConsumerGroup resource. |
+
+
+
+
+
+
+### Types
+
+In this section you will find types that the CRDs rely on.
 
 ## gateway-operator.konghq.com/v1alpha1
 
 Package v1alpha1 contains API Schema definitions for the operator v1alpha1 API group
 
 - [AIGateway](#aigateway)
-- [DataPlaneKonnectExtension](#dataplanekonnectextension)
 - [DataPlaneMetricsExtension](#dataplanemetricsextension)
 - [KongPluginInstallation](#kongplugininstallation)
+- [KonnectExtension](#konnectextension)
 ### AIGateway
 
 
@@ -1749,26 +1777,6 @@ See: https://kubernetes.io/docs/reference/using-api/cel/
 
 
 
-### DataPlaneKonnectExtension
-
-
-DataPlaneKonnectExtension is the Schema for the dataplanekonnectextension API,
-and is intended to be referenced as extension by the dataplane API.
-If a DataPlane successfully refers a DataPlaneKonnectExtension, the DataPlane
-deployment spec gets customized to include the konnect-related configuration.
-
-<!-- data_plane_konnect_extension description placeholder -->
-
-| Field | Description |
-| --- | --- |
-| `apiVersion` _string_ | `gateway-operator.konghq.com/v1alpha1`
-| `kind` _string_ | `DataPlaneKonnectExtension`
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
-| `spec` _[DataPlaneKonnectExtensionSpec](#dataplanekonnectextensionspec)_ | Spec is the specification of the DataPlaneKonnectExtension resource. |
-| `status` _[DataPlaneKonnectExtensionStatus](#dataplanekonnectextensionstatus)_ | Status is the status of the DataPlaneKonnectExtension resource. |
-
-
-
 ### DataPlaneMetricsExtension
 
 
@@ -1809,6 +1817,26 @@ and configured with KongPlugin CRD.
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
 | `spec` _[KongPluginInstallationSpec](#kongplugininstallationspec)_ |  |
 | `status` _[KongPluginInstallationStatus](#kongplugininstallationstatus)_ |  |
+
+
+
+### KonnectExtension
+
+
+KonnectExtension is the Schema for the KonnectExtension API,
+and is intended to be referenced as extension by the DataPlane API.
+If a DataPlane successfully refers a KonnectExtension, the DataPlane
+deployment spec gets customized to include the konnect-related configuration.
+
+<!-- konnect_extension description placeholder -->
+
+| Field | Description |
+| --- | --- |
+| `apiVersion` _string_ | `gateway-operator.konghq.com/v1alpha1`
+| `kind` _string_ | `KonnectExtension`
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
+| `spec` _[KonnectExtensionSpec](#konnectextensionspec)_ | Spec is the specification of the KonnectExtension resource. |
+| `status` _[KonnectExtensionStatus](#konnectextensionstatus)_ | Status is the status of the KonnectExtension resource. |
 
 
 
@@ -1968,40 +1996,6 @@ ClusterCertificateSecretRef contains the reference to the Secret containing the 
 _Appears in:_
 - [KonnectControlPlaneAPIAuthConfiguration](#konnectcontrolplaneapiauthconfiguration)
 
-#### DataPlaneKonnectExtensionSpec
-
-
-DataPlaneKonnectExtensionSpec defines the desired state of DataPlaneKonnectExtension.
-
-
-
-| Field | Description |
-| --- | --- |
-| `controlPlaneRef` _[ControlPlaneRef](#controlplaneref)_ | ControlPlaneRef is a reference to a ControlPlane this DataPlaneKonnectExtension is associated with. |
-| `controlPlaneRegion` _string_ | ControlPlaneRegion is the region of the Konnect Control Plane. |
-| `serverHostname` _string_ | ServerHostname is the fully qualified domain name of the konnect server. This matches the RFC 1123 definition of a hostname with 1 notable exception that numeric IP addresses are not allowed.<br /><br /> Note that as per RFC1035 and RFC1123, a *label* must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character. No other punctuation is allowed. |
-| `konnectControlPlaneAPIAuthConfiguration` _[KonnectControlPlaneAPIAuthConfiguration](#konnectcontrolplaneapiauthconfiguration)_ | AuthConfiguration must be used to configure the Konnect API authentication. |
-| `clusterDataPlaneLabels` _object (keys:string, values:string)_ | ClusterDataPlaneLabels is a set of labels that will be applied to the Konnect DataPlane. |
-
-
-_Appears in:_
-- [DataPlaneKonnectExtension](#dataplanekonnectextension)
-
-#### DataPlaneKonnectExtensionStatus
-
-
-DataPlaneKonnectExtensionStatus defines the observed state of DataPlaneKonnectExtension.
-
-
-
-| Field | Description |
-| --- | --- |
-| `dataPlaneRefs` _[NamespacedRef](#namespacedref) array_ | DataPlaneRefs is the array  of DataPlane references this is associated with. A new reference is set by the operator when this extension is associated with a DataPlane through its extensions spec. |
-
-
-_Appears in:_
-- [DataPlaneKonnectExtension](#dataplanekonnectextension)
-
 #### DataPlaneMetricsExtensionSpec
 
 
@@ -2096,11 +2090,45 @@ KonnectControlPlaneAPIAuthConfiguration contains the configuration to authentica
 
 | Field | Description |
 | --- | --- |
-| `clusterCertificateSecretRef` _[ClusterCertificateSecretRef](#clustercertificatesecretref)_ | ClusterCertificateSecretName is a name of the Secret containing the Konnect Control Plane's cluster certificate. |
+| `clusterCertificateSecretRef` _[ClusterCertificateSecretRef](#clustercertificatesecretref)_ | ClusterCertificateSecretRef is the reference to the Secret containing the Konnect Control Plane's cluster certificate. |
 
 
 _Appears in:_
-- [DataPlaneKonnectExtensionSpec](#dataplanekonnectextensionspec)
+- [KonnectExtensionSpec](#konnectextensionspec)
+
+#### KonnectExtensionSpec
+
+
+KonnectExtensionSpec defines the desired state of KonnectExtension.
+
+
+
+| Field | Description |
+| --- | --- |
+| `controlPlaneRef` _[ControlPlaneRef](#controlplaneref)_ | ControlPlaneRef is a reference to a ControlPlane this KonnectExtension is associated with. |
+| `controlPlaneRegion` _string_ | ControlPlaneRegion is the region of the Konnect Control Plane. |
+| `serverHostname` _string_ | ServerHostname is the fully qualified domain name of the Konnect server. For typical operation a default value doesn't need to be adjusted. It matches the RFC 1123 definition of a hostname with 1 notable exception that numeric IP addresses are not allowed.<br /><br /> Note that as per RFC1035 and RFC1123, a *label* must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character. No other punctuation is allowed. |
+| `konnectControlPlaneAPIAuthConfiguration` _[KonnectControlPlaneAPIAuthConfiguration](#konnectcontrolplaneapiauthconfiguration)_ | AuthConfiguration must be used to configure the Konnect API authentication. |
+| `clusterDataPlaneLabels` _object (keys:string, values:string)_ | ClusterDataPlaneLabels is a set of labels that will be applied to the Konnect DataPlane. |
+
+
+_Appears in:_
+- [KonnectExtension](#konnectextension)
+
+#### KonnectExtensionStatus
+
+
+KonnectExtensionStatus defines the observed state of KonnectExtension.
+
+
+
+| Field | Description |
+| --- | --- |
+| `dataPlaneRefs` _[NamespacedRef](#namespacedref) array_ | DataPlaneRefs is the array  of DataPlane references this is associated with. A new reference is set by the operator when this extension is associated with a DataPlane through its extensions spec. |
+
+
+_Appears in:_
+- [KonnectExtension](#konnectextension)
 
 #### LLMPrompt
 
@@ -2216,9 +2244,9 @@ NamespacedRef is a reference to a namespaced resource.
 
 
 _Appears in:_
-- [DataPlaneKonnectExtensionStatus](#dataplanekonnectextensionstatus)
 - [DataPlaneMetricsExtensionStatus](#dataplanemetricsextensionstatus)
 - [ExtensionRef](#extensionref)
+- [KonnectExtensionStatus](#konnectextensionstatus)
 
 #### ServiceSelector
 
@@ -2503,7 +2531,7 @@ deploy the DataPlane.
 | `deployment` _[DataPlaneDeploymentOptions](#dataplanedeploymentoptions)_ |  |
 | `network` _[DataPlaneNetworkOptions](#dataplanenetworkoptions)_ |  |
 | `resources` _[DataPlaneResources](#dataplaneresources)_ |  |
-| `extensions` _ExtensionRef array_ | Extensions provide additional or replacement features for the DataPlane resources to influence or enhance functionality. NOTE: since we have one extension only (DataPlaneKonnectExtension), we limit the amount of extensions to 1. |
+| `extensions` _ExtensionRef array_ | Extensions provide additional or replacement features for the DataPlane resources to influence or enhance functionality. NOTE: since we have one extension only (KonnectExtension), we limit the amount of extensions to 1. |
 | `pluginsToInstall` _[NamespacedName](#namespacedname) array_ | PluginsToInstall is a list of KongPluginInstallation resources that will be installed and available in the DataPlane. |
 
 
@@ -2639,7 +2667,7 @@ DataPlaneSpec defines the desired state of DataPlane
 | `deployment` _[DataPlaneDeploymentOptions](#dataplanedeploymentoptions)_ |  |
 | `network` _[DataPlaneNetworkOptions](#dataplanenetworkoptions)_ |  |
 | `resources` _[DataPlaneResources](#dataplaneresources)_ |  |
-| `extensions` _ExtensionRef array_ | Extensions provide additional or replacement features for the DataPlane resources to influence or enhance functionality. NOTE: since we have one extension only (DataPlaneKonnectExtension), we limit the amount of extensions to 1. |
+| `extensions` _ExtensionRef array_ | Extensions provide additional or replacement features for the DataPlane resources to influence or enhance functionality. NOTE: since we have one extension only (KonnectExtension), we limit the amount of extensions to 1. |
 | `pluginsToInstall` _[NamespacedName](#namespacedname) array_ | PluginsToInstall is a list of KongPluginInstallation resources that will be installed and available in the DataPlane. |
 
 
@@ -2715,7 +2743,7 @@ configure and deploy a DataPlane object.
 | --- | --- |
 | `deployment` _[DataPlaneDeploymentOptions](#dataplanedeploymentoptions)_ |  |
 | `network` _[GatewayConfigDataPlaneNetworkOptions](#gatewayconfigdataplanenetworkoptions)_ |  |
-| `extensions` _ExtensionRef array_ | Extensions provide additional or replacement features for the DataPlane resources to influence or enhance functionality. NOTE: since we have one extension only (DataPlaneKonnectExtension), we limit the amount of extensions to 1. |
+| `extensions` _ExtensionRef array_ | Extensions provide additional or replacement features for the DataPlane resources to influence or enhance functionality. NOTE: since we have one extension only (KonnectExtension), we limit the amount of extensions to 1. |
 | `pluginsToInstall` _[NamespacedName](#namespacedname) array_ | PluginsToInstall is a list of KongPluginInstallation resources that will be installed and available in the Gateways (DataPlanes) that use this GatewayConfig. |
 
 
@@ -3113,8 +3141,8 @@ KonnectAPIAuthConfigurationSpec is the specification of the KonnectAPIAuthConfig
 | --- | --- |
 | `type` _[KonnectAPIAuthType](#konnectapiauthtype)_ |  |
 | `token` _string_ | Token is the Konnect token used to authenticate with the Konnect API. |
-| `secretRef` _[SecretReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#secretreference-v1-core)_ | SecretRef is a reference to a Kubernetes Secret containing the Konnect token. This secret is required to has the konghq.com/credential label set to "konnect". |
-| `serverURL` _string_ | ServerURL is the URL of the Konnect server. |
+| `secretRef` _[SecretReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#secretreference-v1-core)_ | SecretRef is a reference to a Kubernetes Secret containing the Konnect token. This secret is required to have the konghq.com/credential label set to "konnect". |
+| `serverURL` _string_ | ServerURL is the URL of the Konnect server. It can be either a full URL with an HTTPs scheme or just a hostname. Please refer to https://docs.konghq.com/konnect/network/ for the list of supported hostnames. |
 
 
 _Appears in:_
@@ -3210,7 +3238,7 @@ KonnectGatewayControlPlaneSpec defines the desired state of KonnectGatewayContro
 | --- | --- |
 | `name` _string_ | The name of the control plane. |
 | `description` _string_ | The description of the control plane in Konnect. |
-| `cluster_type` _[ClusterType](#clustertype)_ | The ClusterType value of the cluster associated with the Control Plane. |
+| `cluster_type` _[CreateControlPlaneRequestClusterType](#createcontrolplanerequestclustertype)_ | The ClusterType value of the cluster associated with the Control Plane. |
 | `auth_type` _[AuthType](#authtype)_ | The auth type value of the cluster associated with the Runtime Group. |
 | `cloud_gateway` _boolean_ | Whether this control-plane can be used for cloud-gateways. |
 | `proxy_urls` _[ProxyURL](#proxyurl) array_ | Array of proxy URLs associated with reaching the data-planes connected to a control-plane. |

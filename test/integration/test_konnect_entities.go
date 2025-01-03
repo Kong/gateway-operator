@@ -2,7 +2,6 @@ package integration
 
 import (
 	"testing"
-	"time"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	"github.com/google/uuid"
@@ -15,7 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kong/gateway-operator/controller/konnect"
-	"github.com/kong/gateway-operator/controller/konnect/conditions"
 	testutils "github.com/kong/gateway-operator/pkg/utils/test"
 	"github.com/kong/gateway-operator/test"
 	"github.com/kong/gateway-operator/test/helpers"
@@ -58,14 +56,14 @@ func TestKonnectEntities(t *testing.T) {
 		deploy.WithTestIDLabel(testID),
 	)
 
-	t.Cleanup(deleteObjectAndWaitForDeletionFn(t, cp))
+	t.Cleanup(deleteObjectAndWaitForDeletionFn(t, cp.DeepCopy()))
 
 	t.Logf("Waiting for Konnect ID to be assigned to ControlPlane %s/%s", cp.Namespace, cp.Name)
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		err := GetClients().MgrClient.Get(GetCtx(), types.NamespacedName{Name: cp.Name, Namespace: cp.Namespace}, cp)
 		require.NoError(t, err)
 		assertKonnectEntityProgrammed(t, cp)
-	}, testutils.ObjectUpdateTimeout, time.Second)
+	}, testutils.ObjectUpdateTimeout, testutils.ObjectUpdateTick)
 
 	ks := deploy.KongServiceAttachedToCP(t, ctx, clientNamespaced, cp,
 		deploy.WithTestIDLabel(testID),
@@ -76,7 +74,7 @@ func TestKonnectEntities(t *testing.T) {
 		err := GetClients().MgrClient.Get(GetCtx(), types.NamespacedName{Name: ks.Name, Namespace: ks.Namespace}, ks)
 		require.NoError(t, err)
 		assertKonnectEntityProgrammed(t, ks)
-	}, testutils.ObjectUpdateTimeout, time.Second)
+	}, testutils.ObjectUpdateTimeout, testutils.ObjectUpdateTick)
 
 	kr := deploy.KongRouteAttachedToService(t, ctx, clientNamespaced, ks,
 		deploy.WithTestIDLabel(testID),
@@ -85,7 +83,7 @@ func TestKonnectEntities(t *testing.T) {
 			kr.Spec.KongRouteAPISpec.Paths = []string{"/kr-" + testID}
 		},
 	)
-	t.Cleanup(deleteObjectAndWaitForDeletionFn(t, kr))
+	t.Cleanup(deleteObjectAndWaitForDeletionFn(t, kr.DeepCopy()))
 
 	t.Logf("Waiting for KongRoute to be updated with Konnect ID")
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
@@ -93,7 +91,7 @@ func TestKonnectEntities(t *testing.T) {
 		require.NoError(t, err)
 
 		assertKonnectEntityProgrammed(t, kr)
-	}, testutils.ObjectUpdateTimeout, time.Second)
+	}, testutils.ObjectUpdateTimeout, testutils.ObjectUpdateTick)
 
 	kcg := deploy.KongConsumerGroupAttachedToCP(t, ctx, clientNamespaced, cp,
 		deploy.WithTestIDLabel(testID),
@@ -105,7 +103,7 @@ func TestKonnectEntities(t *testing.T) {
 		require.NoError(t, err)
 
 		assertKonnectEntityProgrammed(t, kcg)
-	}, testutils.ObjectUpdateTimeout, time.Second)
+	}, testutils.ObjectUpdateTimeout, testutils.ObjectUpdateTick)
 
 	kc := deploy.KongConsumerAttachedToCP(t, ctx, clientNamespaced, "kc-"+testID, cp,
 		deploy.WithTestIDLabel(testID),
@@ -125,7 +123,7 @@ func TestKonnectEntities(t *testing.T) {
 		require.NoError(t, err)
 
 		assertKonnectEntityProgrammed(t, kc)
-	}, testutils.ObjectUpdateTimeout, time.Second)
+	}, testutils.ObjectUpdateTimeout, testutils.ObjectUpdateTick)
 
 	kp := deploy.ProxyCachePlugin(t, ctx, clientNamespaced)
 	kpb := deploy.KongPluginBinding(t, ctx, clientNamespaced,
@@ -143,7 +141,7 @@ func TestKonnectEntities(t *testing.T) {
 		require.NoError(t, err)
 
 		assertKonnectEntityProgrammed(t, kpb)
-	}, testutils.ObjectUpdateTimeout, time.Second)
+	}, testutils.ObjectUpdateTimeout, testutils.ObjectUpdateTick)
 
 	kup := deploy.KongUpstreamAttachedToCP(t, ctx, clientNamespaced, cp,
 		deploy.WithTestIDLabel(testID),
@@ -161,7 +159,7 @@ func TestKonnectEntities(t *testing.T) {
 		require.NoError(t, err)
 
 		assertKonnectEntityProgrammed(t, kup)
-	}, testutils.ObjectUpdateTimeout, time.Second)
+	}, testutils.ObjectUpdateTimeout, testutils.ObjectUpdateTick)
 
 	kt := deploy.KongTargetAttachedToUpstream(t, ctx, clientNamespaced, kup,
 		deploy.WithTestIDLabel(testID),
@@ -178,10 +176,10 @@ func TestKonnectEntities(t *testing.T) {
 		require.NoError(t, err)
 
 		assertKonnectEntityProgrammed(t, kt)
-	}, testutils.ObjectUpdateTimeout, time.Second)
+	}, testutils.ObjectUpdateTimeout, testutils.ObjectUpdateTick)
 
 	// Should delete KongTarget because it will block deletion of KongUpstream owning it.
-	t.Cleanup(deleteObjectAndWaitForDeletionFn(t, kt))
+	t.Cleanup(deleteObjectAndWaitForDeletionFn(t, kt.DeepCopy()))
 
 	kv := deploy.KongVaultAttachedToCP(t, ctx, clientNamespaced, "env", "env-vault", []byte(`{"prefix":"env-vault"}`), cp)
 	t.Logf("Waiting for KongVault to be updated with Konnect ID")
@@ -190,7 +188,7 @@ func TestKonnectEntities(t *testing.T) {
 		require.NoError(t, err)
 
 		assertKonnectEntityProgrammed(t, kv)
-	}, testutils.ObjectUpdateTimeout, time.Second)
+	}, testutils.ObjectUpdateTimeout, testutils.ObjectUpdateTick)
 
 	kcert := deploy.KongCertificateAttachedToCP(t, ctx, clientNamespaced, cp)
 
@@ -203,7 +201,7 @@ func TestKonnectEntities(t *testing.T) {
 		require.NoError(t, err)
 
 		assertKonnectEntityProgrammed(t, kcert)
-	}, testutils.ObjectUpdateTimeout, time.Second)
+	}, testutils.ObjectUpdateTimeout, testutils.ObjectUpdateTick)
 
 	ksni := deploy.KongSNIAttachedToCertificate(t, ctx, clientNamespaced, kcert,
 		deploy.WithTestIDLabel(testID),
@@ -223,7 +221,7 @@ func TestKonnectEntities(t *testing.T) {
 
 		assertKonnectEntityProgrammed(t, ksni)
 		assert.Equal(t, kcert.GetKonnectID(), ksni.Status.Konnect.CertificateID)
-	}, testutils.ObjectUpdateTimeout, time.Second)
+	}, testutils.ObjectUpdateTimeout, testutils.ObjectUpdateTick)
 }
 
 // deleteObjectAndWaitForDeletionFn returns a function that deletes the given object and waits for it to be gone.
@@ -236,7 +234,7 @@ func deleteObjectAndWaitForDeletionFn(t *testing.T, obj client.Object) func() {
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			err := GetClients().MgrClient.Get(GetCtx(), types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, obj)
 			assert.True(t, k8serrors.IsNotFound(err))
-		}, testutils.ObjectUpdateTimeout, time.Second)
+		}, testutils.ObjectUpdateTimeout, testutils.ObjectUpdateTick)
 	}
 }
 
@@ -258,7 +256,7 @@ func assertKonnectEntityProgrammed(
 	assert.NotEmpty(t, konnectStatus.GetServerURL())
 
 	assert.True(t, lo.ContainsBy(obj.GetConditions(), func(condition metav1.Condition) bool {
-		return condition.Type == conditions.KonnectEntityProgrammedConditionType &&
+		return condition.Type == konnectv1alpha1.KonnectEntityProgrammedConditionType &&
 			condition.Status == metav1.ConditionTrue
 	}))
 }

@@ -15,8 +15,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/kong/gateway-operator/controller/konnect/conditions"
-	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
+	sdkmocks "github.com/kong/gateway-operator/controller/konnect/ops/sdk/mocks"
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
@@ -32,14 +31,14 @@ func mustConvertKongVaultToVaultInput(t *testing.T, vault *configurationv1alpha1
 func TestCreateKongVault(t *testing.T) {
 	testCases := []struct {
 		name          string
-		mockVaultPair func(*testing.T) (*MockVaultSDK, *configurationv1alpha1.KongVault)
+		mockVaultPair func(*testing.T) (*sdkmocks.MockVaultSDK, *configurationv1alpha1.KongVault)
 		expectedErr   bool
 		assertions    func(*testing.T, *configurationv1alpha1.KongVault)
 	}{
 		{
 			name: "success",
-			mockVaultPair: func(t *testing.T) (*MockVaultSDK, *configurationv1alpha1.KongVault) {
-				sdk := NewMockVaultSDK(t)
+			mockVaultPair: func(t *testing.T) (*sdkmocks.MockVaultSDK, *configurationv1alpha1.KongVault) {
+				sdk := sdkmocks.NewMockVaultSDK(t)
 				vault := &configurationv1alpha1.KongVault{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "vault-1",
@@ -72,16 +71,11 @@ func TestCreateKongVault(t *testing.T) {
 			},
 			assertions: func(t *testing.T, vault *configurationv1alpha1.KongVault) {
 				assert.Equal(t, "12345", vault.GetKonnectStatus().GetKonnectID())
-				cond, ok := k8sutils.GetCondition(conditions.KonnectEntityProgrammedConditionType, vault)
-				require.True(t, ok, "Programmed condition not set on KongVault")
-				assert.Equal(t, metav1.ConditionTrue, cond.Status)
-				assert.Equal(t, conditions.KonnectEntityProgrammedReasonProgrammed, cond.Reason)
-				assert.Equal(t, vault.GetGeneration(), cond.ObservedGeneration)
 			},
 		},
 		{
 			name: "failed - no control plane ID in Konnect status",
-			mockVaultPair: func(t *testing.T) (*MockVaultSDK, *configurationv1alpha1.KongVault) {
+			mockVaultPair: func(t *testing.T) (*sdkmocks.MockVaultSDK, *configurationv1alpha1.KongVault) {
 				vault := &configurationv1alpha1.KongVault{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "vault-no-cpid",
@@ -95,7 +89,7 @@ func TestCreateKongVault(t *testing.T) {
 					},
 					Status: configurationv1alpha1.KongVaultStatus{},
 				}
-				return NewMockVaultSDK(t), vault
+				return sdkmocks.NewMockVaultSDK(t), vault
 			},
 			expectedErr: true,
 			assertions: func(t *testing.T, vault *configurationv1alpha1.KongVault) {
@@ -104,8 +98,8 @@ func TestCreateKongVault(t *testing.T) {
 		},
 		{
 			name: "fail - upstream returns non-OK response",
-			mockVaultPair: func(t *testing.T) (*MockVaultSDK, *configurationv1alpha1.KongVault) {
-				sdk := NewMockVaultSDK(t)
+			mockVaultPair: func(t *testing.T) (*sdkmocks.MockVaultSDK, *configurationv1alpha1.KongVault) {
+				sdk := sdkmocks.NewMockVaultSDK(t)
 				vault := &configurationv1alpha1.KongVault{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "vault-1",
@@ -138,11 +132,6 @@ func TestCreateKongVault(t *testing.T) {
 			expectedErr: true,
 			assertions: func(t *testing.T, vault *configurationv1alpha1.KongVault) {
 				assert.Equal(t, "", vault.GetKonnectStatus().GetKonnectID())
-				cond, ok := k8sutils.GetCondition(conditions.KonnectEntityProgrammedConditionType, vault)
-				require.True(t, ok, "Programmed condition not set on KongVault")
-				assert.Equal(t, metav1.ConditionFalse, cond.Status)
-				assert.Equal(t, "FailedToCreate", cond.Reason)
-				assert.Equal(t, vault.GetGeneration(), cond.ObservedGeneration)
 			},
 		},
 	}
@@ -165,14 +154,14 @@ func TestCreateKongVault(t *testing.T) {
 func TestUpdateKongVault(t *testing.T) {
 	testCases := []struct {
 		name          string
-		mockVaultPair func(*testing.T) (*MockVaultSDK, *configurationv1alpha1.KongVault)
+		mockVaultPair func(*testing.T) (*sdkmocks.MockVaultSDK, *configurationv1alpha1.KongVault)
 		expectedErr   bool
 		assertions    func(*testing.T, *configurationv1alpha1.KongVault)
 	}{
 		{
 			name: "success",
-			mockVaultPair: func(t *testing.T) (*MockVaultSDK, *configurationv1alpha1.KongVault) {
-				sdk := NewMockVaultSDK(t)
+			mockVaultPair: func(t *testing.T) (*sdkmocks.MockVaultSDK, *configurationv1alpha1.KongVault) {
+				sdk := sdkmocks.NewMockVaultSDK(t)
 				vault := &configurationv1alpha1.KongVault{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "vault-1",
@@ -214,17 +203,12 @@ func TestUpdateKongVault(t *testing.T) {
 			},
 			assertions: func(t *testing.T, vault *configurationv1alpha1.KongVault) {
 				assert.Equal(t, "12345", vault.GetKonnectStatus().GetKonnectID())
-				cond, ok := k8sutils.GetCondition(conditions.KonnectEntityProgrammedConditionType, vault)
-				require.True(t, ok, "Programmed condition not set on KongVault")
-				assert.Equal(t, metav1.ConditionTrue, cond.Status)
-				assert.Equal(t, conditions.KonnectEntityProgrammedReasonProgrammed, cond.Reason)
-				assert.Equal(t, vault.GetGeneration(), cond.ObservedGeneration)
 			},
 		},
 		{
 			name: "fail - upstream returns non-OK response",
-			mockVaultPair: func(t *testing.T) (*MockVaultSDK, *configurationv1alpha1.KongVault) {
-				sdk := NewMockVaultSDK(t)
+			mockVaultPair: func(t *testing.T) (*sdkmocks.MockVaultSDK, *configurationv1alpha1.KongVault) {
+				sdk := sdkmocks.NewMockVaultSDK(t)
 				vault := &configurationv1alpha1.KongVault{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "vault-1",
@@ -259,66 +243,7 @@ func TestUpdateKongVault(t *testing.T) {
 			},
 			expectedErr: true,
 			assertions: func(t *testing.T, vault *configurationv1alpha1.KongVault) {
-				cond, ok := k8sutils.GetCondition(conditions.KonnectEntityProgrammedConditionType, vault)
-				require.True(t, ok, "Programmed condition not set on KongVault")
-				assert.Equal(t, metav1.ConditionFalse, cond.Status)
-				assert.Equal(t, "FailedToUpdate", cond.Reason)
-				assert.Equal(t, vault.GetGeneration(), cond.ObservedGeneration)
-			},
-		},
-		{
-			name: "try to create when not found",
-			mockVaultPair: func(t *testing.T) (*MockVaultSDK, *configurationv1alpha1.KongVault) {
-				sdk := NewMockVaultSDK(t)
-				vault := &configurationv1alpha1.KongVault{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "vault-1",
-					},
-					Spec: configurationv1alpha1.KongVaultSpec{
-						Config: apiextensionsv1.JSON{
-							Raw: []byte(`{}`),
-						},
-						Backend:     "aws",
-						Prefix:      "aws-vault1",
-						Description: "test vault",
-					},
-					Status: configurationv1alpha1.KongVaultStatus{
-						Konnect: &konnectv1alpha1.KonnectEntityStatusWithControlPlaneRef{
-							KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
-								ID: "12345",
-							},
-							ControlPlaneID: "123456789",
-						},
-					},
-				}
-				sdk.EXPECT().UpsertVault(mock.Anything, sdkkonnectops.UpsertVaultRequest{
-					VaultID:        "12345",
-					ControlPlaneID: "123456789",
-					Vault:          mustConvertKongVaultToVaultInput(t, vault),
-				}).Return(nil, &sdkkonnecterrs.SDKError{
-					Message:    "not found",
-					StatusCode: http.StatusNotFound,
-				})
-				sdk.EXPECT().CreateVault(mock.Anything, "123456789", mustConvertKongVaultToVaultInput(t, vault)).
-					Return(
-						&sdkkonnectops.CreateVaultResponse{
-							Vault: &sdkkonnectcomp.Vault{
-								ID:     lo.ToPtr("12345"),
-								Name:   "aws",
-								Prefix: "aws-vault1",
-							},
-						},
-						nil,
-					)
-				return sdk, vault
-			},
-			assertions: func(t *testing.T, vault *configurationv1alpha1.KongVault) {
-				assert.Equal(t, "12345", vault.GetKonnectStatus().GetKonnectID())
-				cond, ok := k8sutils.GetCondition(conditions.KonnectEntityProgrammedConditionType, vault)
-				require.True(t, ok, "Programmed condition not set on KongVault")
-				assert.Equal(t, metav1.ConditionTrue, cond.Status)
-				assert.Equal(t, conditions.KonnectEntityProgrammedReasonProgrammed, cond.Reason)
-				assert.Equal(t, vault.GetGeneration(), cond.ObservedGeneration)
+				assert.Equal(t, "12345", vault.GetKonnectID())
 			},
 		},
 	}
@@ -341,13 +266,13 @@ func TestUpdateKongVault(t *testing.T) {
 func TestDeleteKongVault(t *testing.T) {
 	testCases := []struct {
 		name          string
-		mockVaultPair func(*testing.T) (*MockVaultSDK, *configurationv1alpha1.KongVault)
+		mockVaultPair func(*testing.T) (*sdkmocks.MockVaultSDK, *configurationv1alpha1.KongVault)
 		expectedErr   bool
 	}{
 		{
 			name: "success",
-			mockVaultPair: func(t *testing.T) (*MockVaultSDK, *configurationv1alpha1.KongVault) {
-				sdk := NewMockVaultSDK(t)
+			mockVaultPair: func(t *testing.T) (*sdkmocks.MockVaultSDK, *configurationv1alpha1.KongVault) {
+				sdk := sdkmocks.NewMockVaultSDK(t)
 				vault := &configurationv1alpha1.KongVault{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "vault-1",
@@ -370,8 +295,8 @@ func TestDeleteKongVault(t *testing.T) {
 		},
 		{
 			name: "fail",
-			mockVaultPair: func(t *testing.T) (*MockVaultSDK, *configurationv1alpha1.KongVault) {
-				sdk := NewMockVaultSDK(t)
+			mockVaultPair: func(t *testing.T) (*sdkmocks.MockVaultSDK, *configurationv1alpha1.KongVault) {
+				sdk := sdkmocks.NewMockVaultSDK(t)
 				vault := &configurationv1alpha1.KongVault{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "vault-1",
@@ -397,8 +322,8 @@ func TestDeleteKongVault(t *testing.T) {
 		},
 		{
 			name: "not found error treated as successful delete",
-			mockVaultPair: func(t *testing.T) (*MockVaultSDK, *configurationv1alpha1.KongVault) {
-				sdk := NewMockVaultSDK(t)
+			mockVaultPair: func(t *testing.T) (*sdkmocks.MockVaultSDK, *configurationv1alpha1.KongVault) {
+				sdk := sdkmocks.NewMockVaultSDK(t)
 				vault := &configurationv1alpha1.KongVault{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "vault-1",

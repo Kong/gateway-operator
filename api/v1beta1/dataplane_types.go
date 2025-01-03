@@ -34,7 +34,7 @@ func init() {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=kodp,categories=kong;all
-// +kubebuilder:validation:XValidation:message="Extension not allowed for DataPlane",rule="has(self.spec.extensions) ? self.spec.extensions.all(e, e.group == 'gateway-operator.konghq.com' && e.kind == 'DataPlaneKonnectExtension') : true"
+// +kubebuilder:validation:XValidation:message="Extension not allowed for DataPlane",rule="has(self.spec.extensions) ? self.spec.extensions.all(e, e.group == 'gateway-operator.konghq.com' && e.kind == 'KonnectExtension') : true"
 // +kubebuilder:printcolumn:name="Ready",description="The Resource is ready",type=string,JSONPath=`.status.conditions[?(@.type=='Ready')].status`
 
 // DataPlane is the Schema for the dataplanes API
@@ -78,7 +78,7 @@ type DataPlaneOptions struct {
 
 	// Extensions provide additional or replacement features for the DataPlane
 	// resources to influence or enhance functionality.
-	// NOTE: since we have one extension only (DataPlaneKonnectExtension), we limit the amount of extensions to 1.
+	// NOTE: since we have one extension only (KonnectExtension), we limit the amount of extensions to 1.
 	//
 	// +optional
 	// +kubebuilder:validation:MinItems=0
@@ -239,6 +239,7 @@ type DataPlaneServicePort struct {
 // ServiceOptions is used to includes options to customize the ingress service,
 // such as the annotations.
 // +apireference:kgo:include
+// +kubebuilder:validation:XValidation:message="Cannot set ExternalTrafficPolicy for ClusterIP service.", rule="has(self.type) && self.type == 'ClusterIP' ? !has(self.externalTrafficPolicy) : true"
 type ServiceOptions struct {
 	// Type determines how the Service is exposed.
 	// Defaults to `LoadBalancer`.
@@ -285,7 +286,6 @@ type ServiceOptions struct {
 	// More info: https://kubernetes.io/docs/tasks/access-application-cluster/create-external-load-balancer/#preserving-the-client-source-ip
 	//
 	// +optional
-	// +kubebuilder:default=Cluster
 	// +kubebuilder:validation:Enum=Cluster;Local
 	ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy `json:"externalTrafficPolicy,omitempty"`
 }
