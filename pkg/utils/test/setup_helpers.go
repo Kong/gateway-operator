@@ -28,6 +28,7 @@ import (
 
 	"github.com/kong/gateway-operator/modules/manager"
 	operatorclient "github.com/kong/gateway-operator/pkg/clientset"
+	"github.com/kong/gateway-operator/test/helpers"
 )
 
 const (
@@ -101,6 +102,12 @@ func BuildEnvironment(ctx context.Context, existingCluster string, builderOpts .
 
 func buildEnvironmentOnNewKindCluster(ctx context.Context, builderOpts ...BuilderOpt) (environments.Environment, error) {
 	builder := environments.NewBuilder()
+
+	kindBuilder := kind.NewBuilder()
+	if configFile, err := helpers.CreateKindConfigWithDockerCredentialsBasedOnEnvVars(ctx); err == nil {
+		kindBuilder.WithConfig(configFile)
+		builder.WithClusterBuilder(kindBuilder)
+	}
 
 	for _, o := range builderOpts {
 		o(builder, kind.KindClusterType)

@@ -292,6 +292,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         KONG_TEST_KONNECT_ACCESS_TOKEN: ${{ secrets.KONG_TEST_KONNECT_ACCESS_TOKEN }}
         KONG_TEST_KONNECT_SERVER_URL: us.api.konghq.tech
+        DOCKERHUB_PULL_TOKEN: ${{ secrets.DOCKERHUB_PULL_TOKEN }}
+        DOCKERHUB_PULL_USERNAME: ${{ vars.DOCKERHUB_PULL_USERNAME }}
 
     - name: upload diagnostics
       if: always()
@@ -344,6 +346,8 @@ jobs:
         KONG_CONTROLLER_OUT: stdout
         GOTESTSUM_JUNITFILE: integration-tests-bluegreen-webhook-enabled-${{ matrix.webhook-enabled }}.xml
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        DOCKERHUB_PULL_TOKEN: ${{ secrets.DOCKERHUB_PULL_TOKEN }}
+        DOCKERHUB_PULL_USERNAME: ${{ vars.DOCKERHUB_PULL_USERNAME }}
 
     - name: upload diagnostics
       if: always()
@@ -394,6 +398,8 @@ jobs:
         KONG_PLUGIN_IMAGE_REGISTRY_CREDENTIALS: ${{ secrets.KONG_PLUGIN_IMAGE_REGISTRY_CREDENTIALS }}
         GOTESTSUM_JUNITFILE: integration-tests-provision-dataplane-fail.xml
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        DOCKERHUB_PULL_TOKEN: ${{ secrets.DOCKERHUB_PULL_TOKEN }}
+        DOCKERHUB_PULL_USERNAME: ${{ vars.DOCKERHUB_PULL_USERNAME }}
     
     - name: upload diagnostics
       if: always()
@@ -446,6 +452,8 @@ jobs:
         KONG_TEST_GATEWAY_OPERATOR_IMAGE_LOAD: gateway-operator:e2e-${{ github.sha }}
         GOTESTSUM_JUNITFILE: "e2e-tests.xml"
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        DOCKERHUB_PULL_TOKEN: ${{ secrets.DOCKERHUB_PULL_TOKEN }}
+        DOCKERHUB_PULL_USERNAME: ${{ vars.DOCKERHUB_PULL_USERNAME }}
 
     - name: upload diagnostics
       if: always()
