@@ -15,6 +15,7 @@ If the troubleshooting section does not contain the answer to the problem you en
 - [ ] Check the existing [releases][releases] and determine the next version number.
 - [ ] Check [default versions](#verify-default-hardcoded-versions) of images (see below).
 - [ ] Check the `CHANGELOG.md` and update it with the new version number. Make sure the log is up to date.
+  - [ ] Make sure to add any changes to already supported resources (e.g. changing labels of managed `DataPlane`s) which might cause other resources (e.g. Pods) to be recreated.
 - [ ] Ensure that all generators have run properly (e.g. `make generate manifests`) so that updates to things like CRDs are handled for the release, double check that all manifests from `config/samples/` still work as intended.
 - [ ] Ensure GitHub PAT is still valid (see [GitHub PAT](#github-pat) below).
 - [ ] From [GitHub release action][release-action], start a new workflow run:
@@ -66,14 +67,13 @@ These versions should be updated to match the new release. The example consts to
 
 ## GitHub PAT
 
-**Next expiration date**: 2024-10-02
-
 The release workflow uses @team-k8s-bot's GitHub PAT to create a GitHub release and PRs related to it.
-It's named `Kong Gateway operator release pipeline` and is stored in `PAT_GITHUB`
-GitHub repository secret to give workflows access to it. It's always generated with 1-year expiration date.
+It's named `Github team k8s bot - PAT - Kong Gateway Operator CI` in 1password and is stored in `PAT_GITHUB`
+GitHub repository secret to give workflows access to it.
+It's always generated with 1-year expiration date.
 
 If you find it's expired, make sure to generate a new one and update the `PAT_GITHUB` secret as well as its 1Pass item
-`Github team k8s bot - PAT - Kong Gateway operator release token` for redundancy.
+`Github team k8s bot - PAT - Kong Gateway Operator CI` for redundancy.
 
 ## Troubleshooting
 
