@@ -11,7 +11,7 @@ retract v1.2.2
 replace oras.land/oras-go/v2 => github.com/programmer04/oras-go/v2 v2.5.1-0.20241220123114-0ad13e6c72b9
 
 require (
-	github.com/Kong/sdk-konnect-go v0.1.14
+	github.com/Kong/sdk-konnect-go v0.1.15
 	github.com/Masterminds/semver v1.5.0
 	github.com/cloudflare/cfssl v1.6.5
 	github.com/go-logr/logr v1.4.2
