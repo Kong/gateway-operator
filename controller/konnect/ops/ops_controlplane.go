@@ -38,12 +38,12 @@ func createControlPlane(
 		return errWrap
 	}
 
-	if resp == nil || resp.ControlPlane == nil || resp.ControlPlane.ID == nil {
+	if resp == nil || resp.ControlPlane == nil || resp.ControlPlane.ID == "" {
 		return fmt.Errorf("failed creating %s: %w", cp.GetTypeName(), ErrNilResponse)
 	}
 
 	// At this point, the ControlPlane has been created in Konnect.
-	id := *resp.ControlPlane.ID
+	id := resp.ControlPlane.ID
 	cp.SetKonnectID(id)
 
 	if err := setGroupMembers(ctx, cl, cp, id, sdkGroups); err != nil {
@@ -106,7 +106,7 @@ func updateControlPlane(
 	if resp == nil || resp.ControlPlane == nil {
 		return fmt.Errorf("failed updating ControlPlane: %w", ErrNilResponse)
 	}
-	id = *resp.ControlPlane.ID
+	id = resp.ControlPlane.ID
 
 	if err := setGroupMembers(ctx, cl, cp, id, sdkGroups); err != nil {
 		// If we failed to set group membership, we should return a specific error with a reason
@@ -128,9 +128,8 @@ func setGroupMembers(
 	id string,
 	sdkGroups sdkops.ControlPlaneGroupSDK,
 ) error {
-	if len(cp.Spec.Members) == 0 ||
-		cp.Spec.ClusterType == nil ||
-		*cp.Spec.ClusterType != sdkkonnectcomp.ClusterTypeClusterTypeControlPlaneGroup {
+	if cp.Spec.ClusterType == nil ||
+		*cp.Spec.ClusterType != sdkkonnectcomp.CreateControlPlaneRequestClusterTypeClusterTypeControlPlaneGroup {
 		return nil
 	}
 
@@ -145,17 +144,28 @@ func setGroupMembers(
 			)
 			if err := cl.Get(ctx, nn, &memberCP); err != nil {
 				return sdkkonnectcomp.Members{},
-					fmt.Errorf("failed to get control plane group member %s: %w", member.Name, err)
+					GetControlPlaneGroupMemberFailedError{
+						MemberName: memberCP.Name,
+						Err:        err,
+					}
 			}
 			if memberCP.GetKonnectID() == "" {
 				return sdkkonnectcomp.Members{},
-					fmt.Errorf("control plane group %s member %s has no Konnect ID", cp.Name, member.Name)
+					ControlPlaneGroupMemberNoKonnectIDError{
+						GroupName:  cp.Name,
+						MemberName: memberCP.Name,
+					}
 			}
 			return sdkkonnectcomp.Members{
-				ID: lo.ToPtr(memberCP.GetKonnectID()),
+				ID: memberCP.GetKonnectID(),
 			}, nil
 		})
 	if err != nil {
+		SetControlPlaneGroupMembersReferenceResolvedConditionFalse(
+			cp,
+			ControlPlaneGroupMembersReferenceResolvedReasonPartialNotResolved,
+			err.Error(),
+		)
 		return fmt.Errorf("failed to set group members, some members couldn't be found: %w", err)
 	}
 
@@ -165,18 +175,26 @@ func setGroupMembers(
 	}
 	_, err = sdkGroups.PutControlPlanesIDGroupMemberships(ctx, id, &gm)
 	if err != nil {
+		SetControlPlaneGroupMembersReferenceResolvedConditionFalse(
+			cp,
+			ControlPlaneGroupMembersReferenceResolvedReasonFailedToSet,
+			err.Error(),
+		)
 		return fmt.Errorf("failed to set members on control plane group %s: %w",
 			client.ObjectKeyFromObject(cp), err,
 		)
 	}
 
+	SetControlPlaneGroupMembersReferenceResolvedCondition(
+		cp,
+	)
 	return nil
 }
 
 type membersByID []sdkkonnectcomp.Members
 
 func (m membersByID) Len() int           { return len(m) }
-func (m membersByID) Less(i, j int) bool { return *m[i].ID < *m[j].ID }
+func (m membersByID) Less(i, j int) bool { return m[i].ID < m[j].ID }
 func (m membersByID) Swap(i, j int)      { m[i], m[j] = m[j], m[i] }
 
 // getControlPlaneForUID returns the Konnect ID of the Konnect ControlPlane
@@ -184,6 +202,8 @@ func (m membersByID) Swap(i, j int)      { m[i], m[j] = m[j], m[i] }
 func getControlPlaneForUID(
 	ctx context.Context,
 	sdk sdkops.ControlPlaneSDK,
+	sdkGroups sdkops.ControlPlaneGroupSDK,
+	cl client.Client,
 	cp *konnectv1alpha1.KonnectGatewayControlPlane,
 ) (string, error) {
 	reqList := sdkkonnectops.ListControlPlanesRequest{
@@ -202,5 +222,20 @@ func getControlPlaneForUID(
 		return "", fmt.Errorf("failed listing %s: %w", cp.GetTypeName(), ErrNilResponse)
 	}
 
-	return getMatchingEntryFromListResponseData(sliceToEntityWithIDSlice(resp.ListControlPlanesResponse.Data), cp)
+	id, err := getMatchingEntryFromListResponseData(sliceToEntityWithIDSlice(resp.ListControlPlanesResponse.Data), cp)
+	if err != nil {
+		return "", err
+	}
+
+	if err := setGroupMembers(ctx, cl, cp, id, sdkGroups); err != nil {
+		// If we failed to set group membership, we should return a specific error with a reason
+		// so the downstream can handle it properly.
+		return id, KonnectEntityCreatedButRelationsFailedError{
+			KonnectID: id,
+			Err:       err,
+			Reason:    konnectv1alpha1.KonnectGatewayControlPlaneProgrammedReasonFailedToSetControlPlaneGroupMembers,
+		}
+	}
+
+	return id, nil
 }

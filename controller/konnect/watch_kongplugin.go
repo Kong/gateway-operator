@@ -11,11 +11,11 @@ import (
 
 	"github.com/kong/gateway-operator/controller/konnect/constraints"
 	"github.com/kong/gateway-operator/controller/pkg/log"
-	"github.com/kong/gateway-operator/pkg/annotations"
 
 	configurationv1 "github.com/kong/kubernetes-configuration/api/configuration/v1"
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 	configurationv1beta1 "github.com/kong/kubernetes-configuration/api/configuration/v1beta1"
+	"github.com/kong/kubernetes-configuration/pkg/metadata"
 )
 
 // mapPluginsFromAnnotation enqueue requests for KongPlugins based on
@@ -36,14 +36,14 @@ func mapPluginsFromAnnotation[
 			logger := log.GetLogger(ctx, entityTypeName, devMode)
 			log.Error(logger,
 				fmt.Errorf("cannot cast object to %s", entityTypeName),
-				fmt.Sprintf("%s mapping handler", entityTypeName), obj,
+				fmt.Sprintf("%s mapping handler", entityTypeName),
 			)
 			return []ctrl.Request{}
 		}
 
 		var (
 			namespace = obj.GetNamespace()
-			plugins   = annotations.ExtractPlugins(obj)
+			plugins   = metadata.ExtractPlugins(obj)
 			requests  = make([]ctrl.Request, 0, len(plugins))
 		)
 
@@ -64,7 +64,10 @@ func (r *KongPluginReconciler) mapKongPluginBindings(ctx context.Context, obj cl
 	logger := log.GetLogger(ctx, "KongPlugin", r.developmentMode)
 	kongPluginBinding, ok := obj.(*configurationv1alpha1.KongPluginBinding)
 	if !ok {
-		log.Error(logger, errors.New("cannot cast object to KongPluginBinding"), "KongPluginBinding mapping handler", obj)
+		log.Error(logger,
+			errors.New("cannot cast object to KongPluginBinding"),
+			"KongPluginBinding mapping handler",
+		)
 		return []ctrl.Request{}
 	}
 

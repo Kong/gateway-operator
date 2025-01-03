@@ -22,6 +22,7 @@ import (
 
 	sdkmocks "github.com/kong/gateway-operator/controller/konnect/ops/sdk/mocks"
 	"github.com/kong/gateway-operator/modules/manager/scheme"
+	"github.com/kong/gateway-operator/pkg/consts"
 
 	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
@@ -61,7 +62,7 @@ func TestCreateControlPlane(t *testing.T) {
 					Return(
 						&sdkkonnectops.CreateControlPlaneResponse{
 							ControlPlane: &sdkkonnectcomp.ControlPlane{
-								ID: lo.ToPtr(cpID),
+								ID: cpID,
 							},
 						},
 						nil,
@@ -136,7 +137,7 @@ func TestCreateControlPlane(t *testing.T) {
 					},
 					Spec: konnectv1alpha1.KonnectGatewayControlPlaneSpec{
 						CreateControlPlaneRequest: sdkkonnectcomp.CreateControlPlaneRequest{
-							ClusterType: lo.ToPtr(sdkkonnectcomp.ClusterTypeClusterTypeControlPlaneGroup),
+							ClusterType: lo.ToPtr(sdkkonnectcomp.CreateControlPlaneRequestClusterTypeClusterTypeControlPlaneGroup),
 							Name:        "cpg-1",
 						},
 						Members: []corev1.LocalObjectReference{
@@ -154,7 +155,7 @@ func TestCreateControlPlane(t *testing.T) {
 					Return(
 						&sdkkonnectops.CreateControlPlaneResponse{
 							ControlPlane: &sdkkonnectcomp.ControlPlane{
-								ID: lo.ToPtr(cpgID),
+								ID: cpgID,
 							},
 						},
 						nil,
@@ -165,7 +166,7 @@ func TestCreateControlPlane(t *testing.T) {
 					PutControlPlanesIDGroupMemberships(ctx, cpgID, &sdkkonnectcomp.GroupMembership{
 						Members: []sdkkonnectcomp.Members{
 							{
-								ID: lo.ToPtr(cpID),
+								ID: cpID,
 							},
 						},
 					}).
@@ -205,7 +206,7 @@ func TestCreateControlPlane(t *testing.T) {
 					},
 					Spec: konnectv1alpha1.KonnectGatewayControlPlaneSpec{
 						CreateControlPlaneRequest: sdkkonnectcomp.CreateControlPlaneRequest{
-							ClusterType: lo.ToPtr(sdkkonnectcomp.ClusterTypeClusterTypeControlPlaneGroup),
+							ClusterType: lo.ToPtr(sdkkonnectcomp.CreateControlPlaneRequestClusterTypeClusterTypeControlPlaneGroup),
 							Name:        "cpg-1",
 						},
 						Members: []corev1.LocalObjectReference{
@@ -223,7 +224,7 @@ func TestCreateControlPlane(t *testing.T) {
 					Return(
 						&sdkkonnectops.CreateControlPlaneResponse{
 							ControlPlane: &sdkkonnectcomp.ControlPlane{
-								ID: lo.ToPtr(cpgID),
+								ID: cpgID,
 							},
 						},
 						nil,
@@ -234,7 +235,7 @@ func TestCreateControlPlane(t *testing.T) {
 					PutControlPlanesIDGroupMemberships(ctx, cpgID, &sdkkonnectcomp.GroupMembership{
 						Members: []sdkkonnectcomp.Members{
 							{
-								ID: lo.ToPtr(cpID),
+								ID: cpID,
 							},
 						},
 					}).
@@ -439,7 +440,7 @@ func TestUpdateControlPlane(t *testing.T) {
 					Return(
 						&sdkkonnectops.UpdateControlPlaneResponse{
 							ControlPlane: &sdkkonnectcomp.ControlPlane{
-								ID: lo.ToPtr("12345"),
+								ID: "12345",
 							},
 						},
 						nil,
@@ -543,7 +544,7 @@ func TestUpdateControlPlane(t *testing.T) {
 					Return(
 						&sdkkonnectops.CreateControlPlaneResponse{
 							ControlPlane: &sdkkonnectcomp.ControlPlane{
-								ID: lo.ToPtr("12345"),
+								ID: "12345",
 							},
 						},
 						nil,
@@ -615,7 +616,7 @@ func TestCreateAndUpdateControlPlane_KubernetesMetadataConsistency(t *testing.T)
 		}).
 		Return(&sdkkonnectops.CreateControlPlaneResponse{
 			ControlPlane: &sdkkonnectcomp.ControlPlane{
-				ID: lo.ToPtr("12345"),
+				ID: "12345",
 			},
 		}, nil)
 	_, err := Create(ctx, sdk.SDK, fakeClient, cp)
@@ -629,7 +630,7 @@ func TestCreateAndUpdateControlPlane_KubernetesMetadataConsistency(t *testing.T)
 		}).
 		Return(&sdkkonnectops.UpdateControlPlaneResponse{
 			ControlPlane: &sdkkonnectcomp.ControlPlane{
-				ID: lo.ToPtr("12345"),
+				ID: "12345",
 			},
 		}, nil)
 	_, err = Update(ctx, sdk.SDK, 0, fakeClient, cp)
@@ -638,11 +639,13 @@ func TestCreateAndUpdateControlPlane_KubernetesMetadataConsistency(t *testing.T)
 
 func TestSetGroupMembers(t *testing.T) {
 	testcases := []struct {
-		name        string
-		group       *konnectv1alpha1.KonnectGatewayControlPlane
-		cps         []client.Object
-		sdk         func(t *testing.T) *sdkmocks.MockControlPlaneGroupSDK
-		expectedErr bool
+		name                    string
+		group                   *konnectv1alpha1.KonnectGatewayControlPlane
+		cps                     []client.Object
+		sdk                     func(t *testing.T) *sdkmocks.MockControlPlaneGroupSDK
+		expectedErr             bool
+		memberRefResolvedStatus metav1.ConditionStatus
+		memberRefResolvedReason consts.ConditionReason
 	}{
 		{
 			name: "no members",
@@ -654,14 +657,25 @@ func TestSetGroupMembers(t *testing.T) {
 				Spec: konnectv1alpha1.KonnectGatewayControlPlaneSpec{
 					CreateControlPlaneRequest: sdkkonnectcomp.CreateControlPlaneRequest{
 						Name:        "cp-group",
-						ClusterType: lo.ToPtr(sdkkonnectcomp.ClusterTypeClusterTypeControlPlaneGroup),
+						ClusterType: lo.ToPtr(sdkkonnectcomp.CreateControlPlaneRequestClusterTypeClusterTypeControlPlaneGroup),
 					},
 				},
 			},
 			sdk: func(t *testing.T) *sdkmocks.MockControlPlaneGroupSDK {
 				sdk := sdkmocks.NewMockControlPlaneGroupSDK(t)
+				sdk.EXPECT().
+					PutControlPlanesIDGroupMemberships(
+						mock.Anything,
+						"cpg-12345",
+						&sdkkonnectcomp.GroupMembership{
+							Members: []sdkkonnectcomp.Members{},
+						},
+					).
+					Return(&sdkkonnectops.PutControlPlanesIDGroupMembershipsResponse{}, nil)
 				return sdk
 			},
+			memberRefResolvedStatus: metav1.ConditionTrue,
+			memberRefResolvedReason: ControlPlaneGroupMembersReferenceResolvedReasonResolved,
 		},
 		{
 			name: "1 member with Konnect Status ID",
@@ -673,7 +687,7 @@ func TestSetGroupMembers(t *testing.T) {
 				Spec: konnectv1alpha1.KonnectGatewayControlPlaneSpec{
 					CreateControlPlaneRequest: sdkkonnectcomp.CreateControlPlaneRequest{
 						Name:        "cp-group",
-						ClusterType: lo.ToPtr(sdkkonnectcomp.ClusterTypeClusterTypeControlPlaneGroup),
+						ClusterType: lo.ToPtr(sdkkonnectcomp.CreateControlPlaneRequestClusterTypeClusterTypeControlPlaneGroup),
 					},
 					Members: []corev1.LocalObjectReference{
 						{
@@ -704,7 +718,7 @@ func TestSetGroupMembers(t *testing.T) {
 						&sdkkonnectcomp.GroupMembership{
 							Members: []sdkkonnectcomp.Members{
 								{
-									ID: lo.ToPtr("cp-12345"),
+									ID: "cp-12345",
 								},
 							},
 						},
@@ -715,6 +729,8 @@ func TestSetGroupMembers(t *testing.T) {
 					)
 				return sdk
 			},
+			memberRefResolvedStatus: metav1.ConditionTrue,
+			memberRefResolvedReason: ControlPlaneGroupMembersReferenceResolvedReasonResolved,
 		},
 		{
 			name: "1 member without Konnect Status ID",
@@ -726,7 +742,7 @@ func TestSetGroupMembers(t *testing.T) {
 				Spec: konnectv1alpha1.KonnectGatewayControlPlaneSpec{
 					CreateControlPlaneRequest: sdkkonnectcomp.CreateControlPlaneRequest{
 						Name:        "cp-group",
-						ClusterType: lo.ToPtr(sdkkonnectcomp.ClusterTypeClusterTypeControlPlaneGroup),
+						ClusterType: lo.ToPtr(sdkkonnectcomp.CreateControlPlaneRequestClusterTypeClusterTypeControlPlaneGroup),
 					},
 					Members: []corev1.LocalObjectReference{
 						{
@@ -748,7 +764,9 @@ func TestSetGroupMembers(t *testing.T) {
 				sdk := sdkmocks.NewMockControlPlaneGroupSDK(t)
 				return sdk
 			},
-			expectedErr: true,
+			expectedErr:             true,
+			memberRefResolvedStatus: metav1.ConditionFalse,
+			memberRefResolvedReason: ControlPlaneGroupMembersReferenceResolvedReasonPartialNotResolved,
 		},
 		{
 			name: "2 member with Konnect Status IDs",
@@ -760,7 +778,7 @@ func TestSetGroupMembers(t *testing.T) {
 				Spec: konnectv1alpha1.KonnectGatewayControlPlaneSpec{
 					CreateControlPlaneRequest: sdkkonnectcomp.CreateControlPlaneRequest{
 						Name:        "cp-group",
-						ClusterType: lo.ToPtr(sdkkonnectcomp.ClusterTypeClusterTypeControlPlaneGroup),
+						ClusterType: lo.ToPtr(sdkkonnectcomp.CreateControlPlaneRequestClusterTypeClusterTypeControlPlaneGroup),
 					},
 					Members: []corev1.LocalObjectReference{
 						{
@@ -805,10 +823,10 @@ func TestSetGroupMembers(t *testing.T) {
 						&sdkkonnectcomp.GroupMembership{
 							Members: []sdkkonnectcomp.Members{
 								{
-									ID: lo.ToPtr("cp-12345"),
+									ID: "cp-12345",
 								},
 								{
-									ID: lo.ToPtr("cp-12346"),
+									ID: "cp-12346",
 								},
 							},
 						},
@@ -819,6 +837,8 @@ func TestSetGroupMembers(t *testing.T) {
 					)
 				return sdk
 			},
+			memberRefResolvedStatus: metav1.ConditionTrue,
+			memberRefResolvedReason: ControlPlaneGroupMembersReferenceResolvedReasonResolved,
 		},
 		{
 			name: "2 member, 1 with Konnect Status IDs, 1 without it",
@@ -830,7 +850,7 @@ func TestSetGroupMembers(t *testing.T) {
 				Spec: konnectv1alpha1.KonnectGatewayControlPlaneSpec{
 					CreateControlPlaneRequest: sdkkonnectcomp.CreateControlPlaneRequest{
 						Name:        "cp-group",
-						ClusterType: lo.ToPtr(sdkkonnectcomp.ClusterTypeClusterTypeControlPlaneGroup),
+						ClusterType: lo.ToPtr(sdkkonnectcomp.CreateControlPlaneRequestClusterTypeClusterTypeControlPlaneGroup),
 					},
 					Members: []corev1.LocalObjectReference{
 						{
@@ -865,7 +885,9 @@ func TestSetGroupMembers(t *testing.T) {
 				sdk := sdkmocks.NewMockControlPlaneGroupSDK(t)
 				return sdk
 			},
-			expectedErr: true,
+			expectedErr:             true,
+			memberRefResolvedStatus: metav1.ConditionFalse,
+			memberRefResolvedReason: ControlPlaneGroupMembersReferenceResolvedReasonPartialNotResolved,
 		},
 	}
 
@@ -885,6 +907,13 @@ func TestSetGroupMembers(t *testing.T) {
 			}
 			assert.NoError(t, err)
 			assert.True(t, sdk.AssertExpectations(t))
+
+			membersRefResolvedCondition, conditionFound := lo.Find(tc.group.Status.Conditions, func(c metav1.Condition) bool {
+				return c.Type == ControlPlaneGroupMembersReferenceResolvedConditionType
+			})
+			assert.True(t, conditionFound, "Should find MembersReferenceResolved condition")
+			assert.Equal(t, tc.memberRefResolvedStatus, membersRefResolvedCondition.Status, "Should have expected MembersReferenceResolved status")
+			assert.Equal(t, string(tc.memberRefResolvedReason), membersRefResolvedCondition.Reason, "Should have expected MembersReferenceResolved reason")
 		})
 	}
 }

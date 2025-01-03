@@ -14,7 +14,7 @@ import (
 )
 
 // createKeySet creates a KongKeySet in Konnect.
-// It sets the KonnectID and the Programmed condition in the KongKeySet status.
+// It sets the KonnectID in the KongKeySet status.
 func createKeySet(
 	ctx context.Context,
 	sdk sdkops.KeySetsSDK,
@@ -116,5 +116,5 @@ func getKongKeySetForUID(
 		return "", fmt.Errorf("failed listing %s: %w", keySet.GetTypeName(), ErrNilResponse)
 	}
 
-	return getMatchingEntryFromListResponseData(sliceToEntityWithIDSlice(resp.Object.Data), keySet)
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDPtrSlice(resp.Object.Data), keySet)
 }

@@ -14,7 +14,7 @@ import (
 )
 
 // createKey creates a KongKey in Konnect.
-// It sets the KonnectID and the Programmed condition in the KongKey status.
+// It sets the KonnectID in the KongKey status.
 func createKey(
 	ctx context.Context,
 	sdk sdkops.KeysSDK,
@@ -131,5 +131,5 @@ func getKongKeyForUID(
 		return "", fmt.Errorf("failed to list KongKeys: %w", ErrNilResponse)
 	}
 
-	return getMatchingEntryFromListResponseData(sliceToEntityWithIDSlice(resp.Object.Data), key)
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDPtrSlice(resp.Object.Data), key)
 }

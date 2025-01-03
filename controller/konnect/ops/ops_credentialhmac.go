@@ -103,7 +103,7 @@ func kongCredentialHMACToHMACWithoutParents(
 	cred *configurationv1alpha1.KongCredentialHMAC,
 ) sdkkonnectcomp.HMACAuthWithoutParents {
 	ret := sdkkonnectcomp.HMACAuthWithoutParents{
-		Username: cred.Spec.Username,
+		Username: *cred.Spec.Username,
 		Secret:   cred.Spec.Secret,
 		Tags:     GenerateTagsForObject(cred, cred.Spec.Tags...),
 	}
@@ -134,5 +134,5 @@ func getKongCredentialHMACForUID(
 		return "", fmt.Errorf("failed listing %s: %w", cred.GetTypeName(), ErrNilResponse)
 	}
 
-	return getMatchingEntryFromListResponseData(sliceToEntityWithIDSlice(resp.Object.Data), cred)
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDPtrSlice(resp.Object.Data), cred)
 }

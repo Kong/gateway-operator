@@ -25,12 +25,6 @@ import (
 	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
-// Response is the interface for the response from the Konnect API.
-type Response interface {
-	GetContentType() string
-	GetStatusCode() int
-}
-
 // Op is the type for the operation type of a Konnect entity.
 type Op string
 
@@ -115,7 +109,7 @@ func Create[
 		var id string
 		switch ent := any(e).(type) {
 		case *konnectv1alpha1.KonnectGatewayControlPlane:
-			id, err = getControlPlaneForUID(ctx, sdk.GetControlPlaneSDK(), ent)
+			id, err = getControlPlaneForUID(ctx, sdk.GetControlPlaneSDK(), sdk.GetControlPlaneGroupSDK(), cl, ent)
 		case *configurationv1alpha1.KongService:
 			id, err = getKongServiceForUID(ctx, sdk.GetServicesSDK(), ent)
 		case *configurationv1alpha1.KongRoute:
@@ -279,7 +273,7 @@ func shouldUpdate[
 		timeFromLastUpdate <= syncPeriod {
 		requeueAfter := syncPeriod - timeFromLastUpdate
 		log.Debug(ctrllog.FromContext(ctx),
-			"no need for update, requeueing after configured sync period", ent,
+			"no need for update, requeueing after configured sync period",
 			"last_update", condProgrammed.LastTransitionTime.Time.String(),
 			"time_from_last_update", timeFromLastUpdate.String(),
 			"requeue_after", requeueAfter.String(),
@@ -323,8 +317,6 @@ func Update[
 	case *konnectv1alpha1.KonnectGatewayControlPlane:
 		err = updateControlPlane(ctx, sdk.GetControlPlaneSDK(), sdk.GetControlPlaneGroupSDK(), cl, ent)
 	case *configurationv1alpha1.KongService:
-		// TODO: modify the create* operation wrappers to not set Programmed conditions and return
-		// a KonnectEntityCreatedButRelationsFailedError if the entity was created but its relations assignment failed.
 		err = updateService(ctx, sdk.GetServicesSDK(), ent)
 	case *configurationv1alpha1.KongRoute:
 		err = updateRoute(ctx, sdk.GetRoutesSDK(), ent)
@@ -453,12 +445,8 @@ func logEntityNotFoundRecreating[
 		)
 }
 
-type entityWithID interface {
-	GetID() *string
-}
-
-// sliceToEntityWithIDSlice converts a slice of entities to a slice of entityWithID.
-func sliceToEntityWithIDSlice[
+// sliceToEntityWithIDPtrSlice converts a slice of entities to a slice of entityWithIDPtr.
+func sliceToEntityWithIDPtrSlice[
 	T any,
 	TPtr interface {
 		*T
@@ -466,8 +454,25 @@ func sliceToEntityWithIDSlice[
 	},
 ](
 	slice []T,
-) []entityWithID {
-	result := make([]entityWithID, 0, len(slice))
+) []TPtr {
+	result := make([]TPtr, 0, len(slice))
+	for _, item := range slice {
+		result = append(result, TPtr(&item))
+	}
+	return result
+}
+
+// sliceToEntityWithIDSlice converts a slice of entities to a slice of entityWithID.
+func sliceToEntityWithIDSlice[
+	T any,
+	TPtr interface {
+		*T
+		GetID() string
+	},
+](
+	slice []T,
+) []TPtr {
+	result := make([]TPtr, 0, len(slice))
 	for _, item := range slice {
 		result = append(result, TPtr(&item))
 	}
@@ -478,16 +483,29 @@ func sliceToEntityWithIDSlice[
 // It returns an error if no entry with a non-empty ID was found.
 // It is used in conjunction with the list operation to get the ID of the entity that matches the UID
 // hence no filtering is done here because it is assumed that the provided list response data is already filtered.
-func getMatchingEntryFromListResponseData(
-	data []entityWithID,
+func getMatchingEntryFromListResponseData[
+	T interface {
+		GetID() IDType
+	},
+	IDType string | *string,
+](
+	data []T,
 	entity entity,
 ) (string, error) {
 	var id string
 	for _, entry := range data {
 		entryID := entry.GetID()
-		if entryID != nil && *entryID != "" {
-			id = *entryID
-			break
+		switch entryID := any(entryID).(type) {
+		case string:
+			if entryID != "" {
+				id = entryID
+				break
+			}
+		case *string:
+			if entryID != nil && *entryID != "" {
+				id = *entryID
+				break
+			}
 		}
 	}
 

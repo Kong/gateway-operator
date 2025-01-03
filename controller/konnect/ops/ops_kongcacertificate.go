@@ -14,7 +14,7 @@ import (
 )
 
 // createCACertificate creates a KongCACertificate in Konnect.
-// It sets the KonnectID and the Programmed condition in the KongCACertificate status.
+// It sets the KonnectID the KongCACertificate status.
 func createCACertificate(
 	ctx context.Context,
 	sdk sdkops.CACertificatesSDK,
@@ -117,5 +117,5 @@ func getKongCACertificateForUID(
 		return "", fmt.Errorf("failed listing %s: %w", cert.GetTypeName(), ErrNilResponse)
 	}
 
-	return getMatchingEntryFromListResponseData(sliceToEntityWithIDSlice(resp.Object.Data), cert)
+	return getMatchingEntryFromListResponseData(sliceToEntityWithIDPtrSlice(resp.Object.Data), cert)
 }

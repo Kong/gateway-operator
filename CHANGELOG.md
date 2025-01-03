@@ -2,7 +2,8 @@
 
 ## Table of Contents
 
-- [v1.4.0-rc.0](#v140-rc0)
+- [v1.4.1](#v141)
+- [v1.4.0](#v140)
 - [v1.3.0](#v130)
 - [v1.2.3](#v123)
 - [v1.2.2](#v122)
@@ -22,9 +23,42 @@
 - [v0.1.1](#v011)
 - [v0.1.0](#v010)
 
-## [v1.4.0-rc.1]
+## Unreleased
 
-> Release date: 2024-10-28
+### Changed
+
+- `KonnectExtension` does not require `spec.serverHostname` to be set by a user
+  anymore - default is set to `konghq.com`.
+  [#947](https://github.com/Kong/gateway-operator/pull/947)
+
+### Fixes
+
+- Fix `DataPlane`s with `KonnectExtension` and `BlueGreen` settings. Both the Live
+  and preview deployments are now customized with Konnect-related settings.
+  [#910](https://github.com/Kong/gateway-operator/pull/910)
+
+## [v1.4.1]
+
+> Release date: 2024-11-28
+
+### Fixes
+
+- Fix setting the `ServiceAccountName` for `DataPlane`'s `Deployment`.
+  [#897](https://github.com/Kong/gateway-operator/pull/897)
+- Fixed setting `ExternalTrafficPolicy` on `DataPlane`'s ingress `Service` when
+  the requested value is empty.
+  [#898](https://github.com/Kong/gateway-operator/pull/898)
+- Set 0 members on `KonnectGatewayControlPlane` which type is set to group.
+  [#896](https://github.com/Kong/gateway-operator/pull/896)
+- Fixed a `panic` in `KonnectAPIAuthConfigurationReconciler` occuring when nil
+  response was returned by Konnect API when fetching the organization information.
+  [#901](https://github.com/Kong/gateway-operator/pull/901)
+- Bump sdk-konnect-go version to 0.1.10 to fix handling global API endpoints.
+  [#894](https://github.com/Kong/gateway-operator/pull/894)
+
+## [v1.4.0]
+
+> Release date: 2024-10-31
 
 ### Added
 
@@ -793,7 +827,8 @@ leftovers from previous operator deployments in the cluster. The user needs to d
 (clusterrole, clusterrolebinding, validatingWebhookConfiguration) before
 re-installing the operator through the bundle.
 
-[v1.4.0-rc.0]: https://github.com/Kong/gateway-operator/compare/v1.3.0..v1.4.0-rc.0
+[v1.4.1]: https://github.com/Kong/gateway-operator/compare/v1.4.0..v1.4.1
+[v1.4.0]: https://github.com/Kong/gateway-operator/compare/v1.3.0..v1.4.0
 [v1.3.0]: https://github.com/Kong/gateway-operator/compare/v1.2.3..v1.3.0
 [v1.2.3]: https://github.com/Kong/gateway-operator/compare/v1.2.2..v1.2.3
 [v1.2.2]: https://github.com/Kong/gateway-operator/compare/v1.2.1..v1.2.2

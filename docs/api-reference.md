@@ -478,7 +478,7 @@ It is used to reference a Control Plane entity.
 
 | Field | Description |
 | --- | --- |
-| `type` _string_ | Type can be one of: - konnectID - konnectNamespacedRef - kic |
+| `type` _string_ | Type indicates the type of the control plane being referenced. Allowed values: - konnectID - konnectNamespacedRef - kic<br /><br /> The default is kic, which implies that the Control Plane is KIC. |
 | `konnectID` _string_ | KonnectID is the schema for the KonnectID type. This field is required when the Type is konnectID. |
 | `konnectNamespacedRef` _[KonnectNamespacedRef](#konnectnamespacedref)_ | KonnectNamespacedRef is a reference to a Konnect Control Plane entity inside the cluster. It contains the name of the Konnect Control Plane. This field is required when the Type is konnectNamespacedRef. |
 
@@ -1134,19 +1134,18 @@ _Appears in:_
 #### KongObjectRef
 
 
-KongObjectRef is a reference to another object representing a Kong entity with deterministic type.<br /><br />
-TODO: https://github.com/Kong/kubernetes-configuration/issues/96
-change other types to use the generic `KongObjectRef` and move it to a common package to prevent possible import cycles.
+KongObjectRef is a reference to another object representing a Kong entity with deterministic type.
 
 
 
 | Field | Description |
 | --- | --- |
-| `name` _string_ | Name is the name of the entity.<br /><br /> NOTE: the `Required` validation rule does not reject empty strings so we use `MinLength` to reject empty string here. |
+| `name` _string_ | Name is the name of the entity. |
 
 
 _Appears in:_
 - [KongSNISpec](#kongsnispec)
+- [ServiceRef](#serviceref)
 
 #### KongPluginBindingSpec
 
@@ -1235,7 +1234,7 @@ _Appears in:_
 #### KongRouteSpec
 
 
-KongRouteSpec defines specification of a Kong Route.
+KongRouteSpec defines spec of a Kong Route.
 
 
 
@@ -1284,7 +1283,7 @@ _Appears in:_
 #### KongSNIAPISpec
 
 
-KongSNIAPISpec defines specification of an SNI.
+KongSNIAPISpec defines the spec of an SNI.
 
 
 
@@ -1333,7 +1332,7 @@ _Appears in:_
 #### KongServiceAPISpec
 
 
-KongServiceAPISpec defines specification of a Kong Service.
+KongServiceAPISpec defines the specification of a Kong Service.
 
 
 
@@ -1423,8 +1422,7 @@ _Appears in:_
 #### KongTargetSpec
 
 
-KongTargetSpec defines the specification of a Kong Target.
-KongTargetSpec defines the desired state of KongTarget.
+KongTargetSpec defines the spec of KongTarget.
 
 
 
@@ -1490,7 +1488,7 @@ _Appears in:_
 #### KongUpstreamSpec
 
 
-KongUpstreamSpec defines specification of a Kong Upstream.
+KongUpstreamSpec defines the spec of Kong Upstream.
 
 
 
@@ -1600,22 +1598,6 @@ Namespace refers to a Kubernetes namespace. It must be a RFC 1123 label.
 _Appears in:_
 - [ControllerReference](#controllerreference)
 
-#### NamespacedServiceRef
-
-
-NamespacedServiceRef is a namespaced reference to a KongService.<br /><br />
-NOTE: currently cross namespace references are not supported.
-
-
-
-| Field | Description |
-| --- | --- |
-| `name` _string_ |  |
-
-
-_Appears in:_
-- [ServiceRef](#serviceref)
-
 #### ObjectName
 _Underlying type:_ `string`
 
@@ -1673,7 +1655,7 @@ ServiceRef is a reference to a KongService.
 | Field | Description |
 | --- | --- |
 | `type` _string_ | Type can be one of: - namespacedRef |
-| `namespacedRef` _[NamespacedServiceRef](#namespacedserviceref)_ | NamespacedRef is a reference to a KongService. |
+| `namespacedRef` _[KongObjectRef](#kongobjectref)_ | NamespacedRef is a reference to a KongService. |
 
 
 _Appears in:_
@@ -1842,7 +1824,7 @@ and configured with KongPlugin CRD.
 
 
 KonnectExtension is the Schema for the KonnectExtension API,
-and is intended to be referenced as extension by the dataplane API.
+and is intended to be referenced as extension by the DataPlane API.
 If a DataPlane successfully refers a KonnectExtension, the DataPlane
 deployment spec gets customized to include the konnect-related configuration.
 
@@ -2125,7 +2107,7 @@ KonnectExtensionSpec defines the desired state of KonnectExtension.
 | --- | --- |
 | `controlPlaneRef` _[ControlPlaneRef](#controlplaneref)_ | ControlPlaneRef is a reference to a ControlPlane this KonnectExtension is associated with. |
 | `controlPlaneRegion` _string_ | ControlPlaneRegion is the region of the Konnect Control Plane. |
-| `serverHostname` _string_ | ServerHostname is the fully qualified domain name of the konnect server. This matches the RFC 1123 definition of a hostname with 1 notable exception that numeric IP addresses are not allowed.<br /><br /> Note that as per RFC1035 and RFC1123, a *label* must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character. No other punctuation is allowed. |
+| `serverHostname` _string_ | ServerHostname is the fully qualified domain name of the Konnect server. For typical operation a default value doesn't need to be adjusted. It matches the RFC 1123 definition of a hostname with 1 notable exception that numeric IP addresses are not allowed.<br /><br /> Note that as per RFC1035 and RFC1123, a *label* must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character. No other punctuation is allowed. |
 | `konnectControlPlaneAPIAuthConfiguration` _[KonnectControlPlaneAPIAuthConfiguration](#konnectcontrolplaneapiauthconfiguration)_ | AuthConfiguration must be used to configure the Konnect API authentication. |
 | `clusterDataPlaneLabels` _object (keys:string, values:string)_ | ClusterDataPlaneLabels is a set of labels that will be applied to the Konnect DataPlane. |
 
@@ -3256,7 +3238,7 @@ KonnectGatewayControlPlaneSpec defines the desired state of KonnectGatewayContro
 | --- | --- |
 | `name` _string_ | The name of the control plane. |
 | `description` _string_ | The description of the control plane in Konnect. |
-| `cluster_type` _[ClusterType](#clustertype)_ | The ClusterType value of the cluster associated with the Control Plane. |
+| `cluster_type` _[CreateControlPlaneRequestClusterType](#createcontrolplanerequestclustertype)_ | The ClusterType value of the cluster associated with the Control Plane. |
 | `auth_type` _[AuthType](#authtype)_ | The auth type value of the cluster associated with the Runtime Group. |
 | `cloud_gateway` _boolean_ | Whether this control-plane can be used for cloud-gateways. |
 | `proxy_urls` _[ProxyURL](#proxyurl) array_ | Array of proxy URLs associated with reaching the data-planes connected to a control-plane. |

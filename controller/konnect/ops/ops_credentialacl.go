@@ -106,7 +106,7 @@ func kongCredentialACLToACLWithoutParents(
 	cred *configurationv1alpha1.KongCredentialACL,
 ) sdkkonnectcomp.ACLWithoutParents {
 	return sdkkonnectcomp.ACLWithoutParents{
-		Group: lo.ToPtr(cred.Spec.Group),
+		Group: cred.Spec.Group,
 		Tags:  GenerateTagsForObject(cred, cred.Spec.Tags...),
 	}
 }
@@ -134,6 +134,7 @@ func getKongCredentialACLForUID(
 	if resp == nil || resp.Object == nil {
 		return "", fmt.Errorf("failed listing %s: %w", cred.GetTypeName(), ErrNilResponse)
 	}
+	x := sliceToEntityWithIDPtrSlice(resp.Object.Data)
 
-	return getMatchingEntryFromListResponseData(sliceToEntityWithIDSlice(resp.Object.Data), cred)
+	return getMatchingEntryFromListResponseData(x, cred)
 }
