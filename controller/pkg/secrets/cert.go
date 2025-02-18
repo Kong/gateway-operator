@@ -133,7 +133,7 @@ func signCertificate(
 		return nil, fmt.Errorf("failed decoding 'tls.key' data from secret %s", ca.Name)
 	}
 
-	priv, signatureAlgorithm, err := parsePrivateKey(caKeyBlock)
+	priv, signatureAlgorithm, err := ParsePrivateKey(caKeyBlock)
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +437,7 @@ func ensureContainerImageUpdated(container *corev1.Container, imageVersionStr st
 	return updated, nil
 }
 
-func parsePrivateKey(pemBlock *pem.Block) (crypto.Signer, x509.SignatureAlgorithm, error) {
+func ParsePrivateKey(pemBlock *pem.Block) (crypto.Signer, x509.SignatureAlgorithm, error) {
 	var (
 		signatureAlgorithm x509.SignatureAlgorithm = x509.UnknownSignatureAlgorithm
 		priv               crypto.Signer
