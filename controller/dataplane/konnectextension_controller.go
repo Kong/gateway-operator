@@ -19,6 +19,8 @@ import (
 	operatorerrors "github.com/kong/gateway-operator/internal/errors"
 	"github.com/kong/gateway-operator/internal/utils/index"
 	"github.com/kong/gateway-operator/pkg/consts"
+
+	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
 // -----------------------------------------------------------------------------
@@ -37,7 +39,7 @@ type KonnectExtensionReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *KonnectExtensionReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1alpha1.KonnectExtension{}).
+		For(&konnectv1alpha1.KonnectExtension{}).
 		Watches(&operatorv1beta1.DataPlane{}, handler.EnqueueRequestsFromMapFunc(r.listDataPlaneExtensionsReferenced)).
 		Complete(r)
 }
@@ -65,7 +67,7 @@ func (r *KonnectExtensionReconciler) listDataPlaneExtensionsReferenced(ctx conte
 	for _, ext := range dataPlane.Spec.Extensions {
 		namespace := dataPlane.Namespace
 		if ext.Group != operatorv1alpha1.SchemeGroupVersion.Group ||
-			ext.Kind != operatorv1alpha1.KonnectExtensionKind {
+			ext.Kind != konnectv1alpha1.KonnectExtensionKind {
 			continue
 		}
 		if ext.Namespace != nil && *ext.Namespace != namespace {
@@ -84,12 +86,12 @@ func (r *KonnectExtensionReconciler) listDataPlaneExtensionsReferenced(ctx conte
 // Reconcile reconciles a KonnectExtension object.
 func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctx = r.ContextInjector.InjectKeyValues(ctx)
-	var konnectExtension operatorv1alpha1.KonnectExtension
+	var konnectExtension konnectv1alpha1.KonnectExtension
 	if err := r.Client.Get(ctx, req.NamespacedName, &konnectExtension); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	logger := log.GetLogger(ctx, operatorv1alpha1.KonnectExtensionKind, r.DevelopmentMode)
+	logger := log.GetLogger(ctx, konnectv1alpha1.KonnectExtensionKind, r.DevelopmentMode)
 	var dataPlaneList operatorv1beta1.DataPlaneList
 	if err := r.List(ctx, &dataPlaneList, client.MatchingFields{
 		index.KonnectExtensionIndex: konnectExtension.Namespace + "/" + konnectExtension.Name,

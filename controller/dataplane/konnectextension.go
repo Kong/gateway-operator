@@ -17,6 +17,8 @@ import (
 	"github.com/kong/gateway-operator/pkg/consts"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 	k8sresources "github.com/kong/gateway-operator/pkg/utils/kubernetes/resources"
+
+	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
 var (
@@ -32,7 +34,7 @@ var (
 // fetches the referenced extension and applies the necessary changes to the DataPlane spec.
 func applyKonnectExtension(ctx context.Context, cl client.Client, dataplane *v1beta1.DataPlane) error {
 	for _, extensionRef := range dataplane.Spec.Extensions {
-		if extensionRef.Group != operatorv1alpha1.SchemeGroupVersion.Group || extensionRef.Kind != operatorv1alpha1.KonnectExtensionKind {
+		if extensionRef.Group != operatorv1alpha1.SchemeGroupVersion.Group || extensionRef.Kind != konnectv1alpha1.KonnectExtensionKind {
 			continue
 		}
 		namespace := dataplane.Namespace
@@ -40,7 +42,7 @@ func applyKonnectExtension(ctx context.Context, cl client.Client, dataplane *v1b
 			return errors.Join(ErrCrossNamespaceReference, fmt.Errorf("the cross-namespace reference to the extension %s/%s is not permitted", *extensionRef.Namespace, extensionRef.Name))
 		}
 
-		konnectExt := operatorv1alpha1.KonnectExtension{}
+		konnectExt := konnectv1alpha1.KonnectExtension{}
 		if err := cl.Get(ctx, client.ObjectKey{
 			Namespace: namespace,
 			Name:      extensionRef.Name,

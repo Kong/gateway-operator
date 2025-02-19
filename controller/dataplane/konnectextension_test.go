@@ -21,6 +21,7 @@ import (
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 
 	commonv1alpha1 "github.com/kong/kubernetes-configuration/api/common/v1alpha1"
+	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
 func TestApplyKonnectExtension(t *testing.T) {
@@ -31,7 +32,7 @@ func TestApplyKonnectExtension(t *testing.T) {
 	tests := []struct {
 		name          string
 		dataPlane     *operatorv1beta1.DataPlane
-		konnectExt    *operatorv1alpha1.KonnectExtension
+		konnectExt    *konnectv1alpha1.KonnectExtension
 		secret        *corev1.Secret
 		expectedError error
 	}{
@@ -56,7 +57,7 @@ func TestApplyKonnectExtension(t *testing.T) {
 						Extensions: []operatorv1alpha1.ExtensionRef{
 							{
 								Group: operatorv1alpha1.SchemeGroupVersion.Group,
-								Kind:  operatorv1alpha1.KonnectExtensionKind,
+								Kind:  konnectv1alpha1.KonnectExtensionKind,
 								NamespacedRef: operatorv1alpha1.NamespacedRef{
 									Name:      "konnect-ext",
 									Namespace: lo.ToPtr("other"),
@@ -71,12 +72,12 @@ func TestApplyKonnectExtension(t *testing.T) {
 					},
 				},
 			},
-			konnectExt: &operatorv1alpha1.KonnectExtension{
+			konnectExt: &konnectv1alpha1.KonnectExtension{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "konnect-ext",
 					Namespace: "other",
 				},
-				Spec: operatorv1alpha1.KonnectExtensionSpec{
+				Spec: konnectv1alpha1.KonnectExtensionSpec{
 					AuthConfiguration: operatorv1alpha1.KonnectControlPlaneAPIAuthConfiguration{
 						ClusterCertificateSecretRef: operatorv1alpha1.ClusterCertificateSecretRef{
 							Name: "cluster-cert-secret",
@@ -102,7 +103,7 @@ func TestApplyKonnectExtension(t *testing.T) {
 						Extensions: []operatorv1alpha1.ExtensionRef{
 							{
 								Group: operatorv1alpha1.SchemeGroupVersion.Group,
-								Kind:  operatorv1alpha1.KonnectExtensionKind,
+								Kind:  konnectv1alpha1.KonnectExtensionKind,
 								NamespacedRef: operatorv1alpha1.NamespacedRef{
 									Name: "konnect-ext",
 								},
@@ -129,7 +130,7 @@ func TestApplyKonnectExtension(t *testing.T) {
 						Extensions: []operatorv1alpha1.ExtensionRef{
 							{
 								Group: operatorv1alpha1.SchemeGroupVersion.Group,
-								Kind:  operatorv1alpha1.KonnectExtensionKind,
+								Kind:  konnectv1alpha1.KonnectExtensionKind,
 								NamespacedRef: operatorv1alpha1.NamespacedRef{
 									Name: "konnect-ext",
 								},
@@ -143,12 +144,12 @@ func TestApplyKonnectExtension(t *testing.T) {
 					},
 				},
 			},
-			konnectExt: &operatorv1alpha1.KonnectExtension{
+			konnectExt: &konnectv1alpha1.KonnectExtension{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "konnect-ext",
 					Namespace: "default",
 				},
-				Spec: operatorv1alpha1.KonnectExtensionSpec{
+				Spec: konnectv1alpha1.KonnectExtensionSpec{
 					AuthConfiguration: operatorv1alpha1.KonnectControlPlaneAPIAuthConfiguration{
 						ClusterCertificateSecretRef: operatorv1alpha1.ClusterCertificateSecretRef{
 							Name: "cluster-cert-secret",
@@ -174,7 +175,7 @@ func TestApplyKonnectExtension(t *testing.T) {
 						Extensions: []operatorv1alpha1.ExtensionRef{
 							{
 								Group: operatorv1alpha1.SchemeGroupVersion.Group,
-								Kind:  operatorv1alpha1.KonnectExtensionKind,
+								Kind:  konnectv1alpha1.KonnectExtensionKind,
 								NamespacedRef: operatorv1alpha1.NamespacedRef{
 									Name: "konnect-ext",
 								},
@@ -188,12 +189,12 @@ func TestApplyKonnectExtension(t *testing.T) {
 					},
 				},
 			},
-			konnectExt: &operatorv1alpha1.KonnectExtension{
+			konnectExt: &konnectv1alpha1.KonnectExtension{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "konnect-ext",
 					Namespace: "default",
 				},
-				Spec: operatorv1alpha1.KonnectExtensionSpec{
+				Spec: konnectv1alpha1.KonnectExtensionSpec{
 					AuthConfiguration: operatorv1alpha1.KonnectControlPlaneAPIAuthConfiguration{
 						ClusterCertificateSecretRef: operatorv1alpha1.ClusterCertificateSecretRef{
 							Name: "cluster-cert-secret",
@@ -224,7 +225,7 @@ func TestApplyKonnectExtension(t *testing.T) {
 						Extensions: []operatorv1alpha1.ExtensionRef{
 							{
 								Group: operatorv1alpha1.SchemeGroupVersion.Group,
-								Kind:  operatorv1alpha1.KonnectExtensionKind,
+								Kind:  konnectv1alpha1.KonnectExtensionKind,
 								NamespacedRef: operatorv1alpha1.NamespacedRef{
 									Name: "konnect-ext",
 								},
@@ -252,12 +253,12 @@ func TestApplyKonnectExtension(t *testing.T) {
 					},
 				},
 			},
-			konnectExt: &operatorv1alpha1.KonnectExtension{
+			konnectExt: &konnectv1alpha1.KonnectExtension{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "konnect-ext",
 					Namespace: "default",
 				},
-				Spec: operatorv1alpha1.KonnectExtensionSpec{
+				Spec: konnectv1alpha1.KonnectExtensionSpec{
 					AuthConfiguration: operatorv1alpha1.KonnectControlPlaneAPIAuthConfiguration{
 						ClusterCertificateSecretRef: operatorv1alpha1.ClusterCertificateSecretRef{
 							Name: "cluster-cert-secret",
@@ -314,7 +315,7 @@ func TestApplyKonnectExtension(t *testing.T) {
 	}
 }
 
-func getKongInKonnectEnvVars(konnectExt operatorv1alpha1.KonnectExtension) []corev1.EnvVar {
+func getKongInKonnectEnvVars(konnectExt konnectv1alpha1.KonnectExtension) []corev1.EnvVar {
 	envSet := []corev1.EnvVar{}
 	for k, v := range dputils.KongInKonnectDefaults(dputils.KongInKonnectParams{
 		ControlPlane: *konnectExt.Spec.ControlPlaneRef.KonnectID,

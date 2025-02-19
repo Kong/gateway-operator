@@ -250,7 +250,11 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 		{
 			Condition: c.KonnectControllersEnabled,
 			GVRs: []schema.GroupVersionResource{
-				operatorv1alpha1.KonnectExtensionGVR(),
+				{
+					Group:    konnectv1alpha1.SchemeGroupVersion.Group,
+					Version:  konnectv1alpha1.SchemeGroupVersion.Version,
+					Resource: "Konnectextensions",
+				},
 				{
 					Group:    konnectv1alpha1.SchemeGroupVersion.Group,
 					Version:  konnectv1alpha1.SchemeGroupVersion.Version,
