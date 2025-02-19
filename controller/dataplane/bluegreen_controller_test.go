@@ -68,7 +68,7 @@ func TestDataPlaneBlueGreenReconciler_Reconcile(t *testing.T) {
 		dataplaneReq          reconcile.Request
 		dataplane             *operatorv1beta1.DataPlane
 		dataplaneSubResources []client.Object
-		testBody              func(t *testing.T, reconciler BlueGreenReconciler, dataplaneReq reconcile.Request)
+		testBody              func(t *testing.T, reconciler BlueGreenReconciler, dataplaneReq reconcile.Request, dataplane *operatorv1beta1.DataPlane)
 	}{
 		{
 			name: "when live Deployment Pods become not Ready, DataPlane status should have the Ready status condition set to false",
@@ -184,27 +184,27 @@ func TestDataPlaneBlueGreenReconciler_Reconcile(t *testing.T) {
 					),
 				},
 			},
-			testBody: func(t *testing.T, reconciler BlueGreenReconciler, dataplaneReq reconcile.Request) {
+			testBody: func(t *testing.T, reconciler BlueGreenReconciler, dataplaneReq reconcile.Request, dataplane *operatorv1beta1.DataPlane) {
 				ctx := context.Background()
 
-				_, err := reconciler.Reconcile(ctx, dataplaneReq)
+				_, err := reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
 				// The second reconcile is needed because the first one would only get to marking
 				// the DataPlane as Scheduled.
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
 
 				// The third reconcile is needed because the second one will only ensure
 				// the service is deployed for the DataPlane.
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
 				// The fourth reconcile is needed to ensure the service name in the dataplane status
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
 
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
 
 				dp := &operatorv1beta1.DataPlane{}
@@ -230,13 +230,13 @@ func TestDataPlaneBlueGreenReconciler_Reconcile(t *testing.T) {
 					},
 				}, dp.Status.Addresses)
 
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
 
 				// Blue Green reconciliation starts
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
 
 				require.NoError(t, reconciler.Client.Get(ctx, dpNN, dp))
@@ -257,15 +257,15 @@ func TestDataPlaneBlueGreenReconciler_Reconcile(t *testing.T) {
 				require.NoError(t, reconciler.Client.Update(ctx, dp))
 
 				// Run reconciliation to advance the rollout.
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
 
 				// Update the DataPlane preview deployment status to pretend that its Pods are ready.
@@ -302,9 +302,9 @@ func TestDataPlaneBlueGreenReconciler_Reconcile(t *testing.T) {
 					),
 				)
 
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
-				_, err = reconciler.Reconcile(ctx, dataplaneReq)
+				_, err = reconciler.Reconcile(ctx, dataplane)
 				require.NoError(t, err)
 
 				require.NoError(t, reconciler.Client.Get(ctx, dpNN, dp))
@@ -366,7 +366,7 @@ func TestDataPlaneBlueGreenReconciler_Reconcile(t *testing.T) {
 				},
 			}
 
-			tc.testBody(t, reconciler, tc.dataplaneReq)
+			tc.testBody(t, reconciler, tc.dataplaneReq, tc.dataplane)
 		})
 	}
 }
