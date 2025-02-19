@@ -54,18 +54,6 @@ func applyKonnectExtension(ctx context.Context, cl client.Client, dataplane *v1b
 			}
 		}
 
-		secret := corev1.Secret{}
-		if err := cl.Get(ctx, client.ObjectKey{
-			Namespace: namespace,
-			Name:      konnectExt.Spec.AuthConfiguration.ClusterCertificateSecretRef.Name,
-		}, &secret); err != nil {
-			if k8serrors.IsNotFound(err) {
-				return errors.Join(ErrClusterCertificateNotFound, fmt.Errorf("the cluster certificate secret %s/%s referenced by the extension %s/%s is not found", namespace, konnectExt.Spec.AuthConfiguration.ClusterCertificateSecretRef.Name, namespace, extensionRef.Name))
-			} else {
-				return err
-			}
-		}
-
 		if dataplane.Spec.Deployment.PodTemplateSpec == nil {
 			dataplane.Spec.Deployment.PodTemplateSpec = &corev1.PodTemplateSpec{}
 		}
@@ -83,15 +71,11 @@ func applyKonnectExtension(ctx context.Context, cl client.Client, dataplane *v1b
 
 		d.WithVolume(kongInKonnectClusterCertificateVolume())
 		d.WithVolumeMount(kongInKonnectClusterCertificateVolumeMount(), consts.DataPlaneProxyContainerName)
-		d.WithVolume(kongInKonnectClusterCertVolume(konnectExt.Spec.AuthConfiguration.ClusterCertificateSecretRef.Name))
+		d.WithVolume(kongInKonnectClusterCertVolume(konnectExt.Status.DataPlaneClientAuth.CertificateSecretRef.Name))
 		d.WithVolumeMount(kongInKonnectClusterVolumeMount(), consts.DataPlaneProxyContainerName)
 
 		// KonnectID is the only supported type for now, and its presence is guaranteed by a proper CEL rule.
-		envSet := dputils.KongInKonnectDefaults(dputils.KongInKonnectParams{
-			ControlPlane: *konnectExt.Spec.ControlPlaneRef.KonnectID,
-			Region:       konnectExt.Spec.ControlPlaneRegion,
-			Server:       konnectExt.Spec.ServerHostname,
-		})
+		envSet := dputils.KongInKonnectDefaults(konnectExt.Status)
 
 		dputils.FillDataPlaneProxyContainerEnvs(nil, &d.Spec.Template, envSet)
 		dataplane.Spec.Deployment.PodTemplateSpec = &d.Spec.Template
