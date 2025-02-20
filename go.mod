@@ -19,7 +19,7 @@ require (
 	github.com/google/go-containerregistry v0.20.3
 	github.com/google/uuid v1.6.0
 	github.com/gruntwork-io/terratest v0.48.2
-	github.com/kong/kubernetes-configuration v1.1.1-0.20250219125458-b45dead920d4
+	github.com/kong/kubernetes-configuration v1.1.1-0.20250219150607-a086e5edec2d
 	github.com/kong/kubernetes-telemetry v0.1.8
 	github.com/kong/kubernetes-testing-framework v0.47.2
 	github.com/kong/semver/v4 v4.0.1
@@ -296,3 +296,5 @@ replace (
 	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.32.2
 	k8s.io/sample-controller => k8s.io/sample-controller v0.32.2
 )
+
+replace github.com/kong/kubernetes-configuration => /Users/mattia.lavacca@konghq.com/go/src/github.com/kong/kubernetes-configuration
