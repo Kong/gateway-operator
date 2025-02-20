@@ -141,7 +141,7 @@ func TestApplyKonnectExtension(t *testing.T) {
 				},
 				Status: konnectv1alpha1.KonnectExtensionStatus{
 					KonnectControlPlane: &konnectv1alpha1.KonnectControlPlaneStatus{
-						ID: "konnect-id",
+						ControlPlaneID: "konnect-id",
 						KonnectEndpoints: konnectv1alpha1.KonnectEndpoints{
 							ControlPlaneEndpoint: "7078163243.us.cp0.konghq.com",
 							TelemetryEndpoint:    "7078163243.us.tp0.konghq.com",
@@ -188,7 +188,7 @@ func TestApplyKonnectExtension(t *testing.T) {
 				},
 				Status: konnectv1alpha1.KonnectExtensionStatus{
 					KonnectControlPlane: &konnectv1alpha1.KonnectControlPlaneStatus{
-						ID: "konnect-id",
+						ControlPlaneID: "konnect-id",
 						KonnectEndpoints: konnectv1alpha1.KonnectEndpoints{
 							ControlPlaneEndpoint: "7078163243.us.cp0.konghq.com",
 							TelemetryEndpoint:    "7078163243.us.tp0.konghq.com",
@@ -249,7 +249,7 @@ func TestApplyKonnectExtension(t *testing.T) {
 				},
 				Status: konnectv1alpha1.KonnectExtensionStatus{
 					KonnectControlPlane: &konnectv1alpha1.KonnectControlPlaneStatus{
-						ID: "konnect-id",
+						ControlPlaneID: "konnect-id",
 						KonnectEndpoints: konnectv1alpha1.KonnectEndpoints{
 							ControlPlaneEndpoint: "7078163243.us.cp0.konghq.com",
 							TelemetryEndpoint:    "7078163243.us.tp0.konghq.com",

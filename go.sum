@@ -307,8 +307,6 @@ github.com/klauspost/compress v1.17.11 h1:In6xLpyWOi1+C7tXUUWv2ot1QvBjxevKAaI6IX
 github.com/klauspost/compress v1.17.11/go.mod h1:pMDklpSncoRMuLFrf1W9Ss9KT+0rH90U12bZKk7uwG0=
 github.com/kong/go-kong v0.63.0 h1:8ECLgkgDqON61qCMq/M0gTwZKYxg55Oy692dRDOOBiU=
 github.com/kong/go-kong v0.63.0/go.mod h1:ma9GWnhkxtrXZlLFfED955HjVzmUojYEHet3lm+PDik=
-github.com/kong/kubernetes-configuration v1.1.1-0.20250219150607-a086e5edec2d h1:7aDf0+Z3Oz1F3EDqiFfecrcSg57nmExPFvzw5dm5iBQ=
-github.com/kong/kubernetes-configuration v1.1.1-0.20250219150607-a086e5edec2d/go.mod h1:bTJv/IsSCE9Ux+9RY9fEMCU9yehBWAvrSXc8iWx7OGo=
 github.com/kong/kubernetes-telemetry v0.1.8 h1:nbtUmXW9xkzRO7dgvrgVrJZiRksATk4XHrqX+78g/5k=
 github.com/kong/kubernetes-telemetry v0.1.8/go.mod h1:ZEQY/4DddKoe5XA7UTOIbdI/4d6ZRcrzh2ezRxnuyl0=
 github.com/kong/kubernetes-testing-framework v0.47.2 h1:+2Z9anTpbV/hwNeN+NFQz53BMU+g3QJydkweBp3tULo=

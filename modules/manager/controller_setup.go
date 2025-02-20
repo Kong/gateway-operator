@@ -497,13 +497,6 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 				c.DevelopmentMode,
 			),
 		},
-		KonnectExtensionControllerName: {
-			Enabled: (c.DataPlaneControllerEnabled || c.DataPlaneBlueGreenControllerEnabled) && c.KonnectControllersEnabled,
-			Controller: &dataplane.KonnectExtensionReconciler{
-				Client:          mgr.GetClient(),
-				DevelopmentMode: c.DevelopmentMode,
-			},
-		},
 		// AIGateway Controller
 		AIGatewayControllerName: {
 			Enabled: c.AIGatewayControllerEnabled,
@@ -566,6 +559,15 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 					c.DevelopmentMode,
 					mgr.GetClient(),
 					mgr.GetScheme(),
+				),
+			},
+
+			KonnectExtensionControllerName: {
+				Enabled: (c.DataPlaneControllerEnabled || c.DataPlaneBlueGreenControllerEnabled) && c.KonnectControllersEnabled,
+				Controller: konnect.NewKonnectExtensionReconciler(
+					sdkFactory,
+					c.DevelopmentMode,
+					mgr.GetClient(),
 				),
 			},
 

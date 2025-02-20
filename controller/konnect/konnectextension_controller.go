@@ -1,10 +1,13 @@
-package dataplane
+package konnect
 
 import (
 	"context"
+	"errors"
 	"reflect"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -14,8 +17,10 @@ import (
 
 	operatorv1alpha1 "github.com/kong/gateway-operator/api/v1alpha1"
 	operatorv1beta1 "github.com/kong/gateway-operator/api/v1beta1"
-	"github.com/kong/gateway-operator/controller/pkg/ctxinjector"
+	"github.com/kong/gateway-operator/controller/konnect/ops"
+	sdkops "github.com/kong/gateway-operator/controller/konnect/ops/sdk"
 	"github.com/kong/gateway-operator/controller/pkg/log"
+	"github.com/kong/gateway-operator/controller/pkg/patch"
 	operatorerrors "github.com/kong/gateway-operator/internal/errors"
 	"github.com/kong/gateway-operator/internal/utils/index"
 	"github.com/kong/gateway-operator/pkg/consts"
@@ -30,10 +35,21 @@ import (
 // KonnectExtensionReconciler reconciles a KonnectExtension object.
 type KonnectExtensionReconciler struct {
 	client.Client
-	ContextInjector ctxinjector.CtxInjector
-	// DevelopmentMode indicates if the controller should run in development mode,
-	// which causes it to e.g. perform less validations.
 	DevelopmentMode bool
+	sdkFactory      sdkops.SDKFactory
+}
+
+// NewKonnectAPIAuthConfigurationReconciler creates a new KonnectAPIAuthConfigurationReconciler.
+func NewKonnectExtensionReconciler(
+	sdkFactory sdkops.SDKFactory,
+	developmentMode bool,
+	client client.Client,
+) *KonnectAPIAuthConfigurationReconciler {
+	return &KonnectAPIAuthConfigurationReconciler{
+		sdkFactory:      sdkFactory,
+		developmentMode: developmentMode,
+		client:          client,
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -85,16 +101,15 @@ func (r *KonnectExtensionReconciler) listDataPlaneExtensionsReferenced(ctx conte
 
 // Reconcile reconciles a KonnectExtension object.
 func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx = r.ContextInjector.InjectKeyValues(ctx)
-	var konnectExtension konnectv1alpha1.KonnectExtension
-	if err := r.Client.Get(ctx, req.NamespacedName, &konnectExtension); err != nil {
+	var ext konnectv1alpha1.KonnectExtension
+	if err := r.Client.Get(ctx, req.NamespacedName, &ext); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	logger := log.GetLogger(ctx, konnectv1alpha1.KonnectExtensionKind, r.DevelopmentMode)
 	var dataPlaneList operatorv1beta1.DataPlaneList
 	if err := r.List(ctx, &dataPlaneList, client.MatchingFields{
-		index.KonnectExtensionIndex: konnectExtension.Namespace + "/" + konnectExtension.Name,
+		index.KonnectExtensionIndex: ext.Namespace + "/" + ext.Name,
 	}); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -102,12 +117,12 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	var updated bool
 	switch len(dataPlaneList.Items) {
 	case 0:
-		updated = controllerutil.RemoveFinalizer(&konnectExtension, consts.DataPlaneExtensionFinalizer)
+		updated = controllerutil.RemoveFinalizer(&ext, consts.DataPlaneExtensionFinalizer)
 	default:
-		updated = controllerutil.AddFinalizer(&konnectExtension, consts.DataPlaneExtensionFinalizer)
+		updated = controllerutil.AddFinalizer(&ext, consts.DataPlaneExtensionFinalizer)
 	}
 	if updated {
-		if err := r.Client.Update(ctx, &konnectExtension); err != nil {
+		if err := r.Client.Update(ctx, &ext); err != nil {
 			if k8serrors.IsConflict(err) {
 				return ctrl.Result{Requeue: true}, nil
 			}
@@ -117,5 +132,56 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Info(logger, "KonnectExtension finalizer updated")
 	}
 
+	apiAuthRef, err := getKonnectAPIAuthRefNN(ctx, r.Client, &ext)
+	if err != nil {
+		// TODO: handle status properly
+		return ctrl.Result{}, err
+	}
+
+	var apiAuth konnectv1alpha1.KonnectAPIAuthConfiguration
+	err = r.Client.Get(ctx, apiAuthRef, &apiAuth)
+	if requeue, res, retErr := handleAPIAuthStatusCondition(ctx, r.Client, &ext, apiAuth, err); requeue {
+		return res, retErr
+	}
+
+	token, err := getTokenFromKonnectAPIAuthConfiguration(ctx, r.Client, &apiAuth)
+	if err != nil {
+		if res, errStatus := patch.StatusWithCondition(
+			ctx, r.Client, &apiAuth,
+			konnectv1alpha1.KonnectEntityAPIAuthConfigurationValidConditionType,
+			metav1.ConditionFalse,
+			konnectv1alpha1.KonnectEntityAPIAuthConfigurationReasonInvalid,
+			err.Error(),
+		); errStatus != nil || !res.IsZero() {
+			return res, errStatus
+		}
+		return ctrl.Result{}, err
+	}
+
+	// NOTE: We need to create a new SDK instance for each reconciliation
+	// because the token is retrieved in runtime through KonnectAPIAuthConfiguration.
+
+	serverURL := ops.NewServerURL[*konnectv1alpha1.KonnectExtension](apiAuth.Spec.ServerURL)
+	sdk := r.sdkFactory.NewKonnectSDK(
+		serverURL.String(),
+		sdkops.SDKToken(token),
+	)
+
 	return ctrl.Result{}, nil
+}
+
+func getKonnectAPIAuthRefNN(_ context.Context, _ client.Client, ext *konnectv1alpha1.KonnectExtension) (types.NamespacedName, error) {
+	// In case the KonnectConfiguration is not set, we fetch the KonnectGatewayControlPlane
+	// and get the KonnectConfiguration from there. KonnectGatewayControlPlane reference and KonnectConfiguration
+	// are mutually exclusive in the KonnectExtension API.
+	if ext.Spec.KonnectConfiguration == nil {
+		// TODO: https://github.com/Kong/gateway-operator/issues/889
+		return types.NamespacedName{}, errors.New("KonnectGatewayControlPlane references not supported yet")
+	}
+
+	// TODO: handle cross namespace refs
+	return types.NamespacedName{
+		Namespace: ext.Namespace,
+		Name:      ext.Spec.KonnectConfiguration.APIAuthConfigurationRef.Name,
+	}, nil
 }

@@ -296,3 +296,5 @@ replace (
 	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.32.2
 	k8s.io/sample-controller => k8s.io/sample-controller v0.32.2
 )
+
+replace github.com/kong/kubernetes-configuration => /Users/mattia.lavacca@konghq.com/go/src/github.com/kong/kubernetes-configuration
