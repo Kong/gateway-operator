@@ -55,6 +55,14 @@ func KongServiceReconciliationWatchOptions(
 				),
 			)
 		},
+		func(b *ctrl.Builder) *ctrl.Builder {
+			return b.Watches(
+				&configurationv1alpha1.KongRoute{},
+				handler.EnqueueRequestsFromMapFunc(
+					enqueueKongServiceForKongRouteThatBindsToIt(),
+				),
+			)
+		},
 	}
 }
 
@@ -104,5 +112,31 @@ func enqueueKongServiceForKonnectAPIAuthConfiguration(
 
 		}
 		return ret
+	}
+}
+
+func enqueueKongServiceForKongRouteThatBindsToIt() handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		r, ok := obj.(*configurationv1alpha1.KongRoute)
+		if !ok {
+			return nil
+		}
+
+		if r.Spec.ServiceRef == nil {
+			return nil
+		}
+
+		if r.Spec.ServiceRef.Type != configurationv1alpha1.ServiceRefNamespacedRef {
+			return nil
+		}
+
+		return []reconcile.Request{
+			{
+				NamespacedName: types.NamespacedName{
+					Namespace: r.Namespace,
+					Name:      r.Spec.ServiceRef.NamespacedRef.Name,
+				},
+			},
+		}
 	}
 }
