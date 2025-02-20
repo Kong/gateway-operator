@@ -170,7 +170,7 @@ func handleKongCertificateRef[T constraints.SupportedKonnectEntityType, TEnt con
 
 	if resource, ok := any(ent).(EntityWithControlPlaneRef); ok {
 		old := ent.DeepCopyObject().(TEnt)
-		resource.SetControlPlaneID(cp.Status.ID)
+		resource.SetControlPlaneID(cp.Status.Konnect.ID)
 		_, err := patch.ApplyStatusPatchIfNotEmpty(ctx, cl, ctrllog.FromContext(ctx), ent, old)
 		if err != nil {
 			if k8serrors.IsConflict(err) {

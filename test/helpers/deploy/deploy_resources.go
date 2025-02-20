@@ -238,7 +238,7 @@ func KonnectGatewayControlPlaneWithID(
 			LastTransitionTime: metav1.Now(),
 		},
 	}
-	cp.Status.ID = uuid.NewString()[:8]
+	cp.Status.Konnect.ID = uuid.NewString()[:8]
 	require.NoError(t, cl.Status().Update(ctx, cp))
 	return cp
 }

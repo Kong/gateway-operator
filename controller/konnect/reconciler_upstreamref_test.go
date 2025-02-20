@@ -175,7 +175,7 @@ var testControlPlaneOK = &konnectv1alpha1.KonnectGatewayControlPlane{
 	},
 	Spec: konnectv1alpha1.KonnectGatewayControlPlaneSpec{},
 	Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-		KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+		Konnect: konnectv1alpha1.KonnectEntityStatus{
 			ID: "123456789",
 		},
 		Conditions: []metav1.Condition{
