@@ -65,6 +65,7 @@ func StatusWithCondition[T interface {
 	conditionStatus metav1.ConditionStatus,
 	conditionReason consts.ConditionReason,
 	conditionMessage string,
+	opts ...func(T),
 ) (ctrl.Result, error) {
 	old := ent.DeepCopyObject().(T)
 	if !SetStatusWithConditionIfDifferent(ent,
@@ -74,6 +75,10 @@ func StatusWithCondition[T interface {
 		conditionMessage,
 	) {
 		return ctrl.Result{}, nil
+	}
+
+	for _, opt := range opts {
+		opt(ent)
 	}
 
 	if err := cl.Status().Patch(ctx, ent, client.MergeFrom(old)); err != nil {

@@ -58,7 +58,7 @@ func TestKongSNI(t *testing.T) {
 		createdCert.Status = configurationv1alpha1.KongCertificateStatus{
 			Konnect: &konnectv1alpha1.KonnectEntityStatusWithControlPlaneRef{
 				KonnectEntityStatus: konnectEntityStatus("cert-12345"),
-				ControlPlaneID:      cp.Status.GetKonnectID(),
+				ControlPlaneID:      cp.Status.Konnect.GetKonnectID(),
 			},
 			Conditions: []metav1.Condition{
 				{
@@ -79,7 +79,7 @@ func TestKongSNI(t *testing.T) {
 		sdk.SNIsSDK.EXPECT().CreateSniWithCertificate(
 			mock.Anything,
 			mock.MatchedBy(func(req sdkkonnectops.CreateSniWithCertificateRequest) bool {
-				return req.ControlPlaneID == cp.Status.ID &&
+				return req.ControlPlaneID == cp.Status.Konnect.ID &&
 					req.CertificateID == createdCert.GetKonnectID() &&
 					req.SNIWithoutParents.Name == "test.kong-sni.example.com"
 			}),
@@ -106,7 +106,7 @@ func TestKongSNI(t *testing.T) {
 			mock.Anything,
 			mock.MatchedBy(func(req sdkkonnectops.UpsertSniWithCertificateRequest) bool {
 				return req.CertificateID == createdCert.GetKonnectID() &&
-					req.ControlPlaneID == cp.Status.ID &&
+					req.ControlPlaneID == cp.Status.Konnect.ID &&
 					req.SNIWithoutParents.Name == "test2.kong-sni.example.com"
 			}),
 		).Return(&sdkkonnectops.UpsertSniWithCertificateResponse{}, nil)
@@ -125,7 +125,7 @@ func TestKongSNI(t *testing.T) {
 		sdk.SNIsSDK.EXPECT().DeleteSniWithCertificate(
 			mock.Anything,
 			sdkkonnectops.DeleteSniWithCertificateRequest{
-				ControlPlaneID: cp.Status.ID,
+				ControlPlaneID: cp.Status.Konnect.ID,
 				CertificateID:  createdCert.GetKonnectID(),
 				SNIID:          "sni-12345",
 			},

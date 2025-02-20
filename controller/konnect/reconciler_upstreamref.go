@@ -170,7 +170,7 @@ func handleKongUpstreamRef[T constraints.SupportedKonnectEntityType, TEnt constr
 	}
 
 	if resource, ok := any(ent).(EntityWithControlPlaneRef); ok {
-		resource.SetControlPlaneID(cp.Status.ID)
+		resource.SetControlPlaneID(cp.Status.Konnect.ID)
 	}
 
 	if res, errStatus := patch.StatusWithCondition(

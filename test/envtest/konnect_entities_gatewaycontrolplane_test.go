@@ -72,7 +72,7 @@ var konnectGatewayControlPlaneTestCases = []konnectEntityReconcilerTestCase{
 				return
 			}
 
-			assert.Equal(t, "12345", cp.Status.ID)
+			assert.Equal(t, "12345", cp.Status.Konnect.ID)
 			assert.True(t, conditionsContainProgrammedTrue(cp.Status.Conditions),
 				"Programmed condition should be set and it status should be true",
 			)
@@ -188,7 +188,7 @@ var konnectGatewayControlPlaneTestCases = []konnectEntityReconcilerTestCase{
 				return
 			}
 
-			assert.Equal(t, "12345", cp.Status.ID)
+			assert.Equal(t, "12345", cp.Status.Konnect.ID)
 			assert.True(t, conditionsContainProgrammedTrue(cp.Status.Conditions),
 				"Programmed condition should be set and it status should be true",
 			)
@@ -209,7 +209,7 @@ var konnectGatewayControlPlaneTestCases = []konnectEntityReconcilerTestCase{
 				return
 			}
 
-			assert.Equal(t, "12346", cpGroup.Status.ID)
+			assert.Equal(t, "12346", cpGroup.Status.Konnect.ID)
 			assert.True(t, conditionsContainProgrammedTrue(cpGroup.Status.Conditions),
 				"Programmed condition should be set and it status should be true",
 			)
@@ -351,7 +351,7 @@ var konnectGatewayControlPlaneTestCases = []konnectEntityReconcilerTestCase{
 				return
 			}
 
-			assert.Equal(t, "123467", cpGroup.Status.ID)
+			assert.Equal(t, "123467", cpGroup.Status.Konnect.ID)
 			assert.True(t, conditionsContainProgrammedFalse(cpGroup.Status.Conditions),
 				"Programmed condition should be set and its status should be false because of an error returned by Konnect API when setting group members",
 			)
@@ -425,7 +425,7 @@ var konnectGatewayControlPlaneTestCases = []konnectEntityReconcilerTestCase{
 				return
 			}
 
-			assert.Equal(t, "123456", cp.Status.ID, "ID should be set")
+			assert.Equal(t, "123456", cp.Status.Konnect.ID, "ID should be set")
 			assert.True(t, conditionsContainProgrammedTrue(cp.Status.Conditions),
 				"Programmed condition should be set and its status should be true",
 			)
@@ -537,7 +537,7 @@ var konnectGatewayControlPlaneTestCases = []konnectEntityReconcilerTestCase{
 				return
 			}
 
-			assert.Equal(t, "group-123456", cpGroup.Status.ID, "ID should be set")
+			assert.Equal(t, "group-123456", cpGroup.Status.Konnect.ID, "ID should be set")
 			assert.True(t, conditionsContainProgrammedTrue(cpGroup.Status.Conditions),
 				"Programmed condition should be set and its status should be true",
 			)
@@ -600,7 +600,7 @@ var konnectGatewayControlPlaneTestCases = []konnectEntityReconcilerTestCase{
 				return
 			}
 
-			assert.Equal(t, "cpg-id", cpGroup.Status.ID, "ID should be set")
+			assert.Equal(t, "cpg-id", cpGroup.Status.Konnect.ID, "ID should be set")
 			assert.True(t, conditionsContainProgrammedTrue(cpGroup.Status.Conditions),
 				"Programmed condition should be set and its status should be true",
 			)

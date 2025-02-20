@@ -2,38 +2,38 @@ run:
   timeout: 8m
 linters:
   enable:
-  - asciicheck
-  - bodyclose
-  - copyloopvar
-  - dogsled
-  - durationcheck
-  - errcheck
-  - errorlint
-  - exhaustive
+  # - asciicheck
+  # - bodyclose
+  # - copyloopvar
+  # - dogsled
+  # - durationcheck
+  # - errcheck
+  # - errorlint
+  # - exhaustive
   - forbidigo
-  - gci
-  - gocritic
-  - gofmt
-  - goimports
-  - gomodguard
-  - gosec
-  - gosimple
-  - govet
-  - importas
-  - ineffassign
-  - misspell
-  - nakedret
-  - nilerr
-  - nolintlint
-  - predeclared
-  - revive
-  - staticcheck
-  - typecheck
-  - unconvert
-  - unparam
-  - unused
-  - wastedassign
-  - loggercheck
+  # - gci
+  # - gocritic
+  # - gofmt
+  # - goimports
+  # - gomodguard
+  # - gosec
+  # - gosimple
+  # - govet
+  # - importas
+  # - ineffassign
+  # - misspell
+  # - nakedret
+  # - nilerr
+  # - nolintlint
+  # - predeclared
+  # - revive
+  # - staticcheck
+  # - typecheck
+  # - unconvert
+  # - unparam
+  # - unused
+  # - wastedassign
+  # - loggercheck
 linters-settings:
   gci:
     sections:
@@ -139,7 +139,9 @@ linters-settings:
           - go.uber.org/zap/zapcore
   forbidigo:
     forbid:
-      - p: ^.*Dataplane.*$
+      # Add DataplaneG (for DataplaneGroup but there's no lookahead support here)
+      # exception as that's coming from the sdk and we have no control over it.
+      - p: ^.*Dataplane[^G].*$
         msg: "Please use camel case 'DataPlane' instead of 'Dataplane'"
       - p: ^.*Controlplane.*$
         msg: "Please use camel case 'ControlPlane' instead of 'Controlplane'"

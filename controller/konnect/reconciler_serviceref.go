@@ -181,7 +181,7 @@ func handleKongServiceRef[T constraints.SupportedKonnectEntityType, TEnt constra
 		// CP ID is not stored in KonnectEntityStatus because not all entities
 		// have a ControlPlaneRef, hence the type constraints in the reconciler can't be used.
 		if resource, ok := any(ent).(EntityWithControlPlaneRef); ok {
-			resource.SetControlPlaneID(cp.Status.ID)
+			resource.SetControlPlaneID(cp.Status.Konnect.ID)
 		}
 
 		_ = patch.SetStatusWithConditionIfDifferent(ent,

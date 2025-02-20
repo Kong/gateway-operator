@@ -116,7 +116,7 @@ func TestCreateControlPlane(t *testing.T) {
 						Namespace: "default",
 					},
 					Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+						Konnect: konnectv1alpha1.KonnectEntityStatus{
 							ID: cpID,
 						},
 						Conditions: []metav1.Condition{
@@ -185,7 +185,7 @@ func TestCreateControlPlane(t *testing.T) {
 						Namespace: "default",
 					},
 					Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+						Konnect: konnectv1alpha1.KonnectEntityStatus{
 							ID: cpID,
 						},
 						Conditions: []metav1.Condition{
@@ -268,7 +268,7 @@ func TestCreateControlPlane(t *testing.T) {
 
 			assert.NoError(t, err)
 			if tc.expectedID != "" {
-				assert.Equal(t, tc.expectedID, cp.Status.ID)
+				assert.Equal(t, tc.expectedID, cp.Status.Konnect.ID)
 			}
 		})
 	}
@@ -293,7 +293,7 @@ func TestDeleteControlPlane(t *testing.T) {
 						},
 					},
 					Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+						Konnect: konnectv1alpha1.KonnectEntityStatus{
 							ID: "12345",
 						},
 					},
@@ -326,7 +326,7 @@ func TestDeleteControlPlane(t *testing.T) {
 						},
 					},
 					Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+						Konnect: konnectv1alpha1.KonnectEntityStatus{
 							ID: "12345",
 						},
 					},
@@ -361,7 +361,7 @@ func TestDeleteControlPlane(t *testing.T) {
 						},
 					},
 					Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+						Konnect: konnectv1alpha1.KonnectEntityStatus{
 							ID: "12345",
 						},
 					},
@@ -422,7 +422,7 @@ func TestUpdateControlPlane(t *testing.T) {
 						},
 					},
 					Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+						Konnect: konnectv1alpha1.KonnectEntityStatus{
 							ID: "12345",
 						},
 					},
@@ -467,7 +467,7 @@ func TestUpdateControlPlane(t *testing.T) {
 						},
 					},
 					Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+						Konnect: konnectv1alpha1.KonnectEntityStatus{
 							ID: "12345",
 						},
 					},
@@ -512,7 +512,7 @@ func TestUpdateControlPlane(t *testing.T) {
 						},
 					},
 					Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+						Konnect: konnectv1alpha1.KonnectEntityStatus{
 							ID: "12345",
 						},
 					},
@@ -570,7 +570,7 @@ func TestUpdateControlPlane(t *testing.T) {
 			}
 
 			assert.NoError(t, err)
-			assert.Equal(t, tc.expectedID, cp.Status.ID)
+			assert.Equal(t, tc.expectedID, cp.Status.Konnect.ID)
 		})
 	}
 }
@@ -704,7 +704,7 @@ func TestSetGroupMembers(t *testing.T) {
 						Namespace: "default",
 					},
 					Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+						Konnect: konnectv1alpha1.KonnectEntityStatus{
 							ID: "cp-12345",
 						},
 					},
@@ -798,7 +798,7 @@ func TestSetGroupMembers(t *testing.T) {
 						Namespace: "default",
 					},
 					Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+						Konnect: konnectv1alpha1.KonnectEntityStatus{
 							ID: "cp-12345",
 						},
 					},
@@ -809,7 +809,7 @@ func TestSetGroupMembers(t *testing.T) {
 						Namespace: "default",
 					},
 					Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+						Konnect: konnectv1alpha1.KonnectEntityStatus{
 							ID: "cp-12346",
 						},
 					},
@@ -870,7 +870,7 @@ func TestSetGroupMembers(t *testing.T) {
 						Namespace: "default",
 					},
 					Status: konnectv1alpha1.KonnectGatewayControlPlaneStatus{
-						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+						Konnect: konnectv1alpha1.KonnectEntityStatus{
 							ID: "cp-12345",
 						},
 					},
