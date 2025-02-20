@@ -8,7 +8,6 @@ rules:
   - ""
   resources:
   - configmaps
-  - serviceaccounts
   - services
   verbs:
   - create
@@ -53,6 +52,12 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - serviceaccounts
+  verbs:
+  - delete
+- apiGroups:
+  - ""
+  resources:
   - services/status
   verbs:
   - get
@@ -63,13 +68,7 @@ rules:
   resources:
   - validatingwebhookconfigurations
   verbs:
-  - create
   - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - apiextensions.k8s.io
   resources:
@@ -449,10 +448,4 @@ rules:
   - clusterrolebindings
   - clusterroles
   verbs:
-  - create
   - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
