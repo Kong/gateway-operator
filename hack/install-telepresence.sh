@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Note: this is just a quick workaround script to install telepresence to be used in conformance tests.
-# Ideally we should use a more robust solution to install telepresence in the CI environment (e.g. mise).
+# Ideally we should use a more robust solution (e.g. mise).
 
 # Determine OS and exit if unsupported
 case "$OSTYPE" in
