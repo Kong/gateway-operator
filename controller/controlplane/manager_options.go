@@ -67,3 +67,9 @@ func WithPublishService(service types.NamespacedName) managercfg.Opt {
 		c.PublishService = mo.Some(service)
 	}
 }
+
+func WithMetricsServerOff() managercfg.Opt {
+	return func(c *managercfg.Config) {
+		c.MetricsAddr = "0" // 0 disables metrics server
+	}
+}

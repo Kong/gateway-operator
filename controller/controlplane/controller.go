@@ -208,6 +208,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		log.Debug(logger, "DataPlane not set, deployment for ControlPlane will remain dormant")
 	}
 
+	// TODO: before creating a manager, verify that the Admin API service has endpoints OR
+	// handle more gracefully:
+	//
+
 	log.Trace(logger, "checking readiness of ControlPlane instance")
 	if err := r.InstancesManager.IsInstanceReady(mgrID); err != nil {
 		log.Trace(logger, "control plane instance not ready yet", "error", err)
@@ -254,6 +258,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 					Namespace: cp.Namespace,
 					Name:      dataplaneIngressServiceName,
 				}),
+				WithMetricsServerOff(),
 			)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to create manager config: %w", err)

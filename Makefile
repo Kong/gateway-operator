@@ -157,6 +157,10 @@ download.shellcheck: mise yq ## Download shellcheck locally if necessary.
 	@$(MISE) plugin install --yes -q shellcheck
 	@$(MISE) install -q shellcheck@$(SHELLCHECK_VERSION)
 
+.PHONY: download.telepresence
+download.telepresence:  ## Download telepresence locally if necessary.
+	./hack/install-telepresence.sh
+
 .PHONY: use-setup-envtest
 use-setup-envtest:
 	$(SETUP_ENVTEST) use
@@ -440,7 +444,8 @@ NCPU := $(shell getconf _NPROCESSORS_ONLN)
 PARALLEL := $(if $(PARALLEL),$(PARALLEL),$(NCPU))
 
 .PHONY: _test.conformance
-_test.conformance: gotestsum
+_test.conformance: gotestsum download.telepresence
+		PATH=$(PROJECT_DIR)/bin:$(PATH) \
 		GOTESTSUM_FORMAT=$(GOTESTSUM_FORMAT) \
 		$(GOTESTSUM) -- $(GOTESTFLAGS) \
 		-timeout $(CONFORMANCE_TEST_TIMEOUT) \

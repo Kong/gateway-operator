@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"runtime/debug"
 	"testing"
@@ -111,6 +112,28 @@ func TestMain(m *testing.M) {
 
 	fmt.Println("INFO: deploying CRDs to test cluster")
 	exitOnErr(testutils.DeployCRDs(ctx, path.Join(configPath, "/crd"), clients.OperatorClient, env.Cluster()))
+
+	fmt.Println("INFO: installing telepresence traffic manager in the cluster")
+	out, err := exec.CommandContext(ctx, "telepresence", "helm", "install").CombinedOutput()
+	if err != nil {
+		fmt.Printf("ERROR: failed to install telepresence traffic manager: %s\n", string(out))
+		exitOnErr(err)
+	}
+
+	fmt.Println("INFO: connecting to the cluster with telepresence")
+	out, err = exec.CommandContext(ctx, "telepresence", "connect").CombinedOutput()
+	if err != nil {
+		fmt.Printf("ERROR: failed to connect to the cluster with telepresence: %s\n", string(out))
+		exitOnErr(err)
+	}
+
+	defer func() {
+		fmt.Println("INFO: quitting telepresence daemons")
+		out, err := exec.CommandContext(ctx, "telepresence", "quit").CombinedOutput()
+		if err != nil {
+			fmt.Printf("ERROR: failed to quit telepresence daemons: %s\n", string(out))
+		}
+	}()
 
 	fmt.Println("INFO: starting the operator's controller manager")
 	// startControllerManager will spawn the controller manager in a separate
