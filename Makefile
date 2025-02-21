@@ -403,7 +403,8 @@ test.crds-validation.pretty:
 	$(MAKE) _test.envtest GOTESTSUM_FORMAT=testname ENVTEST_TEST_PATHS=./test/crdsvalidation/...
 
 .PHONY: _test.integration
-_test.integration: gotestsum
+_test.integration: gotestsum download.telepresence
+	PATH=$(PROJECT_DIR)/bin:$(PATH) \
 	GOFLAGS=$(GOFLAGS) \
 		GOTESTSUM_FORMAT=$(GOTESTSUM_FORMAT) \
 		$(GOTESTSUM) -- $(GOTESTFLAGS) \
