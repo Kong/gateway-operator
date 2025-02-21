@@ -178,8 +178,8 @@ func GenerateNewAdminServiceForDataPlane(dataplane *operatorv1beta1.DataPlane, o
 			},
 		},
 		Spec: corev1.ServiceSpec{
-			Type:      corev1.ServiceTypeClusterIP,
-			ClusterIP: corev1.ClusterIPNone,
+			Type: corev1.ServiceTypeLoadBalancer,
+			// ClusterIP: corev1.ClusterIPNone,
 			Selector: map[string]string{
 				"app": dataplane.Name,
 			},
