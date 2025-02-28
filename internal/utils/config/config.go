@@ -1,4 +1,4 @@
-package dataplane
+package config
 
 import (
 	"sort"
@@ -6,7 +6,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/kong/gateway-operator/pkg/consts"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 )
 
@@ -22,18 +21,18 @@ const (
 // DataPlane Utils - Config
 // -----------------------------------------------------------------------------
 
-// FillDataPlaneProxyContainerEnvs sets any unset default configuration
-// options on the DataPlane. It allows overriding the defaults via the provided
+// FillContainerEnvs sets any unset default configuration
+// options on the  or ControlPlane. It allows overriding the defaults via the provided
 // PodTemplateSpec. The default configuration is passed as the last argument.
 // EnvVars are sorted lexographically as a side effect.
 // It also returns the updated EnvVar slice.
-func FillDataPlaneProxyContainerEnvs(existing []corev1.EnvVar, podTemplateSpec *corev1.PodTemplateSpec, envSet map[string]string) {
+func FillContainerEnvs(existing []corev1.EnvVar, podTemplateSpec *corev1.PodTemplateSpec, containerName string, envSet map[string]string) {
 	if podTemplateSpec == nil {
 		return
 	}
 
 	podSpec := &podTemplateSpec.Spec
-	container := k8sutils.GetPodContainerByName(podSpec, consts.DataPlaneProxyContainerName)
+	container := k8sutils.GetPodContainerByName(podSpec, containerName)
 	if container == nil {
 		return
 	}
