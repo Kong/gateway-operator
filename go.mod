@@ -9,7 +9,7 @@ go 1.24.0
 retract v1.2.2
 
 require (
-	github.com/Kong/sdk-konnect-go v0.2.14
+	github.com/Kong/sdk-konnect-go v0.2.16
 	github.com/Masterminds/semver v1.5.0
 	github.com/cloudflare/cfssl v1.6.5
 	github.com/go-logr/logr v1.4.2
@@ -19,7 +19,7 @@ require (
 	github.com/google/go-containerregistry v0.20.3
 	github.com/google/uuid v1.6.0
 	github.com/gruntwork-io/terratest v0.48.2
-	github.com/kong/kubernetes-configuration v1.2.0-rc.1.0.20250225175646-4662c505b8e7
+	github.com/kong/kubernetes-configuration v1.2.0-rc.1.0.20250226124621-148cbaed8d99
 	github.com/kong/kubernetes-telemetry v0.1.8
 	github.com/kong/kubernetes-testing-framework v0.47.2
 	github.com/kong/semver/v4 v4.0.1

@@ -2,7 +2,10 @@ package dataplane
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+
+	"github.com/samber/lo"
 
 	"github.com/kong/gateway-operator/pkg/consts"
 
@@ -67,7 +70,10 @@ var kongInKonnectClusterTypeIngressController = map[string]string{
 }
 
 // KongInKonnectDefaults returns the map of Konnect-related env vars properly configured.
-func KongInKonnectDefaults(konnectExtensionStatus konnectv1alpha1.KonnectExtensionStatus) map[string]string {
+func KongInKonnectDefaults(
+	dpLabels map[string]konnectv1alpha1.DataPlaneLabelValue,
+	konnectExtensionStatus konnectv1alpha1.KonnectExtensionStatus,
+) map[string]string {
 	newEnvSet := make(map[string]string, len(kongInKonnectClusterTypeControlPlaneDefaults))
 	var template map[string]string
 
@@ -86,9 +92,24 @@ func KongInKonnectDefaults(konnectExtensionStatus konnectv1alpha1.KonnectExtensi
 		v = strings.ReplaceAll(v, "<TELEMETRY-ENDPOINT>", sanitizeEndpoint(konnectExtensionStatus.Konnect.Endpoints.TelemetryEndpoint))
 		newEnvSet[k] = v
 	}
+
+	if len(dpLabels) > 0 {
+		newEnvSet["KONG_CLUSTER_DP_LABELS"] = clusterDataPlaneLabelStringFromLabels(dpLabels)
+	}
+
 	return newEnvSet
 }
 
 func sanitizeEndpoint(endpoint string) string {
 	return strings.TrimPrefix(endpoint, "https://")
+}
+
+func clusterDataPlaneLabelStringFromLabels(labels map[string]konnectv1alpha1.DataPlaneLabelValue) string {
+	labelStrings := lo.MapToSlice(
+		labels, func(k string, v konnectv1alpha1.DataPlaneLabelValue) string {
+			return fmt.Sprintf("%s:%s", k, v)
+		},
+	)
+	sort.Strings(labelStrings)
+	return strings.Join(labelStrings, ",")
 }
