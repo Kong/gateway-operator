@@ -10,9 +10,9 @@ import (
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
 )
 
-// createKongDataPlaneClientCertificate creates a KongDataPlaneClientCertificate in Konnect.
+// CreateKongDataPlaneClientCertificate creates a KongDataPlaneClientCertificate in Konnect.
 // It sets the KonnectID in the KongDataPlaneClientCertificate status.
-func createKongDataPlaneClientCertificate(
+func CreateKongDataPlaneClientCertificate(
 	ctx context.Context,
 	sdk sdkops.DataPlaneClientCertificatesSDK,
 	cert *configurationv1alpha1.KongDataPlaneClientCertificate,
@@ -39,6 +39,22 @@ func createKongDataPlaneClientCertificate(
 	cert.SetKonnectID(*resp.DataPlaneClientCertificate.Item.ID)
 
 	return nil
+}
+
+func ListKongDataPlaneClientCertificates(
+	ctx context.Context,
+	sdk sdkops.DataPlaneClientCertificatesSDK,
+	cpID string,
+) ([]sdkkonnectcomp.DataPlaneClientCertificateItem, error) {
+	resp, err := sdk.ListDpClientCertificates(ctx, cpID)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.ListDataPlaneCertificatesResponse == nil || resp.ListDataPlaneCertificatesResponse.Items == nil {
+		return nil, nil
+	}
+	return resp.ListDataPlaneCertificatesResponse.Items, nil
 }
 
 // deleteKongDataPlaneClientCertificate deletes a KongDataPlaneClientCertificate in Konnect.

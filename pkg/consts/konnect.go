@@ -1,5 +1,9 @@
 package consts
 
+// -----------------------------------------------------------------------------
+// Consts - Finalizers
+// -----------------------------------------------------------------------------
+
 const (
 	// CleanupPluginBindingFinalizer is the finalizer that is attached to entities that
 	// are referenced as targets by managed KongPluginBindings (binding instances created
@@ -11,4 +15,17 @@ const (
 	// properly referenced by KongPluginBindings.
 	// It avoids that KongPlugins get deleted when KongPluginBindings are still referencing them.
 	PluginInUseFinalizer = "gateway.konghq.com/plugin-in-use"
+	// DataPlaneKonnectExtensionFinalizer is the finalizer added to the secret
+	// referenced by KonnectExtension to ensure that the secret is not deleted
+	// when in use by an active KonnectExtension.
+	SecretKonnectExtensionFinalizer = "gateway-operator.konghq.com/secret-in-use"
+)
+
+// -----------------------------------------------------------------------------
+// Consts - Labels
+// -----------------------------------------------------------------------------
+const (
+	// DataPlaneCertificateIDLabelKey is the label key used to store the certificate ID
+	// associated with the secret resource.
+	DataPlaneCertificateIDLabelKey = "konnect.konghq.com/certificate-id"
 )
