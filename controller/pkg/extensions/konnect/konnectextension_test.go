@@ -23,7 +23,7 @@ import (
 	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
-func TestApplyKonnectExtension(t *testing.T) {
+func TestApplyDataPlaneKonnectExtension(t *testing.T) {
 	s := scheme.Scheme
 	require.NoError(t, operatorv1alpha1.AddToScheme(s))
 	require.NoError(t, operatorv1beta1.AddToScheme(s))
@@ -365,7 +365,7 @@ func TestApplyKonnectExtension(t *testing.T) {
 			cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
 			dataplane := tt.dataPlane.DeepCopy()
-			err := ApplyKonnectExtension(t.Context(), cl, dataplane)
+			err := ApplyDataPlaneKonnectExtension(t.Context(), cl, dataplane)
 			if tt.expectedError != nil {
 				require.ErrorIs(t, err, tt.expectedError)
 				return
