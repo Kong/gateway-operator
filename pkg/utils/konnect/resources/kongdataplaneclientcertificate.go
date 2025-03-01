@@ -1,9 +1,10 @@
 package resources
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	commonv1alpha1 "github.com/kong/kubernetes-configuration/api/common/v1alpha1"
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/api/configuration/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func GenerateKongDataPlaneClientCertificate(name, namespace string, controlPlaneRef *commonv1alpha1.ControlPlaneRef, cert string, opts ...func(dpCert *configurationv1alpha1.KongDataPlaneClientCertificate)) configurationv1alpha1.KongDataPlaneClientCertificate {

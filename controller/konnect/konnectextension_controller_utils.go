@@ -5,10 +5,11 @@ import (
 	"errors"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
-	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
 func getKonnectAPIAuthRefNN(_ context.Context, _ client.Client, ext *konnectv1alpha1.KonnectExtension) (types.NamespacedName, error) {

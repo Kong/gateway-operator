@@ -57,10 +57,10 @@ func ListKongDataPlaneClientCertificates(
 	return resp.ListDataPlaneCertificatesResponse.Items, nil
 }
 
-// deleteKongDataPlaneClientCertificate deletes a KongDataPlaneClientCertificate in Konnect.
+// DeleteKongDataPlaneClientCertificate deletes a KongDataPlaneClientCertificate in Konnect.
 // The KongDataPlaneClientCertificate must have a KonnectID set in its status.
 // It returns an error if the operation fails.
-func deleteKongDataPlaneClientCertificate(
+func DeleteKongDataPlaneClientCertificate(
 	ctx context.Context,
 	sdk sdkops.DataPlaneClientCertificatesSDK,
 	cert *configurationv1alpha1.KongDataPlaneClientCertificate,

@@ -2,12 +2,14 @@ package konnect
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"time"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	"github.com/samber/lo"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -160,9 +162,17 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	var updated bool
-	switch len(dataPlaneList.Items) {
-	case 0:
+	var updated, cleanup bool
+
+	// if the extension is marked for deletion and no dataplane is using it, we can proceed with the cleanup.
+	if !ext.DeletionTimestamp.IsZero() &&
+		ext.DeletionTimestamp.Before(lo.ToPtr(metav1.Now())) &&
+		len(dataPlaneList.Items) == 0 {
+		cleanup = true
+	}
+
+	switch {
+	case len(dataPlaneList.Items) == 0:
 		updated = controllerutil.RemoveFinalizer(&ext, consts.DataPlaneKonnectExtensionFinalizer)
 	default:
 		updated = controllerutil.AddFinalizer(&ext, consts.DataPlaneKonnectExtensionFinalizer)
@@ -174,11 +184,11 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			return ctrl.Result{}, err
 		}
-
-		log.Info(logger, "KonnectExtension finalizer updated")
+		log.Debug(logger, "Extension-in-use finalizer changed on KonnectExtension")
+		return ctrl.Result{}, nil
 	}
 
-	if !ext.DeletionTimestamp.IsZero() && !controllerutil.ContainsFinalizer(&ext, consts.DataPlaneKonnectExtensionFinalizer) {
+	if !ext.DeletionTimestamp.IsZero() {
 		if ext.DeletionTimestamp.After(time.Now()) {
 			log.Debug(logger, "deletion still under grace period")
 			return ctrl.Result{
@@ -188,35 +198,54 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		certificateSecret, err := getCertificateSecret(ctx, r.Client, ext)
-		if err != nil {
-			if client.IgnoreNotFound(err) != nil {
-				return ctrl.Result{}, err
+		if client.IgnoreNotFound(err) != nil {
+			return ctrl.Result{}, err
+		}
+
+		// if the secret does not have the konnect-cleanup finalizer, the certificate has been properly cleaned up
+		// in Konnect, and we can proceed with the further cleanup.
+		if !controllerutil.ContainsFinalizer(certificateSecret, KonnectCleanupFinalizer) {
+			updated = controllerutil.RemoveFinalizer(certificateSecret, consts.SecretKonnectExtensionFinalizer)
+			if updated {
+				if err := r.Client.Update(ctx, certificateSecret); err != nil {
+					if k8serrors.IsConflict(err) {
+						return ctrl.Result{Requeue: true}, nil
+					}
+					return ctrl.Result{}, err
+				}
+				log.Debug(logger, "Secret-in-use finalizer removed from Secret")
+			}
+
+			updated = controllerutil.RemoveFinalizer(&ext, KonnectCleanupFinalizer)
+			if updated {
+				if err := r.Client.Update(ctx, &ext); err != nil {
+					if k8serrors.IsConflict(err) {
+						return ctrl.Result{Requeue: true}, nil
+					}
+					return ctrl.Result{}, err
+				}
+				log.Debug(logger, "Konnect-cleanup finalizer removed from KonnectExtension")
 			}
 			return ctrl.Result{}, nil
 		}
-		updated = controllerutil.RemoveFinalizer(certificateSecret, consts.SecretKonnectExtensionFinalizer)
-		if updated {
-			if err := r.Client.Update(ctx, certificateSecret); err != nil {
-				if k8serrors.IsConflict(err) {
-					return ctrl.Result{Requeue: true}, nil
-				}
-				return ctrl.Result{}, err
-			}
-			log.Info(logger, "Secret finalizer removed")
-		}
-		return ctrl.Result{}, nil
+	}
+
+	readyCondition := metav1.Condition{
+		Type:    konnectv1alpha1.KonnectExtensionReadyConditionType,
+		Status:  metav1.ConditionFalse,
+		Reason:  konnectv1alpha1.KonnectExtensionReadyReasonProvisioning,
+		Message: "provisioning in progress",
 	}
 
 	if cond, present := k8sutils.GetCondition(konnectv1alpha1.KonnectExtensionReadyConditionType, &ext); !present ||
 		(cond.Status == metav1.ConditionFalse && cond.Reason == konnectv1alpha1.KonnectExtensionReadyReasonPending) ||
 		cond.ObservedGeneration != ext.GetGeneration() {
-		if res, err := patch.StatusWithCondition(
-			ctx, r.Client, &ext,
-			consts.ConditionType(konnectv1alpha1.KonnectExtensionReadyConditionType),
-			metav1.ConditionFalse,
-			consts.ConditionReason(konnectv1alpha1.KonnectExtensionReadyReasonProvisioning),
-			"provisioning in progress",
-		); err != nil || !res.IsZero() {
+		if res, updated, err := patch.StatusWithConditions(
+			ctx,
+			r.Client,
+			&ext,
+			readyCondition,
+		); err != nil || updated || !res.IsZero() {
 			return res, err
 		}
 	}
@@ -230,19 +259,36 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	var apiAuth konnectv1alpha1.KonnectAPIAuthConfiguration
 	err = r.Client.Get(ctx, apiAuthRef, &apiAuth)
-	if requeue, res, retErr := handleAPIAuthStatusCondition(ctx, r.Client, &ext, apiAuth, err); requeue {
+	if requeue, res, retErr := handleAPIAuthStatusCondition(
+		ctx,
+		r.Client,
+		&ext,
+		apiAuth,
+		err,
+		readyCondition,
+	); requeue {
 		return res, retErr
+	}
+
+	apiAuthConfigValidCond := metav1.Condition{
+		Type:    konnectv1alpha1.KonnectEntityAPIAuthConfigurationValidConditionType,
+		Status:  metav1.ConditionTrue,
+		Reason:  konnectv1alpha1.KonnectEntityAPIAuthConfigurationReasonValid,
+		Message: "APIAuthConfiguration is valid",
 	}
 
 	token, err := getTokenFromKonnectAPIAuthConfiguration(ctx, r.Client, &apiAuth)
 	if err != nil {
-		if res, errStatus := patch.StatusWithCondition(
-			ctx, r.Client, &ext,
-			konnectv1alpha1.KonnectEntityAPIAuthConfigurationValidConditionType,
-			metav1.ConditionFalse,
-			konnectv1alpha1.KonnectEntityAPIAuthConfigurationReasonInvalid,
-			err.Error(),
-		); errStatus != nil || !res.IsZero() {
+		apiAuthConfigValidCond.Status = metav1.ConditionFalse
+		apiAuthConfigValidCond.Reason = konnectv1alpha1.KonnectEntityAPIAuthConfigurationReasonInvalid
+		apiAuthConfigValidCond.Message = err.Error()
+		if res, updated, errStatus := patch.StatusWithConditions(
+			ctx,
+			r.Client,
+			&ext,
+			readyCondition,
+			apiAuthConfigValidCond,
+		); errStatus != nil || updated || !res.IsZero() {
 			return res, errStatus
 		}
 		return ctrl.Result{}, err
@@ -257,56 +303,103 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		sdkops.SDKToken(token),
 	)
 
+	controlPlaneRefValidCond := metav1.Condition{
+		Type:    konnectv1alpha1.ControlPlaneRefValidConditionType,
+		Status:  metav1.ConditionTrue,
+		Reason:  konnectv1alpha1.ControlPlaneRefReasonValid,
+		Message: "ControlPlaneRef is valid",
+	}
+
 	cp, err := ops.GetControlPlaneByID(ctx, sdk.GetControlPlaneSDK(), *ext.Spec.KonnectControlPlane.ControlPlaneRef.KonnectID)
 	if err != nil {
-		_, err := patch.StatusWithCondition(
-			ctx, r.Client, &ext,
-			consts.ConditionType(konnectv1alpha1.ControlPlaneRefValidConditionType),
-			metav1.ConditionFalse,
-			consts.ConditionReason(konnectv1alpha1.ControlPlaneRefReasonInvalid),
-			err.Error(),
+		controlPlaneRefValidCond.Status = metav1.ConditionFalse
+		controlPlaneRefValidCond.Reason = konnectv1alpha1.ControlPlaneRefReasonInvalid
+		controlPlaneRefValidCond.Message = err.Error()
+		_, _, err := patch.StatusWithConditions(
+			ctx,
+			r.Client,
+			&ext,
+			readyCondition,
+			controlPlaneRefValidCond,
 		)
 		return ctrl.Result{}, err
 	}
-	if res, err := patch.StatusWithCondition(
-		ctx, r.Client, &ext,
-		consts.ConditionType(konnectv1alpha1.ControlPlaneRefValidConditionType),
-		metav1.ConditionTrue,
-		consts.ConditionReason(konnectv1alpha1.ControlPlaneRefReasonValid),
-		"ControlPlaneRef is valid",
-	); err != nil || !res.IsZero() {
+
+	if res, updated, err := patch.StatusWithConditions(
+		ctx,
+		r.Client,
+		&ext,
+		controlPlaneRefValidCond,
+	); err != nil || updated || !res.IsZero() {
 		return res, err
 	}
 
 	log.Debug(logger, "controlPlane reference validity checked")
 
+	certProvisionedCond := metav1.Condition{
+		Type:    konnectv1alpha1.DataPlaneCertificateProvisionedConditionType,
+		Status:  metav1.ConditionTrue,
+		Reason:  konnectv1alpha1.DataPlaneCertificateProvisionedReasonProvisioned,
+		Message: "DataPlane client certificate is provisioned",
+	}
 	certificateSecret, err := getCertificateSecret(ctx, r.Client, ext)
 	if err != nil {
-		_, err := patch.StatusWithCondition(
-			ctx, r.Client, &ext,
-			consts.ConditionType(konnectv1alpha1.DataPlaneCertificateProvisionedConditionType),
-			metav1.ConditionFalse,
-			consts.ConditionReason(konnectv1alpha1.DataPlaneCertificateProvisionedReasonRefNotFound),
-			err.Error(),
+		certProvisionedCond.Status = metav1.ConditionFalse
+		certProvisionedCond.Reason = konnectv1alpha1.DataPlaneCertificateProvisionedReasonRefNotFound
+		certProvisionedCond.Message = err.Error()
+		_, _, err := patch.StatusWithConditions(
+			ctx,
+			r.Client,
+			&ext,
+			readyCondition,
+			certProvisionedCond,
 		)
 		return ctrl.Result{}, err
 	}
 
 	certData, ok := certificateSecret.Data[consts.TLSCRT]
 	if !ok {
-		_, err := patch.StatusWithCondition(
-			ctx, r.Client, &ext,
-			consts.ConditionType(konnectv1alpha1.DataPlaneCertificateProvisionedConditionType),
-			metav1.ConditionFalse,
-			consts.ConditionReason(konnectv1alpha1.DataPlaneCertificateProvisionedReasonInvalidSecret),
-			"the secret does not contain a valid tls secret",
+		certProvisionedCond.Status = metav1.ConditionFalse
+		certProvisionedCond.Reason = konnectv1alpha1.DataPlaneCertificateProvisionedReasonInvalidSecret
+		certProvisionedCond.Message = "the secret does not contain a valid tls secret"
+		_, _, err := patch.StatusWithConditions(
+			ctx,
+			r.Client,
+			&ext,
+			readyCondition,
+			certProvisionedCond,
 		)
 		return ctrl.Result{}, err
 	}
 
 	log.Debug(logger, "DataPlane client certificate validity checked")
 
-	updated = controllerutil.AddFinalizer(certificateSecret, consts.SecretKonnectExtensionFinalizer)
+	dpCertificates, err := ops.ListKongDataPlaneClientCertificates(ctx, sdk.GetDataPlaneCertificatesSDK(), cp.ID)
+	if err != nil {
+		certProvisionedCond.Status = metav1.ConditionFalse
+		certProvisionedCond.Reason = konnectv1alpha1.DataPlaneCertificateProvisionedReasonKonnectAPIOpFailed
+		certProvisionedCond.Message = err.Error()
+		_, _, err := patch.StatusWithConditions(
+			ctx,
+			r.Client,
+			&ext,
+			readyCondition,
+			certProvisionedCond,
+		)
+		return ctrl.Result{}, err
+	}
+
+	cert, certFound := lo.Find(dpCertificates, func(cert sdkkonnectcomp.DataPlaneClientCertificateItem) bool {
+		if cert.Cert != nil {
+			if strings.ReplaceAll(*cert.Cert, "\r", "") == string(certData) {
+				return true
+			}
+		}
+		return false
+	})
+
+	updated = controllerutil.AddFinalizer(certificateSecret, consts.SecretKonnectExtensionFinalizer) ||
+		controllerutil.AddFinalizer(certificateSecret, KonnectCleanupFinalizer)
 	if updated {
 		if err := r.Client.Update(ctx, certificateSecret); err != nil {
 			if k8serrors.IsConflict(err) {
@@ -319,60 +412,107 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	dpCertificates, err := ops.ListKongDataPlaneClientCertificates(ctx, sdk.GetDataPlaneCertificatesSDK(), cp.ID)
-	if err != nil {
-		_, err := patch.StatusWithCondition(
-			ctx, r.Client, &ext,
-			consts.ConditionType(konnectv1alpha1.DataPlaneCertificateProvisionedConditionType),
-			metav1.ConditionFalse,
-			consts.ConditionReason(konnectv1alpha1.DataPlaneCertificateProvisionedReasonKonnectAPIOpFailed),
-			err.Error(),
-		)
-		return ctrl.Result{}, err
-	}
-
-	certFound := lo.ContainsBy(dpCertificates, func(cert sdkkonnectcomp.DataPlaneClientCertificateItem) bool {
-		if cert.Cert != nil {
-			if strings.ReplaceAll(*cert.Cert, "\r", "") == string(certData) {
-				return true
+	switch {
+	case !certFound && !cleanup:
+		updated = controllerutil.AddFinalizer(&ext, KonnectCleanupFinalizer)
+		if updated {
+			if err := r.Client.Update(ctx, &ext); err != nil {
+				if k8serrors.IsConflict(err) {
+					return ctrl.Result{Requeue: true}, nil
+				}
+				return ctrl.Result{}, err
 			}
+			log.Info(logger, "konnectCleanup finalizer addded on konnectExtension")
+			return ctrl.Result{}, nil
 		}
-		return false
-	})
-	if !certFound {
+
+		log.Debug(logger, "DataPlane client certificate enforced in Konnect")
 		dpCert := konnectresource.GenerateKongDataPlaneClientCertificate(
 			certificateSecret.Name,
 			certificateSecret.Namespace,
 			&ext.Spec.KonnectControlPlane.ControlPlaneRef,
 			string(certificateSecret.Data[consts.TLSCRT]),
 			func(dpCert *configurationv1alpha1.KongDataPlaneClientCertificate) {
-				// setting the status as a workaround for the GetControlPlaneID method, that expects the ID to be set in the status.
 				dpCert.Status.Konnect = &konnectv1alpha1.KonnectEntityStatusWithControlPlaneRef{
+					// setting the controlPlane ID in the status as a workaround for the GetControlPlaneID method,
+					// that expects the ControlPlaneID to be set in the status.
 					ControlPlaneID: cp.ID,
 				}
 			},
 		)
 		if err := ops.CreateKongDataPlaneClientCertificate(ctx, sdk.GetDataPlaneCertificatesSDK(), &dpCert); err != nil {
-			_, err := patch.StatusWithCondition(
-				ctx, r.Client, &ext,
-				consts.ConditionType(konnectv1alpha1.DataPlaneCertificateProvisionedConditionType),
-				metav1.ConditionFalse,
-				consts.ConditionReason(konnectv1alpha1.DataPlaneCertificateProvisionedReasonKonnectAPIOpFailed),
-				err.Error(),
+			certProvisionedCond.Status = metav1.ConditionFalse
+			certProvisionedCond.Reason = konnectv1alpha1.DataPlaneCertificateProvisionedReasonKonnectAPIOpFailed
+			certProvisionedCond.Message = err.Error()
+			_, _, err := patch.StatusWithConditions(
+				ctx,
+				r.Client,
+				&ext,
+				readyCondition,
+				certProvisionedCond,
 			)
 			// In case of an error in the Konnect ops, the resync period will take care of a new creation attempt.
 			return ctrl.Result{}, err
 		}
-		log.Debug(logger, "DataPlane client certificate enforced in Konnect")
+	case cleanup:
+		if certFound {
+			// This should never happen, but checking to make the dereference below bullet-proof
+			if cert.ID == nil {
+				return ctrl.Result{}, errors.New("cannot cleanup certificate in Konnect without ID")
+			}
+			dpCert := konnectresource.GenerateKongDataPlaneClientCertificate(
+				certificateSecret.Name,
+				certificateSecret.Namespace,
+				&ext.Spec.KonnectControlPlane.ControlPlaneRef,
+				string(certificateSecret.Data[consts.TLSCRT]),
+				func(dpCert *configurationv1alpha1.KongDataPlaneClientCertificate) {
+					dpCert.Status.Konnect = &konnectv1alpha1.KonnectEntityStatusWithControlPlaneRef{
+						// setting the controlPlane ID in the status as a workaround for the GetControlPlaneID method,
+						// that expects the ControlPlaneID to be set in the status.
+						ControlPlaneID: cp.ID,
+						// setting the ID in the status as a workaround for the DeleteKongDataPlaneClientCertificate method,
+						// that expects the ID to be set in the status.
+						KonnectEntityStatus: konnectv1alpha1.KonnectEntityStatus{
+							ID: *cert.ID,
+						},
+					}
+				},
+			)
+			if err := ops.DeleteKongDataPlaneClientCertificate(ctx, sdk.GetDataPlaneCertificatesSDK(), &dpCert); err != nil {
+				certProvisionedCond.Status = metav1.ConditionFalse
+				certProvisionedCond.Reason = konnectv1alpha1.DataPlaneCertificateProvisionedReasonKonnectAPIOpFailed
+				certProvisionedCond.Message = err.Error()
+				_, _, err := patch.StatusWithConditions(
+					ctx,
+					r.Client,
+					&ext,
+					readyCondition,
+					certProvisionedCond,
+				)
+				// In case of an error in the Konnect ops, the resync period will take care of a new creation attempt.
+				return ctrl.Result{}, err
+			}
+		}
+		updated = controllerutil.RemoveFinalizer(certificateSecret, KonnectCleanupFinalizer)
+		if updated {
+			if err := r.Client.Update(ctx, certificateSecret); err != nil {
+				if k8serrors.IsConflict(err) {
+					return ctrl.Result{Requeue: true}, nil
+				}
+				return ctrl.Result{}, err
+			}
+			log.Info(logger, "Secret finalizer removed")
+		}
+		log.Debug(logger, "DataPlane client certificate Deleted in Konnect")
+		return ctrl.Result{Requeue: true}, nil
 	}
 
-	if res, err := patch.StatusWithCondition(
-		ctx, r.Client, &ext,
-		consts.ConditionType(konnectv1alpha1.DataPlaneCertificateProvisionedConditionType),
-		metav1.ConditionTrue,
-		consts.ConditionReason(konnectv1alpha1.DataPlaneCertificateProvisionedReasonProvisioned),
-		"DataPlane client certificate is provisioned",
-	); err != nil || !res.IsZero() {
+	if res, updated, err := patch.StatusWithConditions(
+		ctx,
+		r.Client,
+		&ext,
+		certProvisionedCond,
+	); err != nil || updated || !res.IsZero() {
 		return res, err
 	}
 
@@ -396,13 +536,19 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Debug(logger, "Status data updated")
 	}
 
-	if res, err := patch.StatusWithCondition(
-		ctx, r.Client, &ext,
-		consts.ConditionType(konnectv1alpha1.KonnectExtensionReadyConditionType),
-		metav1.ConditionTrue,
-		consts.ConditionReason(konnectv1alpha1.KonnectExtensionReadyReasonReady),
-		"KonnectExtension is ready",
-	); err != nil || !res.IsZero() {
+	readyCondition = metav1.Condition{
+		Type:    konnectv1alpha1.KonnectExtensionReadyConditionType,
+		Status:  metav1.ConditionTrue,
+		Reason:  konnectv1alpha1.KonnectExtensionReadyReasonReady,
+		Message: "KonnectExtension is ready",
+	}
+
+	if res, updated, err := patch.StatusWithConditions(
+		ctx,
+		r.Client,
+		&ext,
+		readyCondition,
+	); err != nil || updated || !res.IsZero() {
 		return res, err
 	}
 
