@@ -345,7 +345,7 @@ func applyExtensions(ctx context.Context, cl client.Client, logger logr.Logger, 
 
 	// in case the extensionsCondition is true, let's apply the extensions.
 	if extensionsCondition.Status == metav1.ConditionTrue {
-		condition = k8sutils.NewConditionWithGeneration(consts.KonnectExtensionAppliedType, metav1.ConditionTrue, consts.KonnectExtensionAppliedReason, "", dataplane.GetGeneration())
+		condition = k8sutils.NewConditionWithGeneration(consts.KonnectExtensionAppliedType, metav1.ConditionTrue, consts.KonnectExtensionAppliedReason, "The Konnect extension has been successfully applied.", dataplane.GetGeneration())
 		err = konnectextension.ApplyKonnectExtension(ctx, cl, dataplane)
 		if err != nil {
 			switch {
