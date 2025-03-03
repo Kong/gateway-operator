@@ -572,6 +572,7 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 					sdkFactory,
 					c.DevelopmentMode,
 					mgr.GetClient(),
+					c.KonnectSyncPeriod,
 				),
 			},
 
