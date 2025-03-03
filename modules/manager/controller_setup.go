@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/kong/kubernetes-ingress-controller/v3/pkg/manager/multiinstance"
 	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -123,8 +124,8 @@ const (
 )
 
 // SetupControllersShim runs SetupControllers and returns its result as a slice of the map values.
-func SetupControllersShim(mgr manager.Manager, c *Config) ([]ControllerDef, error) {
-	controllers, err := SetupControllers(mgr, c)
+func SetupControllersShim(mgr manager.Manager, c *Config, cpsMgr *multiinstance.Manager) ([]ControllerDef, error) {
+	controllers, err := SetupControllers(mgr, c, cpsMgr)
 	if err != nil {
 		return []ControllerDef{}, err
 	}
@@ -199,7 +200,7 @@ func setupIndexes(ctx context.Context, mgr manager.Manager, cfg Config) error {
 }
 
 // SetupControllers returns a list of ControllerDefs based on config.
-func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef, error) {
+func SetupControllers(mgr manager.Manager, c *Config, cpsMgr *multiinstance.Manager) (map[string]ControllerDef, error) {
 	ctx := context.Background()
 	// metricRecorder is the recorder used to record custom metrics in the controller manager's metrics server.
 	metricRecorder := metrics.NewGlobalCtrlRuntimeMetricsRecorder()
@@ -438,6 +439,8 @@ func SetupControllers(mgr manager.Manager, c *Config) (map[string]ControllerDef,
 				DevelopmentMode:          c.DevelopmentMode,
 				KonnectEnabled:           c.KonnectControllersEnabled,
 				EnforceConfig:            c.EnforceConfig,
+				RestConfig:               mgr.GetConfig(),
+				InstancesManager:         cpsMgr,
 			},
 		},
 		// DataPlane controller
