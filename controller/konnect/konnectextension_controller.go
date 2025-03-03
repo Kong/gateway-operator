@@ -37,6 +37,8 @@ import (
 	konnectv1alpha1 "github.com/kong/kubernetes-configuration/api/konnect/v1alpha1"
 )
 
+const konnectIDsAnnotationKey = "konnect.konghq.com/certificates-id"
+
 // KonnectExtensionReconciler reconciles a KonnectExtension object.
 type KonnectExtensionReconciler struct {
 	client.Client
@@ -315,14 +317,16 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		controlPlaneRefValidCond.Status = metav1.ConditionFalse
 		controlPlaneRefValidCond.Reason = konnectv1alpha1.ControlPlaneRefReasonInvalid
 		controlPlaneRefValidCond.Message = err.Error()
-		_, _, err := patch.StatusWithConditions(
+		if _, _, err := patch.StatusWithConditions(
 			ctx,
 			r.Client,
 			&ext,
 			readyCondition,
 			controlPlaneRefValidCond,
-		)
-		return ctrl.Result{}, err
+		); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: r.SyncPeriod}, nil
 	}
 
 	if res, updated, err := patch.StatusWithConditions(
@@ -372,6 +376,20 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
+	updated = controllerutil.AddFinalizer(certificateSecret, consts.SecretKonnectExtensionFinalizer) ||
+		controllerutil.AddFinalizer(certificateSecret, KonnectCleanupFinalizer)
+	if updated {
+		if err := r.Client.Update(ctx, certificateSecret); err != nil {
+			if k8serrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, err
+		}
+
+		log.Info(logger, "Secret finalizer updated")
+		return ctrl.Result{}, nil
+	}
+
 	log.Debug(logger, "DataPlane client certificate validity checked")
 
 	dpCertificates, err := ops.ListKongDataPlaneClientCertificates(ctx, sdk.GetDataPlaneCertificatesSDK(), cp.ID)
@@ -388,27 +406,48 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		)
 		return ctrl.Result{}, err
 	}
-
+	mappedIDs := lo.FilterSliceToMap(strings.Split(certificateSecret.Annotations[konnectIDsAnnotationKey], ","),
+		func(item string) (k string, v struct{}, include bool) {
+			if item == "" {
+				return "", struct{}{}, false
+			}
+			return item, struct{}{}, true
+		},
+	)
 	cert, certFound := lo.Find(dpCertificates, func(cert sdkkonnectcomp.DataPlaneClientCertificateItem) bool {
 		if cert.Cert != nil {
-			if strings.ReplaceAll(*cert.Cert, "\r", "") == string(certData) {
-				return true
+			certStr := sanitizeCert(*cert.Cert)
+			certDataStr := sanitizeCert(string(certData))
+			if certStr == certDataStr {
+				if _, ok := mappedIDs[*cert.ID]; ok {
+					return true
+				}
 			}
 		}
 		return false
 	})
 
-	updated = controllerutil.AddFinalizer(certificateSecret, consts.SecretKonnectExtensionFinalizer) ||
-		controllerutil.AddFinalizer(certificateSecret, KonnectCleanupFinalizer)
-	if updated {
-		if err := r.Client.Update(ctx, certificateSecret); err != nil {
-			if k8serrors.IsConflict(err) {
-				return ctrl.Result{Requeue: true}, nil
+	// heal the annotation value in case there is mismatch between its value
+	// and the actual certificates in Konnect.
+	newMappedIDs := lo.FilterMap(dpCertificates, func(cert sdkkonnectcomp.DataPlaneClientCertificateItem, _ int) (string, bool) {
+		if cert.Cert != nil && cert.ID != nil {
+			certStr := sanitizeCert(*cert.Cert)
+			certDataStr := sanitizeCert(string(certData))
+			if certStr == certDataStr {
+				return *cert.ID, true
 			}
+		}
+		return "", false
+	})
+	newMappedIDsStr := strings.Join(newMappedIDs, ",")
+	if certificateSecret.Annotations[konnectIDsAnnotationKey] != newMappedIDsStr {
+		if certificateSecret.Annotations == nil {
+			certificateSecret.Annotations = map[string]string{}
+		}
+		certificateSecret.Annotations[konnectIDsAnnotationKey] = newMappedIDsStr
+		if err := r.Client.Update(ctx, certificateSecret); err != nil {
 			return ctrl.Result{}, err
 		}
-
-		log.Info(logger, "Secret finalizer updated")
 		return ctrl.Result{}, nil
 	}
 
@@ -493,18 +532,22 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				return ctrl.Result{}, err
 			}
 		}
-		updated = controllerutil.RemoveFinalizer(certificateSecret, KonnectCleanupFinalizer)
-		if updated {
-			if err := r.Client.Update(ctx, certificateSecret); err != nil {
-				if k8serrors.IsConflict(err) {
-					return ctrl.Result{Requeue: true}, nil
+
+		// in case no IDs are mapped to the secret, we can remove the finalizer from the secret.
+		if len(newMappedIDs) == 0 {
+			updated = controllerutil.RemoveFinalizer(certificateSecret, KonnectCleanupFinalizer)
+			if updated {
+				if err := r.Client.Update(ctx, certificateSecret); err != nil {
+					if k8serrors.IsConflict(err) {
+						return ctrl.Result{Requeue: true}, nil
+					}
+					return ctrl.Result{}, err
 				}
-				return ctrl.Result{}, err
+				log.Info(logger, "Secret finalizer removed")
 			}
-			log.Info(logger, "Secret finalizer removed")
+			log.Debug(logger, "DataPlane client certificate Deleted in Konnect")
+			return ctrl.Result{Requeue: true}, nil
 		}
-		log.Debug(logger, "DataPlane client certificate Deleted in Konnect")
-		return ctrl.Result{Requeue: true}, nil
 	}
 
 	if res, updated, err := patch.StatusWithConditions(

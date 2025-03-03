@@ -3,6 +3,7 @@ package konnect
 import (
 	"context"
 	"errors"
+	"strings"
 
 	sdkkonnectcomp "github.com/Kong/sdk-konnect-go/models/components"
 	corev1 "k8s.io/api/core/v1"
@@ -55,4 +56,10 @@ func konnectClusterTypeToCRDClusterType(clusterType sdkkonnectcomp.ControlPlaneC
 		// default never happens as the validation is at the CRD level
 		return ""
 	}
+}
+
+func sanitizeCert(cert string) string {
+	newCert := strings.TrimSuffix(cert, "\n")
+	newCert = strings.ReplaceAll(newCert, "\r", "")
+	return newCert
 }

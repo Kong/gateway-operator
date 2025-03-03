@@ -18,7 +18,7 @@ const (
 	// DataPlaneKonnectExtensionFinalizer is the finalizer added to the secret
 	// referenced by KonnectExtension to ensure that the secret is not deleted
 	// when in use by an active KonnectExtension.
-	SecretKonnectExtensionFinalizer = "gateway-operator.konghq.com/secret-in-use"
+	SecretKonnectExtensionFinalizer = "gateway.konghq.com/secret-in-use"
 )
 
 // -----------------------------------------------------------------------------
