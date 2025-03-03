@@ -2,4 +2,4 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/kong/kubernetes-configuration/config/crd/gateway-operator?ref=148cbaed8d9907da26bcc57996a2434daa211fd2 # Version is auto-updated by the generating script.
+  - https://github.com/kong/kubernetes-configuration/config/crd/gateway-operator?ref=3f15110b6c0598c81e94f4cdbc3738cc83fb297b # Version is auto-updated by the generating script.
