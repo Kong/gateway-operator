@@ -36,7 +36,7 @@ func CreateKongDataPlaneClientCertificate(
 		return errWrap
 	}
 
-	cert.SetKonnectID(*resp.DataPlaneClientCertificate.Item.ID)
+	cert.SetKonnectID(*resp.DataPlaneClientCertificateResponse.Item.ID)
 
 	return nil
 }
@@ -45,7 +45,7 @@ func ListKongDataPlaneClientCertificates(
 	ctx context.Context,
 	sdk sdkops.DataPlaneClientCertificatesSDK,
 	cpID string,
-) ([]sdkkonnectcomp.DataPlaneClientCertificateItem, error) {
+) ([]sdkkonnectcomp.DataPlaneClientCertificate, error) {
 	resp, err := sdk.ListDpClientCertificates(ctx, cpID)
 	if err != nil {
 		return nil, err

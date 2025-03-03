@@ -424,11 +424,11 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	var (
-		cert      sdkkonnectcomp.DataPlaneClientCertificateItem
+		cert      sdkkonnectcomp.DataPlaneClientCertificate
 		certFound bool
 	)
 	// retrieve all the konnect certificates bound to this secret
-	mappedIDs := lo.FilterMap(dpCertificates, func(c sdkkonnectcomp.DataPlaneClientCertificateItem, _ int) (k string, include bool) {
+	mappedIDs := lo.FilterMap(dpCertificates, func(c sdkkonnectcomp.DataPlaneClientCertificate, _ int) (k string, include bool) {
 		if c.Cert != nil && c.ID != nil {
 			certStr := sanitizeCert(*c.Cert)
 			certDataStr := sanitizeCert(string(certData))
