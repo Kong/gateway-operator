@@ -233,7 +233,7 @@ require (
 	sigs.k8s.io/kustomize/kyaml v0.19.0
 )
 
-require github.com/kong/kubernetes-ingress-controller/v3 v3.4.1-0.20250221103148-75284544910d
+require github.com/kong/kubernetes-ingress-controller/v3 v3.4.1-0.20250305132244-4792a9de2c43
 
 require (
 	dario.cat/mergo v1.0.1 // indirect
