@@ -351,6 +351,7 @@ func TestHelmUpgrade(t *testing.T) {
 					RestConfig: e.Environment.Cluster().Config(),
 				},
 				SetValues: values,
+				Version:   "0.4.5",
 			}
 
 			require.NoError(t, helm.AddRepoE(t, opts, "kong", "https://charts.konghq.com"))
