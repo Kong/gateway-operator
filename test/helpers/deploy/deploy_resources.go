@@ -1034,32 +1034,6 @@ func KonnectExtension(
 	return ke
 }
 
-// KonnectExtensionRefencingKonnectGatewayControlPlane deploys a KonnectExtension attached to a Konnect CP represented by the given KonnectGatewayControlPlane.
-func KonnectExtensionRefencingKonnectGatewayControlPlane(
-	t *testing.T,
-	ctx context.Context,
-	cl client.Client,
-	cp *konnectv1alpha1.KonnectGatewayControlPlane,
-) *konnectv1alpha1.KonnectExtension {
-	return KonnectExtension(
-		t, ctx, cl,
-		func(obj client.Object) {
-			ke, ok := obj.(*konnectv1alpha1.KonnectExtension)
-			require.Truef(t, ok, "Expect object %s/%s to be a KonnectExtension, actual type %T",
-				obj.GetNamespace(), obj.GetName(), obj)
-			ke.Spec.KonnectControlPlane = konnectv1alpha1.KonnectExtensionControlPlane{
-				ControlPlaneRef: commonv1alpha1.ControlPlaneRef{
-					Type: commonv1alpha1.ControlPlaneRefKonnectNamespacedRef,
-					KonnectNamespacedRef: &commonv1alpha1.KonnectNamespacedRef{
-						Name:      cp.Name,
-						Namespace: cp.Namespace,
-					},
-				},
-			}
-		},
-	)
-}
-
 // ObjectSupportingKonnectConfiguration defines the interface of types supporting setting `KonnectConfiguration`.
 type ObjectSupportingKonnectConfiguration interface {
 	*konnectv1alpha1.KonnectGatewayControlPlane |
@@ -1081,34 +1055,6 @@ func WithKonnectConfiguration[T ObjectSupportingKonnectConfiguration](
 			o.Spec.KonnectConfiguration = konnectConfiguration
 		}
 	}
-}
-
-// KonnectExtensionWithAPIAuthRefAndCPID deploys a KonnectExtension attaching to control plane
-// by the CP's ID and the API auth configuration to the Konnect server where the CP is in.
-func KonnectExtensionWithAPIAuthRefAndCPID(
-	t *testing.T,
-	ctx context.Context,
-	cl client.Client,
-	apiAuth konnectv1alpha1.KonnectAPIAuthConfigurationRef,
-	cpID string,
-	opts ...ObjOption,
-) *konnectv1alpha1.KonnectExtension {
-	opts = append(opts, func(obj client.Object) {
-		ke, ok := obj.(*konnectv1alpha1.KonnectExtension)
-		require.Truef(t, ok, "Expect object %s/%s to be a KonnectExtension, actual type %T",
-			obj.GetNamespace(), obj.GetName(), obj)
-		ke.Spec.KonnectConfiguration = &konnectv1alpha1.KonnectConfiguration{
-			APIAuthConfigurationRef: apiAuth,
-		}
-		ke.Spec.KonnectControlPlane.ControlPlaneRef = commonv1alpha1.ControlPlaneRef{
-			Type:      commonv1alpha1.ControlPlaneRefKonnectID,
-			KonnectID: lo.ToPtr(cpID),
-		}
-	})
-	return KonnectExtension(
-		t, ctx, cl,
-		opts...,
-	)
 }
 
 func logObjectCreate[
