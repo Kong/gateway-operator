@@ -331,7 +331,7 @@ func (r *Reconciler) setControlPlaneGatewayConfigDefaults(gateway *gwtypes.Gatew
 		// This change will not be saved in the API server (i.e. user applied resource
 		// will not be changed) - which is the desired behavior - since the caller
 		// only uses the changed GatewayConfiguration to generate ControlPlane resource.
-		container = lo.ToPtr[corev1.Container](k8sresources.GenerateControlPlaneContainer(
+		container = lo.ToPtr(k8sresources.GenerateControlPlaneContainer(
 			k8sresources.GenerateContainerForControlPlaneParams{
 				Image: consts.DefaultControlPlaneImage,
 			},
@@ -349,7 +349,6 @@ func (r *Reconciler) setControlPlaneGatewayConfigDefaults(gateway *gwtypes.Gatew
 			OwnedByGateway:              gateway.Name,
 			ControlPlaneName:            controlPlaneName,
 			AnonymousReportsEnabled:     controlplane.DeduceAnonymousReportsEnabled(r.DevelopmentMode, gatewayConfig.Spec.ControlPlaneOptions),
-		})
-
-	setControlPlaneOptionsDefaults(gatewayConfig.Spec.ControlPlaneOptions)
+		},
+	)
 }
