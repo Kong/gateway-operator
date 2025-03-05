@@ -212,8 +212,6 @@ func TestHelmUpgrade(t *testing.T) {
 				},
 			},
 		},
-		/**
-		// TODO(Jintao): This test is disabled. After a new nightly image is available which uses KIC 3.4.1, we can enable it.
 		{
 			name:             "upgrade from nightly to current",
 			fromVersion:      "nightly",
@@ -285,7 +283,6 @@ func TestHelmUpgrade(t *testing.T) {
 				},
 			},
 		},
-		**/
 	}
 
 	var (
@@ -304,8 +301,10 @@ func TestHelmUpgrade(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Repository is different for OSS and Enterprise images and it should be set accordingly.
 			kgoImageRepository := "docker.io/kong/gateway-operator-oss"
+			kgoImageRepositoryNightly := "docker.io/kong/nightly-gateway-operator-oss"
 			if helpers.GetDefaultDataPlaneBaseImage() == consts.DefaultDataPlaneBaseEnterpriseImage {
 				kgoImageRepository = "docker.io/kong/gateway-operator"
+				kgoImageRepositoryNightly = "docker.io/kong/nightly-gateway-operator"
 			}
 			var (
 				tag              string
@@ -329,6 +328,9 @@ func TestHelmUpgrade(t *testing.T) {
 				tagInReleaseName = tag[:8]
 			}
 			releaseName := strings.ReplaceAll(fmt.Sprintf("kgo-%s-to-%s", tc.fromVersion, tagInReleaseName), ".", "-")
+			if strings.Contains(tc.fromVersion, "nightly") {
+				kgoImageRepository = kgoImageRepositoryNightly
+			}
 			values := map[string]string{
 				"image.tag":                          tc.fromVersion,
 				"image.repository":                   kgoImageRepository,
@@ -349,6 +351,7 @@ func TestHelmUpgrade(t *testing.T) {
 					RestConfig: e.Environment.Cluster().Config(),
 				},
 				SetValues: values,
+				Version:   "0.4.5",
 			}
 
 			require.NoError(t, helm.AddRepoE(t, opts, "kong", "https://charts.konghq.com"))
