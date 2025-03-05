@@ -32,6 +32,7 @@ import (
 	k8sreduce "github.com/kong/gateway-operator/pkg/utils/kubernetes/reduce"
 	k8sresources "github.com/kong/gateway-operator/pkg/utils/kubernetes/resources"
 
+	commonv1alpha1 "github.com/kong/kubernetes-configuration/api/common/v1alpha1"
 	operatorv1beta1 "github.com/kong/kubernetes-configuration/api/gateway-operator/v1beta1"
 )
 
@@ -56,6 +57,16 @@ func (r *Reconciler) createDataPlane(ctx context.Context,
 	if err := setDataPlaneIngressServicePorts(&dataplane.Spec.DataPlaneOptions, gateway.Spec.Listeners); err != nil {
 		return nil, err
 	}
+	// Extensions at the DataPlane level have precedence over the ones at the GatewayConfiguration level.
+	// For that reason, set the extensions from the GatewayConfiguration if they are not already present in the DataPlane.
+	for _, ext := range gatewayConfig.Spec.Extensions {
+		if _, found := lo.Find(dataplane.Spec.Extensions, func(e commonv1alpha1.ExtensionRef) bool {
+			return e.Group == ext.Group && e.Kind == ext.Kind
+		}); !found {
+			dataplane.Spec.DataPlaneOptions.Extensions = append(dataplane.Spec.DataPlaneOptions.Extensions, ext)
+		}
+	}
+
 	k8sutils.SetOwnerForObject(dataplane, gateway)
 	gatewayutils.LabelObjectAsGatewayManaged(dataplane)
 	err := r.Client.Create(ctx, dataplane)
@@ -86,6 +97,16 @@ func (r *Reconciler) createControlPlane(
 	}
 	if controlplane.Spec.DataPlane == nil {
 		controlplane.Spec.DataPlane = &dataplaneName
+	}
+
+	// Extensions at the ControlPlane level have precedence over the ones at the GatewayConfiguration level.
+	// For that reason, set the extensions from the GatewayConfiguration if they are not already present in the ControlPlane.
+	for _, ext := range gatewayConfig.Spec.Extensions {
+		if _, found := lo.Find(controlplane.Spec.ControlPlaneOptions.Extensions, func(e commonv1alpha1.ExtensionRef) bool {
+			return e.Group == ext.Group && e.Kind == ext.Kind
+		}); !found {
+			controlplane.Spec.ControlPlaneOptions.Extensions = append(controlplane.Spec.ControlPlaneOptions.Extensions, ext)
+		}
 	}
 
 	setControlPlaneOptionsDefaults(&controlplane.Spec.ControlPlaneOptions)
@@ -126,7 +147,8 @@ func (r *Reconciler) getGatewayAddresses(
 }
 
 func gatewayConfigDataPlaneOptionsToDataPlaneOptions(
-	gatewayConfigNamespace string, opts operatorv1beta1.GatewayConfigDataPlaneOptions,
+	gatewayConfigNamespace string,
+	opts operatorv1beta1.GatewayConfigDataPlaneOptions,
 ) *operatorv1beta1.DataPlaneOptions {
 	// When Namespace is not provided, the GatewayConfiguration's namespace is assumed.
 	pluginsToInstall := lo.Map(opts.PluginsToInstall, func(pluginReference operatorv1beta1.NamespacedName, _ int) operatorv1beta1.NamespacedName {
@@ -138,6 +160,7 @@ func gatewayConfigDataPlaneOptionsToDataPlaneOptions(
 
 	dataPlaneOptions := &operatorv1beta1.DataPlaneOptions{
 		Deployment:       opts.Deployment,
+		Extensions:       opts.Extensions,
 		PluginsToInstall: pluginsToInstall,
 	}
 

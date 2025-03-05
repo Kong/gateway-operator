@@ -39,6 +39,7 @@ import (
 	k8sreduce "github.com/kong/gateway-operator/pkg/utils/kubernetes/reduce"
 	k8sresources "github.com/kong/gateway-operator/pkg/utils/kubernetes/resources"
 	"github.com/kong/gateway-operator/pkg/vars"
+	commonv1alpha1 "github.com/kong/kubernetes-configuration/api/common/v1alpha1"
 
 	operatorv1beta1 "github.com/kong/kubernetes-configuration/api/gateway-operator/v1beta1"
 )
@@ -479,6 +480,15 @@ func (r *Reconciler) provisionDataPlane(
 		)
 		return nil, errWrap
 	}
+	// Extensions at the DataPlane level have precedence over the ones at the GatewayConfiguration level.
+	// For that reason, set the extensions from the GatewayConfiguration if they are not already present in the DataPlane.
+	for _, ext := range gatewayConfig.Spec.Extensions {
+		if _, found := lo.Find(expectedDataPlaneOptions.Extensions, func(e commonv1alpha1.ExtensionRef) bool {
+			return e.Group == ext.Group && e.Kind == ext.Kind
+		}); !found {
+			expectedDataPlaneOptions.Extensions = append(expectedDataPlaneOptions.Extensions, ext)
+		}
+	}
 
 	if !dataplaneSpecDeepEqual(&dataplane.Spec.DataPlaneOptions, expectedDataPlaneOptions) {
 		log.Trace(logger, "dataplane config is out of date")
@@ -582,6 +592,15 @@ func (r *Reconciler) provisionControlPlane(
 	// Don't require setting defaults for ControlPlane when using Gateway CRD.
 	setControlPlaneOptionsDefaults(expectedControlPlaneOptions)
 
+	// Extensions at the ControlPlane level have precedence over the ones at the GatewayConfiguration level.
+	// For that reason, set the extensions from the GatewayConfiguration if they are not already present in the ControlPlane.
+	for _, ext := range gatewayConfig.Spec.Extensions {
+		if _, found := lo.Find(expectedControlPlaneOptions.Extensions, func(e commonv1alpha1.ExtensionRef) bool {
+			return e.Group == ext.Group && e.Kind == ext.Kind
+		}); !found {
+			expectedControlPlaneOptions.Extensions = append(expectedControlPlaneOptions.Extensions, ext)
+		}
+	}
 	if !controlplanecontroller.SpecDeepEqual(&controlPlane.Spec.ControlPlaneOptions, expectedControlPlaneOptions) {
 		log.Trace(logger, "controlplane config is out of date")
 		controlplaneOld := controlPlane.DeepCopy()
@@ -645,6 +664,10 @@ func setControlPlaneOptionsDefaults(opts *operatorv1beta1.ControlPlaneOptions) {
 	}
 }
 
+func setControlPlaneExtensions(gatewayExtensions []commonv1alpha1.ExtensionRef) {
+
+}
+
 // setDataPlaneOptionsDefaults sets the default DataPlane options not overriding
 // what's been provided only filling in those fields that were unset or empty.
 func setDataPlaneOptionsDefaults(opts *operatorv1beta1.DataPlaneOptions, defaultImage string) {
@@ -699,6 +722,10 @@ func dataplaneSpecDeepEqual(spec1, spec2 *operatorv1beta1.DataPlaneOptions) bool
 	// TODO: Doesn't take .Rollout field into account.
 	if !deploymentOptionsDeepEqual(&spec1.Deployment.DeploymentOptions, &spec2.Deployment.DeploymentOptions) ||
 		!compare.NetworkOptionsDeepEqual(&spec1.Network, &spec2.Network) {
+		return false
+	}
+
+	if !reflect.DeepEqual(spec1.Extensions, spec2.Extensions) {
 		return false
 	}
 
