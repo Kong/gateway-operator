@@ -132,16 +132,15 @@ func TestHelmUpgrade(t *testing.T) {
 					},
 				},
 				{
-					Name: "Cluster wide resources owned by the ControlPlane get the proper set of labels",
+					Name: "controlPlane for the Gateway exists",
 					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						clusterWideResourcesAreProperlyManaged("gw-upgrade-onebeforelatestminor-latestminor=true")(ctx, c, cl.MgrClient)
+						controlPlaneForGatewayExists("gw-upgrade-onebeforelatestminor-latestminor=true")(ctx, c, cl.MgrClient)
 					},
 				},
 			},
 		},
 		{
 			name:             "upgrade from latest minor to current",
-			skip:             "ControlPlane assertions have to be adjusted to KIC as a library approach (https://github.com/Kong/gateway-operator/issues/1188)",
 			fromVersion:      "1.4.0", // renovate: datasource=docker packageName=kong/gateway-operator-oss
 			upgradeToCurrent: true,
 			// This is the effective semver of a next release. It's needed for the chart to properly render
@@ -207,9 +206,9 @@ func TestHelmUpgrade(t *testing.T) {
 					},
 				},
 				{
-					Name: "Cluster wide resources owned by the ControlPlane get the proper set of labels",
+					Name: "controlPlane for the Gateway exists",
 					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						clusterWideResourcesAreProperlyManaged("gw-upgrade-latestminor-current=true")(ctx, c, cl.MgrClient)
+						controlPlaneForGatewayExists("gw-upgrade-latestminor-current=true")(ctx, c, cl.MgrClient)
 					},
 				},
 			},
@@ -282,7 +281,7 @@ func TestHelmUpgrade(t *testing.T) {
 				{
 					Name: "Cluster wide resources owned by the ControlPlane get the proper set of labels",
 					Func: func(c *assert.CollectT, cl *testutils.K8sClients) {
-						clusterWideResourcesAreProperlyManaged("gw-upgrade-nightly-to-current=true")(ctx, c, cl.MgrClient)
+						controlPlaneForGatewayExists("gw-upgrade-nightly-to-current=true")(ctx, c, cl.MgrClient)
 					},
 				},
 			},
@@ -616,7 +615,7 @@ func listDataPlaneDeploymentsForGateway(
 	)
 }
 
-func clusterWideResourcesAreProperlyManaged(gatewayLabelSelector string) func(ctx context.Context, c *assert.CollectT, cl client.Client) {
+func controlPlaneForGatewayExists(gatewayLabelSelector string) func(ctx context.Context, c *assert.CollectT, cl client.Client) {
 	return func(ctx context.Context, c *assert.CollectT, cl client.Client) {
 		gw := getGatewayByLabelSelector(gatewayLabelSelector, ctx, c, cl)
 		if !assert.NotNil(c, gw) {
@@ -628,37 +627,6 @@ func clusterWideResourcesAreProperlyManaged(gatewayLabelSelector string) func(ct
 			c.Errorf("failed to list ControlPlanes for Gateway %q: %v", client.ObjectKeyFromObject(gw), err)
 			return
 		}
-		if !assert.Len(c, controlplanes, 1) {
-			return
-		}
-		cp := &controlplanes[0]
-
-		managedByLabelSet := k8sutils.GetManagedByLabelSet(cp)
-
-		clusterRoles, err := k8sutils.ListClusterRoles(
-			ctx,
-			cl,
-			client.MatchingLabels(managedByLabelSet),
-		)
-		require.NoError(c, err)
-		assert.Len(c, clusterRoles, 1)
-
-		clusterRoleBindings, err := k8sutils.ListClusterRoleBindings(
-			ctx,
-			cl,
-			client.MatchingLabels(managedByLabelSet),
-		)
-		require.NoError(c, err)
-
-		assert.Len(c, clusterRoleBindings, 1)
-
-		validatingWebhookConfigurations, err := k8sutils.ListValidatingWebhookConfigurations(
-			ctx,
-			cl,
-			client.MatchingLabels(managedByLabelSet),
-		)
-		require.NoError(c, err)
-
-		assert.Len(c, validatingWebhookConfigurations, 1)
+		assert.Len(c, controlplanes, 1)
 	}
 }
