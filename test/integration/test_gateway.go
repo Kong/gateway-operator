@@ -770,9 +770,6 @@ func TestGatewayDataPlaneNetworkPolicy(t *testing.T) {
 	require.Contains(t, networkPolicy.Spec.Ingress, expectAllowMetricsIngress.Rule)
 
 	t.Run("verifying DataPlane's NetworkPolicies get updated after customizing kong proxy listen port through GatewayConfiguration", func(t *testing.T) {
-		// TODO: https://github.com/Kong/gateway-operator/issues/184
-		t.Skip("re-enable once https://github.com/Kong/gateway-operator/issues/184 is fixed")
-
 		gwcClient := GetClients().OperatorClient.GatewayOperatorV1beta1().GatewayConfigurations(namespace.Name)
 
 		setGatewayConfigurationEnvProxyPort(t, gatewayConfig, 8005, 8999)
