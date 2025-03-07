@@ -124,7 +124,9 @@ func TestKonnectExtension(t *testing.T) {
 	// Order of deleting objects with finalizers:
 	// KonnectExtension -> Secret -> KonnectGatewayControlPlane.
 	// After they are all deleted, the namespace can be deleted in the final clean up.
-	t.Cleanup(deleteObjectAndWaitForDeletionFn(t, cp.DeepCopy()))
+	// t.Cleanup(deleteObjectAndWaitForDeletionFn(t, cp.DeepCopy()))
+	clientNamespaced.Delete(ctx, cp)
+
 	t.Cleanup(deleteObjectAndWaitForDeletionFn(t, dpCert1.DeepCopy()))
 	t.Cleanup(deleteObjectAndWaitForDeletionFn(t, dpCert2.DeepCopy()))
 	t.Cleanup(deleteObjectAndWaitForDeletionFn(t, keWithKonnectIDCPRef.DeepCopy()))
