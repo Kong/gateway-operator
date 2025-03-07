@@ -493,17 +493,6 @@ func (r *KonnectExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				// if the syncPeriod is set to zero, the controller won't requeue.
 				return ctrl.Result{Requeue: true, RequeueAfter: r.SyncPeriod}, err
 			}
-			if controllerutil.AddFinalizer(certificateSecret, KonnectCleanupFinalizer) {
-				if err := r.Client.Update(ctx, certificateSecret); err != nil {
-					if k8serrors.IsConflict(err) {
-						return ctrl.Result{Requeue: true}, nil
-					}
-					return ctrl.Result{}, err
-				}
-
-				log.Info(logger, "konnect-cleanup finalizer on the referenced secret updated")
-				return ctrl.Result{}, nil
-			}
 		}
 		updated, res, err := patch.WithFinalizer(ctx, r.Client, &ext, KonnectCleanupFinalizer)
 		if err != nil || !res.IsZero() {
