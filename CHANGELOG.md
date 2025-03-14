@@ -25,6 +25,14 @@
 - [v0.1.1](#v011)
 - [v0.1.0](#v010)
 
+## Unreleased
+
+### Fixes
+
+- Adjustment of `KONG_PROXY_LISTEN` and `KONG_PORT_MAPS` in `GatewayConfiguration` no longer results in a reconciliation
+  error for a `Gateway`.
+  [#1308](https://github.com/Kong/gateway-operator/pull/1308)
+
 ## [v1.5.0]
 
 > Release date: 2025-03-11
