@@ -770,9 +770,6 @@ func TestGatewayDataPlaneNetworkPolicy(t *testing.T) {
 	require.Contains(t, networkPolicy.Spec.Ingress, expectAllowMetricsIngress.Rule)
 
 	t.Run("verifying DataPlane's NetworkPolicies get updated after customizing kong proxy listen port through GatewayConfiguration", func(t *testing.T) {
-		// TODO: https://github.com/Kong/gateway-operator/issues/184
-		t.Skip("re-enable once https://github.com/Kong/gateway-operator/issues/184 is fixed")
-
 		gwcClient := GetClients().OperatorClient.GatewayOperatorV1beta1().GatewayConfigurations(namespace.Name)
 
 		setGatewayConfigurationEnvProxyPort(t, gatewayConfig, 8005, 8999)
@@ -805,10 +802,12 @@ func TestGatewayDataPlaneNetworkPolicy(t *testing.T) {
 			map[string]string{"app": controlplane.Name},
 			map[string]string{"kubernetes.io/metadata.name": controlplane.Namespace},
 		)
-		if !assert.Eventually(t,
+		if !assert.Eventually(
+			t,
 			testutils.GatewayNetworkPolicyForGatewayContainsRules(t, GetCtx(), gateway, clients, expectedUpdatedLimitedAdminAPI.Rule),
 			2*testutils.SubresourceReadinessWait, time.Second,
-			"NetworkPolicy didn't get updated with port 8555 after a corresponding change to GatewayConfiguration") {
+			"NetworkPolicy didn't get updated with port 8555 after a corresponding change to GatewayConfiguration",
+		) {
 			networkpolicies, err := gatewayutils.ListNetworkPoliciesForGateway(GetCtx(), GetClients().MgrClient, gateway)
 			require.NoError(t, err)
 			t.Log("DataPlane's NetworkPolicies")
