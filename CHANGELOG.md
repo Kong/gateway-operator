@@ -36,6 +36,13 @@
   to watch resources in the specified namespace.
   [#1388](https://github.com/Kong/gateway-operator/pull/1388)
 
+### Fixes
+
+- Fix setting the defaults for `GatewayConfiguration`'s `ReadinessProbe when only
+  timeouts and/or delays are specified. Now the HTTPGet field is set to `/status/ready`
+  as expected with the `Gateway` scenario.
+  [#1395](https://github.com/Kong/gateway-operator/pull/1395)
+
 ## [v1.5.0]
 
 > Release date: 2025-03-11
