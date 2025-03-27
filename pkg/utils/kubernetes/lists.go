@@ -184,6 +184,27 @@ func ListServiceAccountsForOwner(
 	return serviceAccounts, nil
 }
 
+// ListRoles is a helper function which gets a list of Roles
+// using the provided list options.
+func ListRoles(
+	ctx context.Context,
+	c client.Client,
+	listOpts ...client.ListOption,
+) ([]rbacv1.Role, error) {
+	roleList := &rbacv1.RoleList{}
+
+	err := c.List(
+		ctx,
+		roleList,
+		listOpts...,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return roleList.Items, nil
+}
+
 // ListClusterRoles is a helper function which gets a list of ClusterRoles
 // using the provided list options.
 func ListClusterRoles(

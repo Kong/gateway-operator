@@ -95,6 +95,29 @@ func filterClusterRoles(clusterRoles []rbacv1.ClusterRole) []rbacv1.ClusterRole 
 }
 
 // -----------------------------------------------------------------------------
+// Filter functions - Roles
+// -----------------------------------------------------------------------------
+
+// filterRoles filters out the Role to be kept and returns
+// all the Roles to be deleted.
+// The filtered-out Role is decided as follows:
+//  1. creationTimestamp (newer is better, because newer Roles can contain new policy rules)
+func filterRoles(roles []rbacv1.Role) []rbacv1.Role {
+	if len(roles) == 1 {
+		return []rbacv1.Role{}
+	}
+
+	best := 0
+	for i, cr := range roles {
+		if cr.CreationTimestamp.After(roles[best].CreationTimestamp.Time) {
+			best = i
+		}
+	}
+
+	return append(roles[:best], roles[best+1:]...)
+}
+
+// -----------------------------------------------------------------------------
 // Filter functions - ClusterRoleBindings
 // -----------------------------------------------------------------------------
 
