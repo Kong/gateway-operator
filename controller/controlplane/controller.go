@@ -49,6 +49,7 @@ import (
 // Reconciler reconciles a ControlPlane object
 type Reconciler struct {
 	client.Client
+	DiscoveryClient          *CachedDiscoveryClient
 	Scheme                   *runtime.Scheme
 	ClusterCASecretName      string
 	ClusterCASecretNamespace string
@@ -348,25 +349,38 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		log.Debug(logger, "DataPlane not set, deployment for ControlPlane will remain dormant")
 	}
 
+	const (
+		ConditionTypeReferenceGrantsValid   = "ReferenceGrantsValid"
+		ConditionReasonReferenceGrantsValid = "ReferenceGrantsValid"
+	)
 	log.Trace(logger, "validating ReferenceGrants exist for the ControlPlane")
 	validatedWatchNamespaces, err := r.validateReferenceGrants(ctx, cp)
 	if err != nil {
 		k8sutils.SetCondition(
-			k8sutils.NewCondition(
-				kcfgdataplane.ReadyType,
+			k8sutils.NewConditionWithGeneration(
+				ConditionTypeReferenceGrantsValid,
 				metav1.ConditionFalse,
 				kcfgcontrolplane.ConditionReasonMissingReferenceGrant,
 				fmt.Sprintf("ReferenceGrant(s) are missing for the ControlPlane: %v", err),
+				cp.GetGeneration(),
 			),
 			cp,
 		)
-		res, err := r.patchStatus(ctx, logger, cp)
-		if err != nil || !res.IsZero() {
-			return res, err
-		}
 		// We do not return here as we want to proceed with reconciling the Deployment.
 		// This will prevent users using the ControlPlane Deployment with previous
 		// WatchNamespaces spec.
+		// We do not patch the status here either because that's done below.
+	} else {
+		k8sutils.SetCondition(
+			k8sutils.NewConditionWithGeneration(
+				ConditionTypeReferenceGrantsValid,
+				metav1.ConditionTrue,
+				ConditionReasonReferenceGrantsValid,
+				"ReferenceGrant(s) are in present and valid",
+				cp.GetGeneration(),
+			),
+			cp,
+		)
 	}
 
 	log.Trace(logger, "ensuring ServiceAccount for ControlPlane deployment exists")
@@ -379,7 +393,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil // requeue will be triggered by the creation or update of the owned object
 	}
 
-	res, err := r.ensureRoles(ctx, logger, cp, controlplaneServiceAccount)
+	res, err := r.ensureRoles(ctx, logger, cp, controlplaneServiceAccount, validatedWatchNamespaces)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to ensure roles or cluster roles: %w", err)
 	} else if res != op.Noop {
@@ -435,11 +449,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	log.Trace(logger, "checking readiness of ControlPlane deployments")
 
-	if controlplaneDeployment.Status.Replicas == 0 || controlplaneDeployment.Status.AvailableReplicas < controlplaneDeployment.Status.Replicas {
+	if controlplaneDeployment.Status.Replicas == 0 ||
+		(controlplaneDeployment.Spec.Replicas != nil && controlplaneDeployment.Status.AvailableReplicas < *controlplaneDeployment.Spec.Replicas) {
 		log.Trace(logger, "deployment for ControlPlane not ready yet", "deployment", controlplaneDeployment)
 		// Set Ready to false for controlplane as the underlying deployment is not ready.
 		k8sutils.SetCondition(
-			k8sutils.NewCondition(kcfgdataplane.ReadyType, metav1.ConditionFalse, kcfgdataplane.WaitingToBecomeReadyReason, kcfgdataplane.WaitingToBecomeReadyMessage),
+			k8sutils.NewConditionWithGeneration(kcfgdataplane.ReadyType, metav1.ConditionFalse, kcfgdataplane.WaitingToBecomeReadyReason, kcfgdataplane.WaitingToBecomeReadyMessage, cp.GetGeneration()),
 			cp,
 		)
 

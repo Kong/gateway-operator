@@ -55,6 +55,7 @@ spec:
     type: list
     list:
     - kong-system
+    - kube-system
   deployment:
     podTemplateSpec:
       metadata:
