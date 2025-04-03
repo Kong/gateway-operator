@@ -60,6 +60,14 @@ func ReduceClusterRoles(ctx context.Context, k8sClient client.Client, clusterRol
 	return clientops.DeleteAll(ctx, k8sClient, filteredClusterRoles)
 }
 
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=delete
+
+// ReduceRoles detects the best Role in the set and deletes all the others.
+func ReduceRoles(ctx context.Context, k8sClient client.Client, roles []rbacv1.Role) error {
+	filteredRoles := filterRoles(roles)
+	return clientops.DeleteAll(ctx, k8sClient, filteredRoles)
+}
+
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=delete
 
 // ReduceClusterRoleBindings detects the best ClusterRoleBinding in the set and deletes all the others.
