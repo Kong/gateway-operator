@@ -20,7 +20,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
+	"github.com/kong/gateway-operator/controller/controlplane"
 	"github.com/kong/gateway-operator/pkg/consts"
 	k8sutils "github.com/kong/gateway-operator/pkg/utils/kubernetes"
 	k8sresources "github.com/kong/gateway-operator/pkg/utils/kubernetes/resources"
@@ -28,6 +31,7 @@ import (
 	"github.com/kong/gateway-operator/test/helpers"
 	"github.com/kong/gateway-operator/test/helpers/eventually"
 
+	kcfgdataplane "github.com/kong/kubernetes-configuration/api/gateway-operator/dataplane"
 	operatorv1beta1 "github.com/kong/kubernetes-configuration/api/gateway-operator/v1beta1"
 )
 
@@ -389,6 +393,162 @@ func TestControlPlaneEssentials(t *testing.T) {
 	t.Logf("verifying controlplane %s disappears after cluster resources are deleted", controlplane.Name)
 	eventually.WaitForObjectToNotExist(t, ctx, GetClients().MgrClient, controlplane,
 		testutils.ControlPlaneCondDeadline, testutils.ControlPlaneCondTick,
+	)
+}
+
+func TestControlPlaneWatchNamespaces(t *testing.T) {
+	t.Parallel()
+	namespace, cleaner := helpers.SetupTestEnv(t, GetCtx(), GetEnv())
+
+	dataplaneClient := GetClients().OperatorClient.GatewayOperatorV1beta1().DataPlanes(namespace.Name)
+	controlplaneClient := GetClients().OperatorClient.GatewayOperatorV1beta1().ControlPlanes(namespace.Name)
+
+	dp := &operatorv1beta1.DataPlane{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:    namespace.Name,
+			GenerateName: "dp-watchnamespaces-",
+		},
+		Spec: operatorv1beta1.DataPlaneSpec{
+			DataPlaneOptions: operatorv1beta1.DataPlaneOptions{
+				Deployment: operatorv1beta1.DataPlaneDeploymentOptions{
+					DeploymentOptions: operatorv1beta1.DeploymentOptions{
+						PodTemplateSpec: &corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  consts.DataPlaneProxyContainerName,
+										Image: helpers.GetDefaultDataPlaneImage(),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	t.Log("deploying dataplane resource")
+	dp, err := dataplaneClient.Create(GetCtx(), dp, metav1.CreateOptions{})
+	require.NoError(t, err)
+	cleaner.Add(dp)
+
+	nsA := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "test-namespace-a-",
+		},
+	}
+	require.NoError(t, GetClients().MgrClient.Create(GetCtx(), nsA))
+	cleaner.Add(nsA)
+
+	nsB := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "test-namespace-b-",
+		},
+	}
+	require.NoError(t, GetClients().MgrClient.Create(GetCtx(), nsB))
+	cleaner.Add(nsB)
+
+	cp := &operatorv1beta1.ControlPlane{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:    namespace.Name,
+			GenerateName: "cp-watchnamespaces-",
+		},
+		Spec: operatorv1beta1.ControlPlaneSpec{
+			ControlPlaneOptions: operatorv1beta1.ControlPlaneOptions{
+				Deployment: operatorv1beta1.ControlPlaneDeploymentOptions{
+					PodTemplateSpec: &corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  consts.ControlPlaneControllerContainerName,
+									Image: consts.DefaultControlPlaneImage,
+								},
+							},
+						},
+					},
+				},
+				DataPlane: lo.ToPtr(dp.Name),
+			},
+			WatchNamespaces: &operatorv1beta1.WatchNamespaces{
+				Type: operatorv1beta1.WatchNamespacesTypeList,
+				List: []string{
+					nsA.Name,
+					nsB.Name,
+				},
+			},
+		},
+	}
+
+	t.Log("deploying controlplane resource")
+	cp, err = controlplaneClient.Create(GetCtx(), cp, metav1.CreateOptions{})
+	require.NoError(t, err)
+	controlplaneNN := client.ObjectKeyFromObject(cp)
+	cleaner.Add(cp)
+	_ = controlplaneNN
+
+	t.Log("verifying controlplane has a status condition indicating missing ReferenceGrants")
+	require.Eventually(t,
+		testutils.ObjectPredicates(t, clients.MgrClient,
+			testutils.MatchCondition[*operatorv1beta1.ControlPlane](t).
+				Type(controlplane.ConditionTypeReferenceGrantsValid).
+				Status(metav1.ConditionFalse).
+				Predicate(),
+			testutils.MatchCondition[*operatorv1beta1.ControlPlane](t).
+				Type(string(kcfgdataplane.ReadyType)).
+				Status(metav1.ConditionFalse).
+				Predicate(),
+		).Match(cp),
+		testutils.ControlPlaneCondDeadline, testutils.ControlPlaneCondTick,
+	)
+
+	refGrantForNamespace := func(t *testing.T, cp *operatorv1beta1.ControlPlane, ns string) *gatewayv1beta1.ReferenceGrant {
+		rg := &gatewayv1beta1.ReferenceGrant{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: ns + "-refgrant-",
+				Namespace:    ns,
+			},
+			Spec: gatewayv1beta1.ReferenceGrantSpec{
+				To: []gatewayv1beta1.ReferenceGrantTo{
+					{
+						Kind: "Namespace",
+						Name: lo.ToPtr(gatewayv1beta1.ObjectName(ns)),
+					},
+				},
+				From: []gatewayv1beta1.ReferenceGrantFrom{
+					{
+						Group:     gatewayv1.Group(operatorv1beta1.SchemeGroupVersion.Group),
+						Kind:      gatewayv1.Kind("ControlPlane"),
+						Namespace: gatewayv1.Namespace(cp.Namespace),
+					},
+				},
+			},
+		}
+
+		clientGatewayV1Beta1 := GetClients().GatewayClient.GatewayV1beta1()
+		_, err = clientGatewayV1Beta1.ReferenceGrants(ns).Create(GetCtx(), rg, metav1.CreateOptions{})
+		require.NoError(t, err)
+		return rg
+	}
+
+	t.Log("add missing ReferenceGrants for watched namespaces")
+	refGrantA := refGrantForNamespace(t, cp, nsA.Name)
+	_ = refGrantA
+	refGrantB := refGrantForNamespace(t, cp, nsB.Name)
+	_ = refGrantB
+
+	t.Log("verifying controlplane has a status condition indicating no missing ReferenceGrants and it's Ready")
+	require.Eventually(t,
+		testutils.ObjectPredicates(t, clients.MgrClient,
+			testutils.MatchCondition[*operatorv1beta1.ControlPlane](t).
+				Type(controlplane.ConditionTypeReferenceGrantsValid).
+				Status(metav1.ConditionTrue).
+				Predicate(),
+			testutils.MatchCondition[*operatorv1beta1.ControlPlane](t).
+				Type(string(kcfgdataplane.ReadyType)).
+				Status(metav1.ConditionTrue).
+				Predicate(),
+		).Match(cp),
+		testutils.ControlPlaneCondDeadline, 4*testutils.ControlPlaneCondTick,
 	)
 }
 

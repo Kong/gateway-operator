@@ -362,10 +362,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		log.Debug(logger, "DataPlane not set, deployment for ControlPlane will remain dormant")
 	}
 
-	const (
-		ConditionTypeReferenceGrantsValid   = "ReferenceGrantsValid"
-		ConditionReasonReferenceGrantsValid = "ReferenceGrantsValid"
-	)
 	log.Trace(logger, "validating ReferenceGrants exist for the ControlPlane")
 	validatedWatchNamespaces, err := r.validateReferenceGrants(ctx, cp)
 	if err != nil {
