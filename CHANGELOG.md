@@ -41,6 +41,8 @@
   - `--validate-images` (or `GATEWAY_OPERATOR_VALIDATE_IMAGES` env var) to enable ControlPlane and DataPlane image 
     validation (it's set by default to `true`).
   [#1435](https://github.com/Kong/gateway-operator/pull/1435)
+- Implemented `Mirror` and `Origin` `KonnectGatewayControlPlane`s.
+  [#1496](https://github.com/Kong/gateway-operator/pull/1496)
 
 ### Changes
 
