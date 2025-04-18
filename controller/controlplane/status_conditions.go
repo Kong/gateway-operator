@@ -9,6 +9,13 @@ import (
 	operatorv1beta1 "github.com/kong/kubernetes-configuration/api/gateway-operator/v1beta1"
 )
 
+const (
+	// TODO add comments
+	ConditionTypeReferenceGrantsValid = "ReferenceGrantsValid"
+	// TODO add comments
+	ConditionReasonReferenceGrantsValid = "ReferenceGrantsValid"
+)
+
 // markAsProvisioned marks the provided resource as ready by the means of Provisioned
 // Status Condition.
 func markAsProvisioned[T *operatorv1beta1.ControlPlane](resource T) {
