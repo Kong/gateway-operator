@@ -41,6 +41,9 @@
   - `--validate-images` (or `GATEWAY_OPERATOR_VALIDATE_IMAGES` env var) to enable ControlPlane and DataPlane image 
     validation (it's set by default to `true`).
   [#1435](https://github.com/Kong/gateway-operator/pull/1435)
+- Add `KonnectCloudGatewayTransitGateway` controller to support managing Konnect
+  transit gateways.
+  [#1489](https://github.com/Kong/gateway-operator/pull/1489)
 
 ### Changes
 
