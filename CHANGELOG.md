@@ -38,9 +38,11 @@
 - Introduced new CLI flags:
   - `--logging-mode` (or `GATEWAY_OPERATOR_LOGGING_MODE` env var) to set the logging mode (`development` can be set
     for simplified logging).
-  - `--validate-images` (or `GATEWAY_OPERATOR_VALIDATE_IMAGES` env var) to enable ControlPlane and DataPlane image 
+  - `--validate-images` (or `GATEWAY_OPERATOR_VALIDATE_IMAGES` env var) to enable ControlPlane and DataPlane image
     validation (it's set by default to `true`).
   [#1435](https://github.com/Kong/gateway-operator/pull/1435)
+- `KongRoute` can be migrated from serviceless to service bound and vice versa.
+  [#1492](https://github.com/Kong/gateway-operator/pull/1492)
 
 ### Changes
 
