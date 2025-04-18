@@ -225,7 +225,7 @@ func Create[
 			if err == nil {
 				SetKonnectEntityMirroredConditionTrue(e)
 			} else {
-				SetKonnectEntityMirroredConditionFalse(e, konnectv1alpha1.ControlPlaneMirroredFailedConditionReason, err)
+				SetKonnectEntityMirroredConditionFalse(e, err)
 			}
 		}
 	}
@@ -504,7 +504,7 @@ func Update[
 			if err == nil {
 				SetKonnectEntityMirroredConditionTrue(e)
 			} else {
-				SetKonnectEntityMirroredConditionFalse(e, konnectv1alpha1.ControlPlaneMirroredFailedConditionReason, err)
+				SetKonnectEntityMirroredConditionFalse(e, err)
 			}
 		}
 	}
