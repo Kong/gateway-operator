@@ -2,12 +2,15 @@ package integration
 
 import (
 	"testing"
+	"time"
 
 	"github.com/samber/lo"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kong/gateway-operator/pkg/consts"
@@ -38,35 +41,12 @@ func TestDataPlaneScaleSubresource(t *testing.T) {
 					DeploymentOptions: operatorv1beta1.DeploymentOptions{
 						Replicas: lo.ToPtr(int32(2)), // Set initial replica count to 2
 						PodTemplateSpec: &corev1.PodTemplateSpec{
-							ObjectMeta: metav1.ObjectMeta{
-								Labels: map[string]string{
-									"label-a": "value-a",
-									"label-x": "value-x",
-								},
-							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
 									{
-										Env: []corev1.EnvVar{
-											{
-												Name:  "TEST_ENV",
-												Value: "test",
-											},
-										},
 										Name:  consts.DataPlaneProxyContainerName,
 										Image: helpers.GetDefaultDataPlaneImage(),
 									},
-								},
-							},
-						},
-					},
-				},
-				Network: operatorv1beta1.DataPlaneNetworkOptions{
-					Services: &operatorv1beta1.DataPlaneServices{
-						Ingress: &operatorv1beta1.DataPlaneServiceOptions{
-							ServiceOptions: operatorv1beta1.ServiceOptions{
-								Annotations: map[string]string{
-									"purpose": "scale",
 								},
 							},
 						},
@@ -105,4 +85,82 @@ func TestDataPlaneScaleSubresource(t *testing.T) {
 
 	t.Log("verifying dataplane scales to 3 replicas")
 	require.Eventually(t, testutils.DataPlaneHasNReadyPods(t, GetCtx(), dataplaneName, clients, 3), testutils.GatewayReadyTimeLimit, testutils.ObjectUpdateTick)
+
+	// Get the current ReplicaSets before restart
+	replicaSetList := &appsv1.ReplicaSetList{}
+	err = clients.MgrClient.List(GetCtx(), replicaSetList,
+		client.InNamespace(namespace.Name),
+		client.MatchingLabels(deployment.Spec.Selector.MatchLabels))
+	require.NoError(t, err)
+	require.NotEmpty(t, replicaSetList.Items, "Expected at least one ReplicaSet")
+
+	// Record the names of existing ReplicaSets
+	existingRSNames := make(map[string]struct{})
+	for _, rs := range replicaSetList.Items {
+		existingRSNames[rs.Name] = struct{}{}
+	}
+
+	t.Log("simulating kubectl rollout restart by adding restart annotation")
+	deploymentCopy := deployment.DeepCopy()
+	if deploymentCopy.Spec.Template.Annotations == nil {
+		deploymentCopy.Spec.Template.Annotations = make(map[string]string)
+	}
+	deploymentCopy.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+
+	err = clients.MgrClient.Patch(GetCtx(), deploymentCopy, client.MergeFrom(&deployment))
+	require.NoError(t, err)
+
+	t.Log("waiting for new ReplicaSet to be created")
+
+	var newReplicaSet *appsv1.ReplicaSet
+	require.Eventually(t, func() bool {
+		newReplicaSetList := &appsv1.ReplicaSetList{}
+		if err := clients.MgrClient.List(GetCtx(), newReplicaSetList,
+			client.InNamespace(namespace.Name),
+			client.MatchingLabels(deployment.Spec.Selector.MatchLabels)); err != nil {
+			t.Logf("Error listing ReplicaSets: %v", err)
+			return false
+		}
+
+		// Find the new ReplicaSet (one that wasn't in the original list)
+		for i := range newReplicaSetList.Items {
+			rs := &newReplicaSetList.Items[i]
+			if _, exists := existingRSNames[rs.Name]; !exists {
+				newReplicaSet = rs
+				return true
+			}
+		}
+		return false
+	}, testutils.GatewayReadyTimeLimit, testutils.ObjectUpdateTick, "Failed to find new ReplicaSet after rollout restart")
+
+	t.Log("verifying new ReplicaSet has correct replica count")
+	assert.NotNil(t, newReplicaSet, "New ReplicaSet should be created")
+
+	// Wait for the ReplicaSet to have the correct replica count
+	require.Eventually(t, func() bool {
+		if err := clients.MgrClient.Get(GetCtx(), types.NamespacedName{
+			Namespace: newReplicaSet.Namespace,
+			Name:      newReplicaSet.Name,
+		}, newReplicaSet); err != nil {
+			t.Logf("Error getting ReplicaSet: %v", err)
+			return false
+		}
+		t.Logf("Current ReplicaSet replicas: %d", *newReplicaSet.Spec.Replicas)
+		return *newReplicaSet.Spec.Replicas == 3
+	}, testutils.GatewayReadyTimeLimit, testutils.ObjectUpdateTick, "New ReplicaSet should have 3 replicas")
+
+	t.Log("waiting for rollout to complete")
+	require.Eventually(t, func() bool {
+		if err := clients.MgrClient.Get(GetCtx(), types.NamespacedName{
+			Namespace: newReplicaSet.Namespace,
+			Name:      newReplicaSet.Name,
+		}, newReplicaSet); err != nil {
+			return false
+		}
+		return newReplicaSet.Status.ReadyReplicas == *newReplicaSet.Spec.Replicas
+	}, testutils.GatewayReadyTimeLimit, testutils.ObjectUpdateTick, "New ReplicaSet should have all replicas ready")
+
+	t.Log("verifying dataplane still has 3 ready replicas after rollout")
+	require.Eventually(t, testutils.DataPlaneHasNReadyPods(t, GetCtx(), dataplaneName, clients, 3), testutils.GatewayReadyTimeLimit, testutils.ObjectUpdateTick)
+
 }

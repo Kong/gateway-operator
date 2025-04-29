@@ -306,8 +306,31 @@ func reconcileDataPlaneDeployment(
 
 		k8sresources.SetDefaultsPodTemplateSpec(&desired.Spec.Template)
 
+		log.Debug(logger, "comparing replicas", "existing", existing.ObjectMeta, "desired", desired.ObjectMeta)
+		log.Debug(logger, "existing replicas", "replicas", existing.Spec.Replicas)
+		log.Debug(logger, "desired replicas", "replicas", desired.Spec.Replicas)
+
+		// Store the original replica count before updating metadata
+		originalReplicas := existing.Spec.Replicas
+
 		// ensure that object metadata is up to date
 		updated, existing.ObjectMeta = k8sutils.EnsureObjectMetaIsUpdated(existing.ObjectMeta, desired.ObjectMeta)
+
+		log.Debug(logger, "comparing replicas", "existing", existing.ObjectMeta, "desired", desired.ObjectMeta)
+		log.Debug(logger, "updated", "updated", updated)
+
+		// Check if this is a deployment restart (kubectl rollout restart)
+		// We need to check if the existing deployment has the restart annotation
+		// This is different from our previous approach because the desired deployment
+		// is generated from the DataPlane resource and won't have the restart annotation
+		isRestartOperation := false
+		if existing.Spec.Template.Annotations != nil {
+			_, hasRestartAnnotation := existing.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"]
+			if hasRestartAnnotation {
+				isRestartOperation = true
+				log.Debug(logger, "detected restart operation", "isRestartOperation", isRestartOperation)
+			}
+		}
 
 		// some custom comparison rules are needed for some PodTemplateSpec sub-attributes, in particular
 		// resources and affinity.
@@ -315,10 +338,43 @@ func reconcileDataPlaneDeployment(
 			cmp.Comparer(k8sresources.ResourceRequirementsEqual),
 		}
 
-		// ensure that PodTemplateSpec is up to date
-		if !cmp.Equal(existing.Spec.Template, desired.Spec.Template, opts...) {
-			existing.Spec.Template = desired.Spec.Template
-			updated = true
+		// Check if this is a restart operation first, before comparing templates
+		if isRestartOperation {
+			log.Debug(logger, "preserving restart annotation and replica count for restart operation")
+
+			// Save the restart annotation
+			restartAnnotation := existing.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"]
+
+			// Make a deep copy of the desired template to avoid modifying the original
+			templateCopy := desired.Spec.Template.DeepCopy()
+
+			// Ensure annotations map exists in the copy
+			if templateCopy.Annotations == nil {
+				templateCopy.Annotations = make(map[string]string)
+			}
+
+			// Add the restart annotation to the copy
+			templateCopy.Annotations["kubectl.kubernetes.io/restartedAt"] = restartAnnotation
+
+			// Now compare with the modified template
+			if !cmp.Equal(existing.Spec.Template, *templateCopy, opts...) {
+				// Update the template with our modified copy that includes the restart annotation
+				existing.Spec.Template = *templateCopy
+
+				// Ensure the replica count is maintained
+				if originalReplicas != nil {
+					log.Debug(logger, "preserving original replica count", "replicas", *originalReplicas)
+					existing.Spec.Replicas = originalReplicas
+				}
+
+				updated = true
+			}
+		} else {
+			// Normal case (not a restart operation)
+			if !cmp.Equal(existing.Spec.Template, desired.Spec.Template, opts...) {
+				existing.Spec.Template = desired.Spec.Template
+				updated = true
+			}
 		}
 
 		// ensure that rollout strategy is up to date
@@ -327,22 +383,29 @@ func reconcileDataPlaneDeployment(
 			updated = true
 		}
 
-		if scaling := dataplane.Spec.Deployment.Scaling; false ||
-			// If the scaling strategy is not specified, we compare the replicas.
-			(scaling == nil || scaling.HorizontalScaling == nil) ||
-			// If the scaling strategy is specified with minReplicas, we compare
-			// the minReplicas with the existing Deployment replicas and we set
-			// the replicas to the minReplicas if the existing Deployment replicas
-			// are less than the minReplicas to enforce faster scaling before HPA
-			// kicks in.
-			(scaling.HorizontalScaling != nil &&
-				scaling.HorizontalScaling.MinReplicas != nil &&
-				existing.Spec.Replicas != nil &&
-				*existing.Spec.Replicas < *scaling.HorizontalScaling.MinReplicas) {
-			if !cmp.Equal(existing.Spec.Replicas, desired.Spec.Replicas) {
-				existing.Spec.Replicas = desired.Spec.Replicas
-				updated = true
+		// Skip replica updates if this is a restart operation
+		// We've already handled the replica count in the PodTemplateSpec update
+		if !isRestartOperation {
+			if scaling := dataplane.Spec.Deployment.Scaling; false ||
+				// If the scaling strategy is not specified, we compare the replicas.
+				(scaling == nil || scaling.HorizontalScaling == nil) ||
+				// If the scaling strategy is specified with minReplicas, we compare
+				// the minReplicas with the existing Deployment replicas and we set
+				// the replicas to the minReplicas if the existing Deployment replicas
+				// are less than the minReplicas to enforce faster scaling before HPA
+				// kicks in.
+				(scaling.HorizontalScaling != nil &&
+					scaling.HorizontalScaling.MinReplicas != nil &&
+					existing.Spec.Replicas != nil &&
+					*existing.Spec.Replicas < *scaling.HorizontalScaling.MinReplicas) {
+				if !cmp.Equal(existing.Spec.Replicas, desired.Spec.Replicas) {
+					log.Debug(logger, "updating replica count", "from", existing.Spec.Replicas, "to", desired.Spec.Replicas)
+					existing.Spec.Replicas = desired.Spec.Replicas
+					updated = true
+				}
 			}
+		} else {
+			log.Debug(logger, "skipping replica update due to restart operation")
 		}
 		if updated {
 			diff := cmp.Diff(original.Spec.Template, desired.Spec.Template, opts...)
