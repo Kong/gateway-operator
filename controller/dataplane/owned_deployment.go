@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
@@ -26,6 +27,8 @@ import (
 
 	operatorv1beta1 "github.com/kong/kubernetes-configuration/api/gateway-operator/v1beta1"
 )
+
+const restartAnnotationKey = "kubectl.kubernetes.io/restartedAt"
 
 // DeploymentBuilder builds a Deployment for a DataPlane.
 type DeploymentBuilder struct {
@@ -271,6 +274,14 @@ func listOrReduceDataPlaneDeployments(
 	return false, &deployments[0], nil
 }
 
+func podTemplateSpecHasRestartAnnotation(template *corev1.PodTemplateSpec) (bool, string) {
+	if template.Annotations == nil {
+		return false, ""
+	}
+	restartTimeStr, hasRestartAnnotation := template.Annotations[restartAnnotationKey]
+	return hasRestartAnnotation, restartTimeStr
+}
+
 // reconcileDataPlaneDeployment takes any existing DataPlane Deployment and a desired DataPlane Deployment and
 // reconciles the existing state to the desired state by either updating an existing Deployment, creating a new one,
 // or doing nothing.
@@ -306,8 +317,38 @@ func reconcileDataPlaneDeployment(
 
 		k8sresources.SetDefaultsPodTemplateSpec(&desired.Spec.Template)
 
+		// Keep track of this for logging purposes
+		originalReplicaCount := existing.Spec.Replicas
+
 		// ensure that object metadata is up to date
 		updated, existing.ObjectMeta = k8sutils.EnsureObjectMetaIsUpdated(existing.ObjectMeta, desired.ObjectMeta)
+
+		// Check if this is a deployment restart (kubectl rollout restart)
+		// We need to check if the existing deployment has the restart annotation
+		// This is different from our previous approach because the desired deployment
+		// is generated from the DataPlane resource and won't have the restart annotation
+		isRestartOperation := false
+
+		// Check if we have a fresh restart annotation (from the last 5 minutes)
+		// This prevents us from treating all deployments with old restart annotations
+		// as perpetually in a restart state, fixing issue #1390
+		hasRestartAnnotation, restartTimeStr := podTemplateSpecHasRestartAnnotation(&existing.Spec.Template)
+		if hasRestartAnnotation {
+			// Only treat it as a restart if the timestamp is recent (within 5 minutes)
+			restartTime, err := time.Parse(time.RFC3339, restartTimeStr)
+			if err == nil {
+				// Check if restart annotation is less than 5 minutes old
+				if time.Since(restartTime) < 5*time.Minute {
+					isRestartOperation = true
+					log.Debug(logger, "detected recent restart operation", "isRestartOperation", isRestartOperation, "restartTime", restartTime)
+				} else {
+					log.Debug(logger, "found old restart annotation, not treating as restart", "restartTime", restartTime)
+				}
+			} else {
+				isRestartOperation = true // If we can't parse time, assume it's a restart for safety
+				log.Debug(logger, "detected restart with unparseable timestamp", "timestamp", restartTimeStr)
+			}
+		}
 
 		// some custom comparison rules are needed for some PodTemplateSpec sub-attributes, in particular
 		// resources and affinity.
@@ -315,8 +356,32 @@ func reconcileDataPlaneDeployment(
 			cmp.Comparer(k8sresources.ResourceRequirementsEqual),
 		}
 
-		// ensure that PodTemplateSpec is up to date
-		if !cmp.Equal(existing.Spec.Template, desired.Spec.Template, opts...) {
+		// Check if this is a restart operation first, before comparing templates
+		if isRestartOperation {
+			log.Debug(logger, "preserving restart annotation for restart operation")
+
+			// Make a deep copy of the desired template to avoid modifying the original
+			templateCopy := desired.Spec.Template.DeepCopy()
+
+			// Ensure annotations map exists in the copy
+			if templateCopy.Annotations == nil {
+				templateCopy.Annotations = make(map[string]string)
+			}
+
+			// Add the restart annotation to the copy
+			templateCopy.Annotations[restartAnnotationKey] = restartTimeStr
+
+			// Now compare with the modified template
+			if !cmp.Equal(existing.Spec.Template, *templateCopy, opts...) {
+				// Update the template with our modified copy that includes the restart annotation
+				existing.Spec.Template = *templateCopy
+
+				// We DO NOT modify replicas during restart - that will happen in the replica-specific section below
+
+				updated = true
+			}
+		} else if !cmp.Equal(existing.Spec.Template, desired.Spec.Template, opts...) {
+			// Normal case (not a restart operation)
 			existing.Spec.Template = desired.Spec.Template
 			updated = true
 		}
@@ -327,6 +392,8 @@ func reconcileDataPlaneDeployment(
 			updated = true
 		}
 
+		// Always process replica updates, even during/after restart operations
+		// This ensures that if a user scales after a restart, the changes take effect
 		if scaling := dataplane.Spec.Deployment.Scaling; false ||
 			// If the scaling strategy is not specified, we compare the replicas.
 			(scaling == nil || scaling.HorizontalScaling == nil) ||
@@ -339,7 +406,11 @@ func reconcileDataPlaneDeployment(
 				scaling.HorizontalScaling.MinReplicas != nil &&
 				existing.Spec.Replicas != nil &&
 				*existing.Spec.Replicas < *scaling.HorizontalScaling.MinReplicas) {
+
+			// Always check for replica changes, regardless of restart status
+			// Fixed issue #1390: Ensure replicas update correctly after restart
 			if !cmp.Equal(existing.Spec.Replicas, desired.Spec.Replicas) {
+				log.Debug(logger, "updating replica count", "original", originalReplicaCount, "from", existing.Spec.Replicas, "to", desired.Spec.Replicas, "isRestart", isRestartOperation)
 				existing.Spec.Replicas = desired.Spec.Replicas
 				updated = true
 			}
