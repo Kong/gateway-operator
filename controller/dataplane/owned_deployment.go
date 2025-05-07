@@ -369,12 +369,10 @@ func reconcileDataPlaneDeployment(
 
 				updated = true
 			}
-		} else {
+		} else if !cmp.Equal(existing.Spec.Template, desired.Spec.Template, opts...) {
 			// Normal case (not a restart operation)
-			if !cmp.Equal(existing.Spec.Template, desired.Spec.Template, opts...) {
-				existing.Spec.Template = desired.Spec.Template
-				updated = true
-			}
+			existing.Spec.Template = desired.Spec.Template
+			updated = true
 		}
 
 		// ensure that rollout strategy is up to date
