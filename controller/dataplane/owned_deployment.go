@@ -306,18 +306,11 @@ func reconcileDataPlaneDeployment(
 
 		k8sresources.SetDefaultsPodTemplateSpec(&desired.Spec.Template)
 
-		log.Debug(logger, "comparing replicas", "existing", existing.ObjectMeta, "desired", desired.ObjectMeta)
-		log.Debug(logger, "existing replicas", "replicas", existing.Spec.Replicas)
-		log.Debug(logger, "desired replicas", "replicas", desired.Spec.Replicas)
-
 		// Store the original replica count before updating metadata
 		originalReplicas := existing.Spec.Replicas
 
 		// ensure that object metadata is up to date
 		updated, existing.ObjectMeta = k8sutils.EnsureObjectMetaIsUpdated(existing.ObjectMeta, desired.ObjectMeta)
-
-		log.Debug(logger, "comparing replicas", "existing", existing.ObjectMeta, "desired", desired.ObjectMeta)
-		log.Debug(logger, "updated", "updated", updated)
 
 		// Check if this is a deployment restart (kubectl rollout restart)
 		// We need to check if the existing deployment has the restart annotation
