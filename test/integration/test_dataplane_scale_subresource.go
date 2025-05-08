@@ -163,4 +163,17 @@ func TestDataPlaneScaleSubresource(t *testing.T) {
 	t.Log("verifying dataplane still has 3 ready replicas after rollout")
 	require.Eventually(t, testutils.DataPlaneHasNReadyPods(t, GetCtx(), dataplaneName, clients, 3), testutils.GatewayReadyTimeLimit, testutils.ObjectUpdateTick)
 
+	// Test the specific issue where scaling after restart didn't work properly
+	t.Log("scaling DataPlane to 4 replicas after restart")
+	// Test scaling through the scale subresource
+	t.Log("testing scaling through scale subresource")
+	require.Eventually(t,
+		testutils.DataPlaneUpdateEventually(t, GetCtx(), dataplaneName, clients, func(dp *operatorv1beta1.DataPlane) {
+			dp.Spec.Deployment.Replicas = lo.ToPtr(int32(4)) // Scale up to 4 replicas
+		}),
+		testutils.GatewayReadyTimeLimit, testutils.ObjectUpdateTick)
+
+	t.Log("verifying dataplane scales to 4 replicas")
+	require.Eventually(t, testutils.DataPlaneHasNReadyPods(t, GetCtx(), dataplaneName, clients, 4), testutils.GatewayReadyTimeLimit, testutils.ObjectUpdateTick)
+
 }
