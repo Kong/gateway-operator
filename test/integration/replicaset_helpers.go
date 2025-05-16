@@ -41,7 +41,7 @@ func FindReplicaSetNewerThan(
 		rs := &newReplicaSetList.Items[i]
 		t.Logf("Found ReplicaSet %s with creation time %v", rs.Name, rs.CreationTimestamp.Time)
 		// Truncate times to seconds for comparison since k8s doesn't use same precision
-		rsTime := rs.CreationTimestamp.Time.Truncate(time.Second)
+		rsTime := rs.CreationTimestamp.Truncate(time.Second)
 		refTime := creationTime.Truncate(time.Second)
 		if rsTime.Equal(refTime) || rsTime.After(refTime) {
 			t.Logf("ReplicaSet %s is at or after %v", rs.Name, creationTime)
@@ -55,20 +55,11 @@ func FindReplicaSetNewerThan(
 		return nil
 	}
 
-	// Multiple new ReplicaSets found - log a warning and return the newest one
+	// Multiple new ReplicaSets found - fail the test
 	if len(newReplicaSets) > 1 {
-		t.Logf("Warning: Found %d ReplicaSets created at or after %v, expected exactly 1",
+		t.Errorf("Found %d ReplicaSets created at or after %v, expected exactly 1",
 			len(newReplicaSets), creationTime)
-
-		// Find the newest one
-		newest := newReplicaSets[0]
-		for _, rs := range newReplicaSets[1:] {
-			if rs.CreationTimestamp.Time.After(newest.CreationTimestamp.Time) {
-				newest = rs
-			}
-		}
-
-		return newest
+		t.FailNow()
 	}
 
 	// Success: exactly one new ReplicaSet found
