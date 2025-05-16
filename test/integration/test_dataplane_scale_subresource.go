@@ -108,7 +108,7 @@ func TestDataPlaneScaleSubresource(t *testing.T) {
 			clients.MgrClient,
 			restartTime,
 			namespace.Name,
-			deployment.Spec.Selector.MatchLabels,
+			dataplane,
 		)
 		if rs != nil {
 			t.Logf("Found new ReplicaSet %s created at %v", rs.Name, rs.CreationTimestamp)

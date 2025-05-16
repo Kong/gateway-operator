@@ -7,6 +7,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	testutils "github.com/kong/gateway-operator/pkg/utils/test"
+
+	operatorv1beta1 "github.com/kong/kubernetes-configuration/api/gateway-operator/v1beta1"
 )
 
 // FindReplicaSetNewerThan finds a ReplicaSet created after or at the specified time.
@@ -22,14 +26,12 @@ func FindReplicaSetNewerThan(
 	cli client.Client,
 	creationTime time.Time,
 	namespace string,
-	labels map[string]string,
+	dp *operatorv1beta1.DataPlane,
 ) *appsv1.ReplicaSet {
 	t.Helper()
 
-	newReplicaSetList := &appsv1.ReplicaSetList{}
-	if err := cli.List(ctx, newReplicaSetList,
-		client.InNamespace(namespace),
-		client.MatchingLabels(labels)); err != nil {
+	rsList, err := testutils.GetDataPlaneReplicaSets(ctx, cli, dp)
+	if err != nil {
 		t.Logf("Error listing ReplicaSets: %v", err)
 		return nil
 	}
@@ -37,8 +39,7 @@ func FindReplicaSetNewerThan(
 	// Find ReplicaSets newer than or exactly at the specified time
 	var newReplicaSets []*appsv1.ReplicaSet
 	t.Logf("Looking for ReplicaSets created at or after %v", creationTime)
-	for i := range newReplicaSetList.Items {
-		rs := &newReplicaSetList.Items[i]
+	for _, rs := range rsList {
 		t.Logf("Found ReplicaSet %s with creation time %v", rs.Name, rs.CreationTimestamp.Time)
 		// Truncate times to seconds for comparison since k8s doesn't use same precision
 		rsTime := rs.CreationTimestamp.Truncate(time.Second)
