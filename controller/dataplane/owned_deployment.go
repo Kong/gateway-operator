@@ -18,6 +18,7 @@ import (
 	"github.com/kong/gateway-operator/controller/pkg/log"
 	"github.com/kong/gateway-operator/controller/pkg/op"
 	"github.com/kong/gateway-operator/controller/pkg/patch"
+	"github.com/kong/gateway-operator/controller/pkg/utils"
 	"github.com/kong/gateway-operator/internal/utils/config"
 	"github.com/kong/gateway-operator/internal/versions"
 	"github.com/kong/gateway-operator/pkg/consts"
@@ -350,38 +351,22 @@ func reconcileDataPlaneDeployment(
 			}
 		}
 
-		// some custom comparison rules are needed for some PodTemplateSpec sub-attributes, in particular
-		// resources and affinity.
+		// some custom comparison rules are needed for some PodTemplateSpec sub-attributes
 		opts := []cmp.Option{
 			cmp.Comparer(k8sresources.ResourceRequirementsEqual),
+			utils.IgnoreAnnotationKeysComparer(restartAnnotationKey),
 		}
 
-		// Check if this is a restart operation first, before comparing templates
-		if isRestartOperation {
-			log.Debug(logger, "preserving restart annotation for restart operation")
+		if !cmp.Equal(existing.Spec.Template, desired.Spec.Template, opts...) {
 
-			// Make a deep copy of the desired template to avoid modifying the original
-			templateCopy := desired.Spec.Template.DeepCopy()
-
-			// Ensure annotations map exists in the copy
-			if templateCopy.Annotations == nil {
-				templateCopy.Annotations = make(map[string]string)
+			if isRestartOperation {
+				// Preserve the restart annotation
+				if desired.Spec.Template.Annotations == nil {
+					desired.Spec.Template.Annotations = make(map[string]string)
+				}
+				desired.Spec.Template.Annotations[restartAnnotationKey] = restartTimeStr
 			}
 
-			// Add the restart annotation to the copy
-			templateCopy.Annotations[restartAnnotationKey] = restartTimeStr
-
-			// Now compare with the modified template
-			if !cmp.Equal(existing.Spec.Template, *templateCopy, opts...) {
-				// Update the template with our modified copy that includes the restart annotation
-				existing.Spec.Template = *templateCopy
-
-				// We DO NOT modify replicas during restart - that will happen in the replica-specific section below
-
-				updated = true
-			}
-		} else if !cmp.Equal(existing.Spec.Template, desired.Spec.Template, opts...) {
-			// Normal case (not a restart operation)
 			existing.Spec.Template = desired.Spec.Template
 			updated = true
 		}
