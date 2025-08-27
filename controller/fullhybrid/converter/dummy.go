@@ -11,6 +11,7 @@ import (
 
 	configurationv1alpha1 "github.com/kong/kubernetes-configuration/v2/api/configuration/v1alpha1"
 
+	"github.com/kong/kong-operator/controller/fullhybrid/utils"
 	gwtypes "github.com/kong/kong-operator/internal/types"
 )
 
@@ -104,7 +105,38 @@ func (d *dummyConverter) Translate() error {
 	return nil
 }
 
+func (d *dummyConverter) EnforceState(ctx context.Context) error {
+	kongServices := configurationv1alpha1.KongServiceList{}
+	if err := d.List(ctx, &kongServices, client.InNamespace(d.service.Namespace)); err != nil {
+		return err
+	}
+
+	for _, ks := range d.outputStore {
+		if !lo.ContainsBy(kongServices.Items, func(item configurationv1alpha1.KongService) bool {
+			return item.Name == ks.Name && item.Namespace == ks.Namespace
+		}) {
+			// If the KongService is not found, create it.
+			if err := d.Create(ctx, &ks); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // DumpOutputStore is an utility function to allow testing the dummy converter in isolation, without exposing internal state.
-func (d *dummyConverter) DumpOutputStore() []configurationv1alpha1.KongService {
-	return d.outputStore
+func (d *dummyConverter) GetStore(ctx context.Context) []client.Object {
+	var objects []client.Object
+	for _, ks := range d.outputStore {
+		objects = append(objects, &ks)
+	}
+	return objects
+}
+
+// Reduct returns the list of reduct functions to apply to the output store
+func (d *dummyConverter) Reduct() []utils.ReductFunc {
+	return []utils.ReductFunc{
+		utils.KeepProgrammed,
+		utils.KeepYoungest,
+	}
 }
