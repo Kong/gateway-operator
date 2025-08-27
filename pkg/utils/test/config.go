@@ -42,6 +42,9 @@ func DefaultControllerConfigForTests(opts ...ControllerConfigOption) manager.Con
 	cfg.ServiceAccountToImpersonate = ServiceAccountToImpersonate
 	// TODO: https://github.com/Kong/kong-operator/issues/1986
 	cfg.ConversionWebhookEnabled = false
+	// Disable label selectors for secrets and configMaps to make the secrets and configMaps in the tests reconciled
+	cfg.SecretLabelSelector = ""
+	cfg.ConfigMapLabelSelector = ""
 
 	// Apply all the provided options
 	for _, opt := range opts {
