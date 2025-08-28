@@ -260,8 +260,8 @@ func configurationDataPlaneGroupAutoscaleTypeToSDKAutoscale(
 				MaxRps:  autoscale.Autopilot.MaxRps,
 			},
 		}, nil
-	// ConfigurationDataPlaneGroupAutoscaleTypeStatic is deprecated.
-	case konnectv1alpha1.ConfigurationDataPlaneGroupAutoscaleTypeStatic:
+		// ConfigurationDataPlaneGroupAutoscaleTypeStatic is deprecated.
+	case konnectv1alpha1.ConfigurationDataPlaneGroupAutoscaleTypeStatic: //nolint:staticcheck
 		return sdkkonnectcomp.ConfigurationDataPlaneGroupAutoscale{
 			Type: sdkkonnectcomp.ConfigurationDataPlaneGroupAutoscaleTypeConfigurationDataPlaneGroupAutoscaleStatic,
 			// ConfigurationDataPlaneGroupAutoscaleStatic is deprecated.
