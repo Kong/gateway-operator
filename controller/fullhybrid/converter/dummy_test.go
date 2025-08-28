@@ -18,13 +18,12 @@ import (
 	"github.com/kong/kong-operator/modules/manager/scheme"
 )
 
-func TestDummyConverter(t *testing.T) {
-
+func TestDummyTranslation(t *testing.T) {
 	testCases := []struct {
 		name           string
 		service        corev1.Service
 		httpRoutes     []client.Object
-		expectedOutput []configurationv1alpha1.KongService
+		expectedOutput []client.Object
 	}{
 		{
 			name: "service with no ports",
@@ -61,7 +60,7 @@ func TestDummyConverter(t *testing.T) {
 					},
 				},
 			},
-			expectedOutput: []configurationv1alpha1.KongService{},
+			expectedOutput: []client.Object{},
 		},
 		{
 			name: "service with matching port",
@@ -102,8 +101,8 @@ func TestDummyConverter(t *testing.T) {
 					},
 				},
 			},
-			expectedOutput: []configurationv1alpha1.KongService{
-				{
+			expectedOutput: []client.Object{
+				&configurationv1alpha1.KongService{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-service-80",
 						Namespace: "default",
@@ -197,8 +196,8 @@ func TestDummyConverter(t *testing.T) {
 					},
 				},
 			},
-			expectedOutput: []configurationv1alpha1.KongService{
-				{
+			expectedOutput: []client.Object{
+				&configurationv1alpha1.KongService{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-service-80",
 						Namespace: "default",
@@ -210,7 +209,7 @@ func TestDummyConverter(t *testing.T) {
 						},
 					},
 				},
-				{
+				&configurationv1alpha1.KongService{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-service-443",
 						Namespace: "default",
@@ -235,10 +234,10 @@ func TestDummyConverter(t *testing.T) {
 				Build()
 
 			dummyConverter := converter.NewDummyConverter(cl)
-			dummyConverter.SetRootObject(tc.service)
+			dummyConverter.SetRootObject(&tc.service)
 			require.NoError(t, dummyConverter.LoadStore(context.Background()))
 			require.NoError(t, dummyConverter.Translate())
-			require.EqualValues(t, tc.expectedOutput, dummyConverter.DumpOutputStore())
+			require.EqualValues(t, tc.expectedOutput, dummyConverter.GetStore(context.Background()))
 		})
 	}
 }
