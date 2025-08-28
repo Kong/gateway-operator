@@ -32,4 +32,3 @@ spec:
   policyName: "autoscale.dataplanegroups.konnectclouddataplanegroupconfig.konnect.konghq.com"
   validationActions: [Warn,Audit]
 {{- end -}}
-{{- end -}}
