@@ -234,7 +234,7 @@ func TestDummyTranslation(t *testing.T) {
 				Build()
 
 			dummyConverter := converter.NewDummyConverter(cl)
-			dummyConverter.SetRootObject(tc.service)
+			dummyConverter.SetRootObject(&tc.service)
 			require.NoError(t, dummyConverter.LoadStore(context.Background()))
 			require.NoError(t, dummyConverter.Translate())
 			require.EqualValues(t, tc.expectedOutput, dummyConverter.GetStore(context.Background()))
